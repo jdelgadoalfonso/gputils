@@ -83,6 +83,9 @@ typedef union {
   int i;
   char *s;
   tree *t;
+  enum node_type y;
+  enum node_size z;
+  enum node_op o;
 } yystype;
 # define YYSTYPE yystype
 # define YYSTYPE_IS_TRIVIAL 1
@@ -183,15 +186,15 @@ static const short yyrhs[] =
 /* YYRLINE[YYN] -- source line where rule number YYN was defined. */
 static const short yyrline[] =
 {
-       0,    93,    95,    97,   101,   106,   111,   121,   130,   141,
-     150,   163,   168,   175,   180,   187,   194,   199,   206,   211,
-     218,   225,   230,   237,   242,   249,   254,   261,   266,   271,
-     276,   281,   288,   294,   299,   307,   314,   319,   326,   328,
-     335,   337,   344,   346,   348,   355,   355,   357,   359,   366,
-     366,   366,   368,   370,   377,   377,   377,   377,   377,   377,
-     379,   381,   388,   388,   390,   392,   399,   399,   401,   403,
-     410,   410,   410,   412,   414,   421,   421,   421,   421,   423,
-     428,   434,   440,   445
+       0,    96,    98,   100,   104,   109,   114,   124,   133,   144,
+     153,   166,   171,   178,   183,   190,   197,   202,   209,   214,
+     221,   228,   233,   240,   245,   252,   257,   264,   269,   274,
+     279,   284,   291,   297,   302,   310,   317,   322,   329,   331,
+     338,   340,   347,   349,   351,   358,   359,   361,   363,   370,
+     371,   372,   374,   376,   383,   384,   385,   386,   387,   388,
+     390,   392,   399,   400,   402,   404,   411,   412,   414,   416,
+     423,   424,   425,   427,   429,   436,   437,   438,   439,   441,
+     446,   452,   458,   463
 };
 #endif
 
@@ -1051,318 +1054,410 @@ yyreduce:
   switch (yyn) {
 
 case 4:
-#line 103 "parse.y"
+#line 106 "parse.y"
 {
 	  process_pragma(yyvsp[-1].t);
 	}
     break;
 case 5:
-#line 108 "parse.y"
+#line 111 "parse.y"
 {
-	  open_src(yyvsp[-1].s, true, false);
+	  open_src(yyvsp[-1].s, with);
 	}
     break;
 case 6:
-#line 113 "parse.y"
+#line 116 "parse.y"
 {
 	  if (state.src->type == source_with) {
-            yyvsp[0].t->value.decl.storage = PUBLIC_STORAGE;
+            yyvsp[0].t->value.decl.storage = storage_public;
 	  } else if (state.src->type == with) {
-            yyvsp[0].t->value.decl.storage = EXTERN_STORAGE;
+            yyvsp[0].t->value.decl.storage = storage_extern;
           }
 	  add_entity(yyvsp[0].t);
         }
     break;
 case 7:
-#line 123 "parse.y"
+#line 126 "parse.y"
 { 
           if (state.src->type == source) {
-            add_entity(mk_proc(yyvsp[-3].t, PRIVATE_STORAGE, yyvsp[-2].t));
+            add_entity(mk_proc(yyvsp[-3].t, storage_private, yyvsp[-2].t));
           } else {
             gp_error("procedures can only be defined in .pal files");
           }
      	}
     break;
 case 8:
-#line 132 "parse.y"
+#line 135 "parse.y"
 { 
 	  if (state.src->type == source_with) {
-            add_entity(mk_proc(yyvsp[-1].t, PUBLIC_STORAGE, NULL));
+            add_entity(mk_proc_prot(yyvsp[-1].t, storage_public));
 	  } else if (state.src->type == with) {
-            add_entity(mk_proc(yyvsp[-1].t, EXTERN_STORAGE, NULL));
+            add_entity(mk_proc_prot(yyvsp[-1].t, storage_extern));
           } else {
             gp_error("procedure declarations can only be in .pub files");
           }
      	}
     break;
 case 9:
-#line 143 "parse.y"
+#line 146 "parse.y"
 { 
 	  if (state.src->type == source) {
-            add_entity(mk_func(yyvsp[-5].t, PRIVATE_STORAGE, yyvsp[-3].i, yyvsp[-2].t));
+            add_entity(mk_func(yyvsp[-5].t, storage_private, yyvsp[-3].z, yyvsp[-2].t));
           } else {
             gp_error("functions can only be defined in .pal files");
           }
      	}
     break;
 case 10:
-#line 152 "parse.y"
+#line 155 "parse.y"
 { 
 	  if (state.src->type == source_with) {
-            add_entity(mk_func(yyvsp[-3].t, PUBLIC_STORAGE, yyvsp[-1].i, NULL));
+            add_entity(mk_func_prot(yyvsp[-3].t, storage_public, yyvsp[-1].z));
 	  } else if (state.src->type == with) {
-            add_entity(mk_func(yyvsp[-3].t, EXTERN_STORAGE, yyvsp[-1].i, NULL));
+            add_entity(mk_func_prot(yyvsp[-3].t, storage_extern, yyvsp[-1].z));
           } else {
             gp_error("function declarations can only be in .pub files");
           }
      	}
     break;
 case 11:
-#line 165 "parse.y"
+#line 168 "parse.y"
 {
  	  yyval.t = mk_head(yyvsp[0].s, NULL);
      	}
     break;
 case 12:
-#line 170 "parse.y"
+#line 173 "parse.y"
 {
  	  yyval.t = mk_head(yyvsp[-3].s, yyvsp[-1].t);
      	}
     break;
 case 13:
-#line 177 "parse.y"
+#line 180 "parse.y"
 {
 	  yyval.t = mk_list(yyvsp[0].t, NULL);
 	}
     break;
 case 14:
-#line 182 "parse.y"
+#line 185 "parse.y"
 {
 	  yyval.t = mk_list(yyvsp[-2].t, yyvsp[0].t);
 	}
     break;
 case 15:
-#line 189 "parse.y"
+#line 192 "parse.y"
 {	  
-	  yyval.t = mk_decl(0, yyvsp[-1].i, 0, mk_symbol(yyvsp[0].s));
+	  yyval.t = mk_decl(0, yyvsp[-1].z, 0, mk_symbol(yyvsp[0].s));
         }
     break;
 case 16:
-#line 196 "parse.y"
+#line 199 "parse.y"
 {
  	  yyval.t = mk_body(yyvsp[-3].t, yyvsp[-1].t);
      	}
     break;
 case 17:
-#line 201 "parse.y"
+#line 204 "parse.y"
 {
  	  yyval.t = mk_body(NULL, yyvsp[-1].t);
      	}
     break;
 case 18:
-#line 208 "parse.y"
+#line 211 "parse.y"
 {
 	  yyval.t = mk_list(yyvsp[0].t, NULL);
 	}
     break;
 case 19:
-#line 213 "parse.y"
+#line 216 "parse.y"
 {
 	  yyval.t = mk_list(yyvsp[-1].t, yyvsp[0].t);
 	}
     break;
 case 20:
-#line 220 "parse.y"
+#line 223 "parse.y"
 { 
-	  yyval.t = mk_decl(yyvsp[-3].i, yyvsp[-2].i, PRIVATE_STORAGE, yyvsp[-1].t);
+	  yyval.t = mk_decl(yyvsp[-3].y, yyvsp[-2].z, storage_private, yyvsp[-1].t);
         }
     break;
 case 21:
-#line 227 "parse.y"
+#line 230 "parse.y"
 {
-	  yyval.i = CONST_TYPE;
+	  yyval.y = type_const;
 	}
     break;
 case 22:
-#line 232 "parse.y"
+#line 235 "parse.y"
 {
-	  yyval.i = VAR_TYPE;
+	  yyval.y = type_var;
 	}
     break;
 case 23:
-#line 239 "parse.y"
+#line 242 "parse.y"
 {
-	  yyval.i = BIT_SIZE;
+	  yyval.z = size_bit;
 	}
     break;
 case 24:
-#line 244 "parse.y"
+#line 247 "parse.y"
 {
-	  yyval.i = BYTE_SIZE;
+	  yyval.z = size_byte;
 	}
     break;
 case 25:
-#line 251 "parse.y"
+#line 254 "parse.y"
 {
 	  yyval.t = mk_list(yyvsp[0].t, NULL);
 	}
     break;
 case 26:
-#line 256 "parse.y"
+#line 259 "parse.y"
 {
 	  yyval.t = mk_list(yyvsp[-1].t, yyvsp[0].t);
 	}
     break;
 case 27:
-#line 263 "parse.y"
+#line 266 "parse.y"
 {
 	  yyval.t = mk_cond(yyvsp[-5].t, yyvsp[-3].t, NULL);
 	}
     break;
 case 28:
-#line 268 "parse.y"
+#line 271 "parse.y"
 {
 	  yyval.t = mk_cond(yyvsp[-6].t, yyvsp[-4].t, yyvsp[-3].t);
 	}
     break;
 case 29:
-#line 273 "parse.y"
+#line 276 "parse.y"
 {
 	  yyval.t= mk_loop(NULL, yyvsp[-1].t, NULL, yyvsp[0].t);	
 	}
     break;
 case 30:
-#line 278 "parse.y"
+#line 281 "parse.y"
 {
 	  yyval.t= mk_loop(NULL, NULL, NULL, yyvsp[0].t);
 	}
     break;
 case 31:
-#line 283 "parse.y"
+#line 286 "parse.y"
 {
 	  yyval.t = yyvsp[-1].t;
 	}
     break;
 case 32:
-#line 290 "parse.y"
+#line 293 "parse.y"
 {
 	  /* last statement is elsif */
 	  yyval.t = mk_cond(yyvsp[-2].t, yyvsp[0].t, NULL);
 	}
     break;
 case 33:
-#line 296 "parse.y"
+#line 299 "parse.y"
 {
 	  yyval.t = mk_cond(yyvsp[-3].t, yyvsp[-1].t, yyvsp[0].t);
 	}
     break;
 case 34:
-#line 301 "parse.y"
+#line 304 "parse.y"
 {
 	  /* last statement is else */
 	  yyval.t = mk_cond(NULL, yyvsp[0].t, NULL);
 	}
     break;
 case 35:
-#line 309 "parse.y"
+#line 312 "parse.y"
 {
 	  yyval.t = yyvsp[-3].t;
 	}
     break;
 case 36:
-#line 316 "parse.y"
+#line 319 "parse.y"
 {
 	  yyval.t = mk_list(yyvsp[0].t, NULL);
 	}
     break;
 case 37:
-#line 321 "parse.y"
+#line 324 "parse.y"
 {
 	  yyval.t = mk_list(yyvsp[-2].t, yyvsp[0].t);
 	}
     break;
 case 39:
-#line 330 "parse.y"
+#line 333 "parse.y"
 {
 	  yyval.t = mk_string(yyvsp[0].s);
         }
     break;
 case 41:
-#line 339 "parse.y"
+#line 342 "parse.y"
 {
-	  yyval.t = mk_binop(yyvsp[-1].i, yyvsp[-2].t, yyvsp[0].t);
+	  yyval.t = mk_binop(yyvsp[-1].o, yyvsp[-2].t, yyvsp[0].t);
 	}
+    break;
+case 42:
+#line 347 "parse.y"
+{ yyval.o = op_eq; }
     break;
 case 44:
-#line 350 "parse.y"
+#line 353 "parse.y"
 {
-	  yyval.t = mk_binop(yyvsp[-1].i, yyvsp[-2].t, yyvsp[0].t);
+	  yyval.t = mk_binop(yyvsp[-1].o, yyvsp[-2].t, yyvsp[0].t);
 	}
+    break;
+case 45:
+#line 358 "parse.y"
+{ yyval.o = op_land; }
+    break;
+case 46:
+#line 359 "parse.y"
+{ yyval.o = op_lor; }
     break;
 case 48:
-#line 361 "parse.y"
+#line 365 "parse.y"
 {
-	  yyval.t = mk_binop(yyvsp[-1].i, yyvsp[-2].t, yyvsp[0].t);
+	  yyval.t = mk_binop(yyvsp[-1].o, yyvsp[-2].t, yyvsp[0].t);
 	}
+    break;
+case 49:
+#line 370 "parse.y"
+{ yyval.o = op_and; }
+    break;
+case 50:
+#line 371 "parse.y"
+{ yyval.o = op_or; }
+    break;
+case 51:
+#line 372 "parse.y"
+{ yyval.o = op_xor; }
     break;
 case 53:
-#line 372 "parse.y"
+#line 378 "parse.y"
 {
-	  yyval.t = mk_binop(yyvsp[-1].i, yyvsp[-2].t, yyvsp[0].t);
+	  yyval.t = mk_binop(yyvsp[-1].o, yyvsp[-2].t, yyvsp[0].t);
 	}
+    break;
+case 54:
+#line 383 "parse.y"
+{ yyval.o = op_lt; }
+    break;
+case 55:
+#line 384 "parse.y"
+{ yyval.o = op_gt; }
+    break;
+case 56:
+#line 385 "parse.y"
+{ yyval.o = op_eq; }
+    break;
+case 57:
+#line 386 "parse.y"
+{ yyval.o = op_ne; }
+    break;
+case 58:
+#line 387 "parse.y"
+{ yyval.o = op_gte; }
+    break;
+case 59:
+#line 388 "parse.y"
+{ yyval.o = op_lte; }
     break;
 case 61:
-#line 383 "parse.y"
-{
-	  yyval.t = mk_binop(yyvsp[-1].i, yyvsp[-2].t, yyvsp[0].t);
-	}
-    break;
-case 65:
 #line 394 "parse.y"
 {
-	  yyval.t = mk_binop(yyvsp[-1].i, yyvsp[-2].t, yyvsp[0].t);
+	  yyval.t = mk_binop(yyvsp[-1].o, yyvsp[-2].t, yyvsp[0].t);
 	}
+    break;
+case 62:
+#line 399 "parse.y"
+{ yyval.o = op_lsh; }
+    break;
+case 63:
+#line 400 "parse.y"
+{ yyval.o = op_rsh; }
+    break;
+case 65:
+#line 406 "parse.y"
+{
+	  yyval.t = mk_binop(yyvsp[-1].o, yyvsp[-2].t, yyvsp[0].t);
+	}
+    break;
+case 66:
+#line 411 "parse.y"
+{ yyval.o = op_add; }
+    break;
+case 67:
+#line 412 "parse.y"
+{ yyval.o = op_sub; }
     break;
 case 69:
-#line 405 "parse.y"
+#line 418 "parse.y"
 {
-	  yyval.t = mk_binop(yyvsp[-1].i, yyvsp[-2].t, yyvsp[0].t);
+	  yyval.t = mk_binop(yyvsp[-1].o, yyvsp[-2].t, yyvsp[0].t);
 	}
+    break;
+case 70:
+#line 423 "parse.y"
+{ yyval.o = op_mult; }
+    break;
+case 71:
+#line 424 "parse.y"
+{ yyval.o = op_div; }
+    break;
+case 72:
+#line 425 "parse.y"
+{ yyval.o = op_mod; }
     break;
 case 74:
-#line 416 "parse.y"
+#line 431 "parse.y"
 {
-	  yyval.t = mk_unop(yyvsp[-1].i, yyvsp[0].t);
+	  yyval.t = mk_unop(yyvsp[-1].o, yyvsp[0].t);
 	}
     break;
+case 75:
+#line 436 "parse.y"
+{ yyval.o = op_neg; }
+    break;
+case 76:
+#line 437 "parse.y"
+{ yyval.o = op_not; }
+    break;
+case 77:
+#line 438 "parse.y"
+{ yyval.o = op_com; }
+    break;
+case 78:
+#line 439 "parse.y"
+{ yyval.o = op_add; }
+    break;
 case 79:
-#line 425 "parse.y"
+#line 443 "parse.y"
 {
 	  yyval.t = mk_symbol(yyvsp[0].s);
         }
     break;
 case 80:
-#line 430 "parse.y"
+#line 448 "parse.y"
 {
 	  /* function or procedure call */
 	  yyval.t = mk_call(yyvsp[-2].s, NULL);
 	}
     break;
 case 81:
-#line 436 "parse.y"
+#line 454 "parse.y"
 {
 	  /* function or procedure call with arguments */
 	  yyval.t = mk_call(yyvsp[-3].s, yyvsp[-1].t);
 	}
     break;
 case 82:
-#line 442 "parse.y"
+#line 460 "parse.y"
 {
 	  yyval.t = mk_constant(yyvsp[0].i);
 	}
     break;
 case 83:
-#line 447 "parse.y"
+#line 465 "parse.y"
 {
 	  yyval.t = yyvsp[-1].t;
 	}
@@ -1600,5 +1695,5 @@ yyreturn:
 #endif
   return yyresult;
 }
-#line 452 "parse.y"
+#line 470 "parse.y"
 

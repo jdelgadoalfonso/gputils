@@ -22,6 +22,6 @@ Boston, MA 02111-1307, USA.  */
 #ifndef __SCAN_H__
 #define __SCAN_H__
 
-void open_src(char *name, gp_boolean is_with, gp_boolean is_source_wit);
+void open_src(char *name, enum src_types type);
 
 #endif

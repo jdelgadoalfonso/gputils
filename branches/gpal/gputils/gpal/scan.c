@@ -1809,14 +1809,14 @@ int main()
 #line 101 "scan.l"
 
 
-void open_src(char *name, gp_boolean is_with, gp_boolean is_source_with)
+void open_src(char *name, enum src_types type)
 {
   extern FILE *yyin;
   struct source_context *new = malloc(sizeof(*new));
   char *file_name;
   int length;
 
-  if (is_with) {
+  if ((type == with) || (type == source_with)) {
     /* construct the public file name */
     length = strlen(name);
     length += strlen(".pub") + 1;
@@ -1832,7 +1832,7 @@ void open_src(char *name, gp_boolean is_with, gp_boolean is_source_with)
 
   new->f = fopen(file_name, "rt");
   if (new->f == NULL) {
-    if (is_source_with) {
+    if (type == source_with) {
       /* source files aren't required to have public files */
       free(new);
       free(file_name);
@@ -1843,6 +1843,12 @@ void open_src(char *name, gp_boolean is_with, gp_boolean is_source_with)
     }
   }
 
+  yyin = new->f;
+
+  if (state.src) {
+    yy_switch_to_buffer(yy_create_buffer(yyin, YY_BUF_SIZE));
+  }
+
 #ifdef PARSE_DEBUG
   {
     extern int yydebug;
@@ -1850,30 +1856,18 @@ void open_src(char *name, gp_boolean is_with, gp_boolean is_source_with)
   }
 #endif
 
-  yyin = new->f;
-
-  if (state.src) {
-    yy_switch_to_buffer(yy_create_buffer(yyin, YY_BUF_SIZE));
-  }
-
   new->name = file_name;
-  if (is_source_with)
-    new->type = source_with;
-  else if (is_with)
-    new->type = with;
-  else
-    new->type = source;
+  new->type = type;
   new->line_number = 1;
   new->prev = state.src;
   
   state.src = new;
 }
 
-static
-int found_eof(void)
+static void
+close_file(void)
 {
   struct source_context *old;
-  int terminate = 0;
 
   /* switch to previous buffer */
   old = state.src;
@@ -1885,7 +1879,14 @@ int found_eof(void)
   }
   free(old->name);
   free(old);
+}
 
+static
+int found_eof(void)
+{
+  int terminate = 0;
+
+  close_file();
   if (state.src) {
     /* Just a with file */
     yy_delete_buffer(YY_CURRENT_BUFFER);

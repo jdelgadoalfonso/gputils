@@ -24,13 +24,77 @@ Boston, MA 02111-1307, USA.  */
 #include "libgputils.h"
 #include "gpal.h"
 
+#define NODES_PER_BLOCK 1000
+
+typedef struct node_block_struct tree_block;
+
+typedef struct node_block_struct {
+  tree nodes[NODES_PER_BLOCK];
+  tree_block *next;
+} node_block;
+
+static tree_block *head_block;
+static tree_block *current_block;
+static unsigned int next_node;
+
+static tree_block *
+create_block(void)
+{
+  tree_block *new;
+  
+  new = malloc(sizeof(tree_block));
+  new->next = NULL;
+
+  return new;
+}
+
+void
+init_nodes(void)
+{
+  current_block = create_block();
+  head_block = current_block;
+  next_node = 0;
+}
+
+void
+free_nodes(void)
+{
+  tree_block *prev;
+  unsigned int num_freed = 0;
+
+  while(head_block) {
+   prev = head_block;
+   head_block = head_block->next;
+   free(prev);
+   num_freed++;
+  }
+
+  gp_debug("freed %i block(s) of tree nodes (%i bytes of memory)", 
+           num_freed,
+           num_freed * sizeof(tree_block));
+
+  gp_debug("used %i nodes of the current block", next_node);
+
+}
+
 tree *
 mk_node(enum node_tag tag)
 {
-  tree *new = malloc(sizeof(*new));
+  tree *new;
+
+  if (next_node >= NODES_PER_BLOCK) {
+    current_block->next = create_block();
+    current_block = current_block->next;  
+    next_node = 0;
+  }
+  
+  new = &current_block->nodes[next_node++];
   new->tag = tag;
+  new->prev = NULL;
+  new->next = NULL;
   new->file_name = state.src->name;
   new->line_number = state.src->line_number;
+
   return new;
 }
 
@@ -44,7 +108,7 @@ mk_body(tree *decl, tree *statements)
 }
 
 tree *
-mk_binop(int op, tree *p0, tree *p1)
+mk_binop(enum node_op op, tree *p0, tree *p1)
 {
   tree *new = mk_node(node_binop);
   new->value.binop.op = op;
@@ -82,7 +146,7 @@ mk_cond(tree *cond, tree *body, tree *next)
 }
 
 tree *
-mk_decl(int type, int size, int storage, tree *expr)
+mk_decl(enum node_type type, enum node_size size, enum node_storage storage, tree *expr)
 {
   tree *new = mk_node(node_decl);
   new->value.decl.type = type;
@@ -94,13 +158,24 @@ mk_decl(int type, int size, int storage, tree *expr)
 }
 
 tree *
-mk_func(tree *head, int storage, int ret, tree *body)
+mk_func(tree *head, enum node_storage storage, enum node_size ret, tree *body)
 {
   tree *new = mk_node(node_func);
   new->value.func.head = head;
   new->value.func.storage = storage;
   new->value.func.ret = ret;
   new->value.func.body = body;
+ 
+  return new;
+}
+
+tree *
+mk_func_prot(tree *head, enum node_storage storage, enum node_size ret)
+{
+  tree *new = mk_node(node_func);
+  new->value.func_prot.head = head;
+  new->value.func_prot.storage = storage;
+  new->value.func_prot.ret = ret;
  
   return new;
 }
@@ -136,12 +211,22 @@ mk_loop(tree *init, tree *exit, tree *incr, tree *body)
 }
 
 tree *
-mk_proc(tree *head, int storage, tree *body)
+mk_proc(tree *head, enum node_storage storage, tree *body)
 {
   tree *new = mk_node(node_proc);
   new->value.proc.head = head;
   new->value.proc.storage = storage;
   new->value.proc.body = body;
+  
+  return new;
+}
+
+tree *
+mk_proc_prot(tree *head, enum node_storage storage)
+{
+  tree *new = mk_node(node_proc);
+  new->value.proc_prot.head = head;
+  new->value.proc_prot.storage = storage;
   
   return new;
 }
@@ -163,7 +248,7 @@ mk_symbol(char *value)
 }
 
 tree *
-mk_unop(int op, tree *p0)
+mk_unop(enum node_op op, tree *p0)
 {
   tree *new = mk_node(node_unop);
   new->value.unop.op = op;
@@ -259,6 +344,12 @@ print_node(tree *node, int level)
     if (node->value.cond.body != NULL)
       print_node(node->value.cond.body, level);
     break;
+  case node_func_prot:
+    print_space(level);
+    printf("node_func_prot that returns %i\n", node->value.func.ret);
+    if (node->value.proc_prot.head != NULL)  
+      print_node(node->value.proc_prot.head, level);
+    break;
   case node_head:
     print_space(level);
     printf("node_head %s\n", node->value.head.name);
@@ -313,6 +404,12 @@ print_node(tree *node, int level)
       print_node(node->value.proc.head, level);
     if (node->value.cond.body != NULL)
       print_node(node->value.cond.body, level);
+    break;
+  case node_proc_prot:
+    print_space(level);
+    printf("node_proc_prot\n");
+    if (node->value.proc_prot.head != NULL)  
+      print_node(node->value.proc_prot.head, level);
     break;
   case node_string:
     print_space(level);
