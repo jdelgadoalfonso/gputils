@@ -5,7 +5,7 @@ dnl Process this file with autoconf to produce a configure script.
 AC_PREREQ(2.57)
 
 # Initialization
-AC_INIT([gputils],[0.11.7])
+AC_INIT([gputils],[0.11.7-gpal6])
 AC_CONFIG_SRCDIR(gpasm/gpasm.c)
 AM_INIT_AUTOMAKE
 AM_CONFIG_HEADER(config.h)
@@ -26,6 +26,10 @@ MAKE_SUBDIRS="libgputils libiberty gpasm header lkr doc"
 AC_ARG_ENABLE(debug, 
   [  --enable-debug          enable gputils debug features],
   [enable_gputils_debug=yes])    
+
+AC_ARG_ENABLE(gpal,
+  [  --disable-gpal          disable the compiler],
+  [], [enable_gpal=yes])
 
 AC_ARG_ENABLE(gplink,
   [  --disable-gplink        disable the linker],
@@ -63,7 +67,7 @@ AC_FUNC_ALLOCA
 AC_FUNC_MALLOC
 AC_FUNC_REALLOC
 AC_FUNC_VPRINTF
-AC_CHECK_FUNCS(memset strcasecmp strchr strdup strerror stricmp strrchr strtol strtoul)
+AC_CHECK_FUNCS(memset strcasecmp strchr strdup strerror stricmp strrchr strtol)
 
 # Check for functions to compile into libiberty (getopt is always compiled).
 IBERTYOBJS=
@@ -112,6 +116,10 @@ esac
 CFLAGS="$CFLAGS $XTRA_CFLAGS"
 
 # Process the options
+if test x$enable_gpal = xyes; then
+  MAKE_SUBDIRS="$MAKE_SUBDIRS gpal"
+fi
+
 if test x$enable_gplink = xyes; then
   MAKE_SUBDIRS="$MAKE_SUBDIRS gplink"
 fi
@@ -141,6 +149,7 @@ AC_SUBST(MAKE_SUBDIRS)
 # Generate Makefiles
 AC_CONFIG_FILES([Makefile 
                  doc/Makefile 
+                 gpal/Makefile 
                  gpasm/Makefile 
                  gplink/Makefile 
                  gputils/Makefile 
