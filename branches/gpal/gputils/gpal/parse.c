@@ -90,109 +90,8 @@ yyerror(char *message)
 
 int yylex(void);
 
-/* FIXME: Clean this up.  We need to read the pragmas then modify the data
-   so the mod doesn't start after the pragma statement. Maybe use the
-   parse tree to implement the pragmas. */
 
-static void
-process_pragma(tree *expr)
-{
-  tree *lhs;
-  tree *rhs;
-
-  switch (expr->tag) {
-  case node_binop:
-    lhs = expr->value.binop.p0;
-    rhs = expr->value.binop.p1;
-    if ((expr->value.binop.op != op_eq) ||
-        (lhs->tag != node_symbol)) {
-      gp_error("unknown pragma");
-    } else {
-      if (strcasecmp(lhs->value.symbol, "processor") == 0) {
-        if (rhs->tag != node_symbol) {
-          gp_error("invalid processor name");        
-        } else {
-          if (state.processor_chosen == false) {
-            select_processor(rhs->value.symbol);
-          }        
-        }
-      } else if (strcasecmp(lhs->value.symbol, "code_section") == 0) {
-        if (rhs->tag != node_symbol) {
-          /* FIXME: change from symbol to string */
-          gp_error("invalid code section name");
-        } else {
-          if (state.src->type == with) {            
-            if ((state.section.code) && 
-                (strcmp(rhs->value.symbol, state.section.code) == 0)) {
-              state.section.code_default = storage_local;
-            } else {
-              state.section.code_default = storage_extern;
-            }
-          } else {
-            if (state.src->type == source) {
-              gp_warning("section pragma's should be in .pub files");
-            }
-            if (state.section.code) {
-              gp_error("duplicate code section name");
-            } else {
-              state.section.code = rhs->value.symbol;
-            }
-          }        
-        }
-      } else if (strcasecmp(lhs->value.symbol, "udata_section") == 0) {
-        if (rhs->tag != node_symbol) {
-          gp_error("invalid udata section name");
-        } else {
-          if (state.src->type == with) {            
-            if ((state.section.udata) &&
-                (strcmp(rhs->value.symbol, state.section.udata) == 0)) {
-              state.section.udata_default = storage_local;
-            } else {
-              state.section.udata_default = storage_extern;
-            }
-          } else {
-            if (state.src->type == source) {
-              gp_warning("section pragma's should be in .pub files");
-            }
-            if (state.section.code) {
-              gp_error("duplicate udata section name");
-            } else {
-              state.section.udata = rhs->value.symbol;
-            }
-          }        
-        }
-      } else if (strcasecmp(lhs->value.symbol, "code_address") == 0) {
-        if (rhs->tag != node_constant) {
-          gp_error("invalid code address");
-        } else if (state.src->type == source) {            
-          state.section.code_addr = rhs->value.constant;
-          state.section.code_addr_valid = true;
-        } else {
-          gp_error("udata section addresses can only be in .pal files");
-        }
-      } else if (strcasecmp(lhs->value.symbol, "udata_address") == 0) {
-        if (rhs->tag != node_constant) {
-          gp_error("invalid udata address");
-        } else if (state.src->type == source) {            
-          state.section.udata_addr = rhs->value.constant;
-          state.section.udata_addr_valid = true;
-        } else {
-          gp_error("udata section addresses can only be in .pal files");
-        }
-      } else {
-        gp_error("unknown pragma \"%s\"", lhs->value.symbol);
-      }
-    }
-    break;
-  default:
-    gp_error("unknown pragma");
-  }
-  
-  return;
-}
-
-
-#line 156 "parse.y"
+#line 55 "parse.y"
 #ifndef YYSTYPE
 typedef union {
   int i;
@@ -256,8 +155,8 @@ static const char yytranslate[] =
 #if YYDEBUG
 static const short yyprhs[] =
 {
-       0,     0,     1,     4,     8,    12,    16,    22,    29,    35,
-      42,    44,    47,    49,    55,    59,    67,    73,    75,    80,
+       0,     0,     1,     4,     8,    12,    18,    25,    31,    38,
+      40,    43,    47,    49,    55,    59,    67,    73,    75,    80,
       82,    86,    89,    95,   100,   102,   105,   110,   117,   119,
      121,   123,   125,   127,   130,   133,   141,   150,   154,   156,
      159,   164,   170,   173,   179,   181,   185,   187,   189,   191,
@@ -269,11 +168,11 @@ static const short yyprhs[] =
 };
 static const short yyrhs[] =
 {
-      -1,    56,    57,     0,    56,     1,    52,     0,     7,    73,
-      30,     0,     9,    27,    30,     0,    25,     6,     4,    25,
-      30,     0,    25,     6,    58,     4,    25,    30,     0,    22,
-       6,     4,    22,    30,     0,    22,     6,    58,     4,    22,
-      30,     0,    59,     0,    59,    58,     0,    65,     0,     8,
+      -1,    56,    57,     0,    56,     1,    52,     0,     9,    27,
+      30,     0,    25,     6,     4,    25,    30,     0,    25,     6,
+      58,     4,    25,    30,     0,    22,     6,     4,    22,    30,
+       0,    22,     6,    58,     4,    22,    30,     0,    59,     0,
+      59,    58,     0,     7,    73,    30,     0,    65,     0,     8,
       60,    63,     8,    30,     0,     8,    60,    30,     0,     5,
       60,    16,    67,    63,     5,    30,     0,     5,    60,    16,
       67,    30,     0,    27,     0,    27,    53,    61,    54,     0,
@@ -307,16 +206,16 @@ static const short yyrhs[] =
 /* YYRLINE[YYN] -- source line where rule number YYN was defined. */
 static const short yyrline[] =
 {
-       0,   213,   215,   217,   221,   226,   231,   233,   238,   240,
-     247,   252,   259,   264,   273,   284,   293,   306,   311,   318,
-     323,   330,   344,   349,   356,   361,   368,   380,   395,   400,
-     407,   412,   419,   424,   431,   436,   441,   446,   451,   456,
-     463,   469,   474,   482,   489,   494,   501,   503,   510,   512,
-     519,   521,   523,   530,   531,   533,   535,   542,   543,   544,
-     546,   548,   555,   556,   557,   558,   559,   560,   562,   564,
-     571,   572,   574,   576,   583,   584,   586,   588,   595,   596,
-     597,   599,   601,   608,   609,   610,   611,   613,   618,   624,
-     630,   635
+       0,   112,   114,   116,   120,   125,   130,   135,   140,   147,
+     152,   159,   164,   169,   174,   179,   184,   191,   196,   203,
+     208,   215,   222,   227,   234,   239,   246,   251,   258,   263,
+     270,   275,   282,   287,   294,   299,   304,   309,   314,   319,
+     326,   332,   337,   345,   352,   357,   364,   366,   373,   375,
+     382,   384,   386,   393,   394,   396,   398,   405,   406,   407,
+     409,   411,   418,   419,   420,   421,   422,   423,   425,   427,
+     434,   435,   437,   439,   446,   447,   449,   451,   458,   459,
+     460,   462,   464,   471,   472,   473,   474,   476,   481,   487,
+     493,   498
 };
 #endif
 
@@ -346,8 +245,8 @@ static const char *const yytname[] =
 /* YYR1[YYN] -- Symbol number of symbol that rule YYN derives. */
 static const short yyr1[] =
 {
-       0,    56,    56,    56,    57,    57,    57,    57,    57,    57,
-      58,    58,    59,    59,    59,    59,    59,    60,    60,    61,
+       0,    56,    56,    56,    57,    57,    57,    57,    57,    58,
+      58,    59,    59,    59,    59,    59,    59,    60,    60,    61,
       61,    62,    63,    63,    64,    64,    65,    65,    66,    66,
       67,    67,    68,    68,    69,    69,    69,    69,    69,    69,
       70,    70,    70,    71,    72,    72,    73,    73,    74,    74,
@@ -361,8 +260,8 @@ static const short yyr1[] =
 /* YYR2[YYN] -- Number of symbols composing right hand side of rule YYN. */
 static const short yyr2[] =
 {
-       0,     0,     2,     3,     3,     3,     5,     6,     5,     6,
-       1,     2,     1,     5,     3,     7,     5,     1,     4,     1,
+       0,     0,     2,     3,     3,     5,     6,     5,     6,     1,
+       2,     3,     1,     5,     3,     7,     5,     1,     4,     1,
        3,     2,     5,     4,     1,     2,     4,     6,     1,     1,
        1,     1,     1,     2,     2,     7,     8,     3,     1,     2,
        4,     5,     2,     5,     1,     3,     1,     1,     1,     3,
@@ -378,20 +277,20 @@ static const short yyr2[] =
    error. */
 static const short yydefact[] =
 {
-       1,     0,     0,     0,     0,     0,     0,     2,     3,    87,
-      90,    47,    86,    83,    84,    85,     0,     0,    46,    48,
-      51,    55,    60,    68,    72,    76,     0,    81,     0,     0,
-       0,     0,     0,     4,    50,     0,    53,    54,     0,    57,
-      58,    59,     0,    66,    67,    64,    65,    62,    63,     0,
-      70,    71,     0,    74,    75,     0,    78,    79,    80,     0,
-      82,     5,     0,     0,     0,    29,    28,     0,    10,    12,
-       0,     0,     0,    88,     0,    44,    91,    49,    52,    56,
-      61,    69,    73,    77,     0,    17,     0,     0,     0,    11,
-      30,    31,     0,     0,     0,    89,     0,     8,     0,     0,
-       0,    14,     0,     0,     0,     6,     0,    45,     0,    19,
-       0,     0,     0,     0,    24,     0,     9,    26,     0,     7,
-      18,     0,    21,    16,     0,     0,     0,     0,     0,     0,
-      32,    38,     0,     0,    25,    13,     0,    20,     0,     0,
+       1,     0,     0,     0,     0,     0,     2,     3,     0,     0,
+       0,     4,     0,     0,     0,     0,    29,    28,     0,     9,
+      12,     0,     0,     0,     0,    17,     0,    87,    90,    47,
+      86,    83,    84,    85,     0,     0,    46,    48,    51,    55,
+      60,    68,    72,    76,     0,    81,     0,     0,    10,    30,
+      31,     0,     0,     0,     7,     0,     0,     0,     0,    11,
+      50,     0,    53,    54,     0,    57,    58,    59,     0,    66,
+      67,    64,    65,    62,    63,     0,    70,    71,     0,    74,
+      75,     0,    78,    79,    80,     0,    82,     0,    14,     0,
+       0,     0,     5,     0,     0,    19,     0,     0,    88,     0,
+      44,    91,    49,    52,    56,    61,    69,    73,    77,     0,
+       0,    24,     0,     8,    26,     0,     6,    18,     0,    21,
+      16,     0,    89,     0,     0,     0,     0,     0,     0,    32,
+      38,     0,     0,    25,    13,     0,    20,     0,    45,     0,
        0,     0,    34,    23,    33,    39,     0,    27,    15,     0,
       37,     0,    22,     0,     0,     0,     0,     0,     0,    43,
        0,     0,    42,     0,    35,     0,     0,    40,    36,    41,
@@ -400,90 +299,90 @@ static const short yydefact[] =
 
 static const short yydefgoto[] =
 {
-       1,     7,    67,    68,    86,   108,   109,   102,   113,    69,
-      70,   110,   129,   130,   158,   131,    74,   132,    18,    35,
-      19,    38,    20,    42,    21,    49,    22,    52,    23,    55,
-      24,    59,    25,    26,    27
+       1,     6,    18,    19,    26,    94,    95,    89,   110,    20,
+      21,    96,   128,   129,   158,   130,    99,   131,    36,    61,
+      37,    64,    38,    68,    39,    75,    40,    78,    41,    81,
+      42,    85,    43,    44,    45
 };
 
 static const short yypact[] =
 {
-  -32768,    78,   -36,    22,     0,    28,    37,-32768,-32768,     4,
-  -32768,-32768,-32768,-32768,-32768,-32768,    22,    32,    36,    23,
-      30,    91,    59,    51,   -26,-32768,   -18,-32768,    44,    84,
-      90,     2,    29,-32768,-32768,    31,-32768,-32768,    31,-32768,
-  -32768,-32768,    31,-32768,-32768,-32768,-32768,-32768,-32768,    31,
-  -32768,-32768,    31,-32768,-32768,    31,-32768,-32768,-32768,    31,
-  -32768,-32768,    64,    72,    72,-32768,-32768,   110,   101,-32768,
-      85,    92,   112,-32768,    66,    75,-32768,    23,    30,    91,
-      59,    51,   -26,-32768,   102,    68,   115,     8,   111,-32768,
-  -32768,-32768,   107,   105,   113,-32768,    22,-32768,    85,    85,
-      43,-32768,   128,   109,   -19,-32768,   114,-32768,    83,    86,
-     116,     9,    -9,   137,    93,   117,-32768,-32768,    22,-32768,
-  -32768,    85,-32768,-32768,   140,    22,    22,    -9,   118,   138,
-      -9,-32768,   119,    -9,-32768,-32768,   120,-32768,   121,   135,
-     139,   148,-32768,-32768,-32768,-32768,   151,-32768,-32768,    -9,
-  -32768,   141,-32768,    50,   127,   149,    22,    -9,   154,-32768,
-     130,   150,-32768,   152,-32768,    -9,   133,    99,-32768,-32768,
-     164,-32768
+  -32768,    63,   -44,    20,    19,    53,-32768,-32768,    32,    85,
+      90,-32768,    49,    46,    24,    46,-32768,-32768,    72,   107,
+  -32768,    10,    62,    87,    66,    60,   112,    76,-32768,-32768,
+  -32768,-32768,-32768,-32768,    24,   100,    88,   -24,    41,    83,
+      36,    54,    57,-32768,   -16,-32768,    -2,   109,-32768,-32768,
+  -32768,   106,   104,   110,-32768,    10,    10,     4,    82,-32768,
+  -32768,    33,-32768,-32768,    33,-32768,-32768,-32768,    33,-32768,
+  -32768,-32768,-32768,-32768,-32768,    33,-32768,-32768,    33,-32768,
+  -32768,    33,-32768,-32768,-32768,    33,-32768,    -1,-32768,   129,
+     108,   -17,-32768,   111,    86,    84,   116,     8,-32768,    91,
+      89,-32768,   -24,    41,    83,    36,    54,    57,-32768,    -5,
+     143,   105,   117,-32768,-32768,    24,-32768,-32768,    10,-32768,
+  -32768,   144,-32768,    24,    24,    24,    -5,   118,   146,    -5,
+  -32768,   121,    -5,-32768,-32768,   122,-32768,   123,-32768,   145,
+     139,   151,-32768,-32768,-32768,-32768,   153,-32768,-32768,    -5,
+  -32768,   147,-32768,    52,   128,   149,    24,    -5,   156,-32768,
+     131,   152,-32768,   154,-32768,    -5,   135,   113,-32768,-32768,
+     166,-32768
 };
 
 static const short yypgoto[] =
 {
-  -32768,-32768,   -23,-32768,   103,    45,-32768,    54,    55,   -88,
-  -32768,   -66,  -125,-32768,     1,    33,    74,    -3,-32768,-32768,
-     136,-32768,   134,-32768,   132,-32768,   126,-32768,   124,-32768,
-     122,-32768,   123,-32768,   153
+  -32768,-32768,    25,-32768,   155,    50,-32768,    70,    58,   -72,
+  -32768,   -20,  -123,-32768,     5,    31,    51,   -14,-32768,-32768,
+     114,-32768,   115,-32768,   119,-32768,    98,-32768,    99,-32768,
+      95,-32768,    93,-32768,   136
 };
 
 
-#define	YYLAST		182
+#define	YYLAST		187
 
 
 static const short yytable[] =
 {
-      17,   125,   141,   126,    92,   144,   127,    72,   146,     9,
-      10,   117,   114,    32,   100,   100,     8,   128,     9,    10,
-      11,    56,    57,    58,   153,   118,   114,    28,    75,     9,
-      10,    11,   162,   111,    29,    16,    12,    13,   101,   123,
-     167,    14,    15,    30,    16,    89,   112,    12,    13,     9,
-      10,    11,    14,    15,   155,    16,    73,    31,     9,    10,
-      65,    66,    33,   156,   157,    36,    37,    12,    13,    39,
-      40,    41,    14,    15,    61,    16,    12,    13,   170,     2,
-      34,    14,    15,    76,    16,     3,    84,     4,    62,    63,
-      50,    51,    64,    75,    71,    63,    53,    54,    64,    85,
-       5,    65,    66,     6,    90,    91,    63,    65,    66,    64,
-      65,    66,   156,   157,    88,   136,    94,    93,    65,    66,
-      95,    98,   139,   140,    43,    44,    45,    46,    47,    48,
-      96,    99,    97,   103,   104,   105,   115,   120,   106,   116,
-     133,   121,   143,   122,   119,   138,   149,   135,   142,   145,
-     147,   148,   151,   161,   127,   152,   154,   159,   163,   160,
-     164,   165,   166,   168,   171,   124,   137,    87,   169,   134,
-     107,    77,    78,   150,    79,    80,    81,    82,     0,    60,
-       0,     0,    83
+      35,    51,   109,   141,    87,   124,   144,   125,     7,   146,
+     126,    27,    28,   114,    87,   111,    16,    17,    62,    63,
+      58,   127,    27,    28,    29,     9,   153,   115,    88,    49,
+      50,    27,    28,    29,   162,    23,    97,    34,   120,   111,
+      30,    31,   167,   100,    48,    32,    33,     8,    34,    30,
+      31,    27,    28,    29,    32,    33,   155,    34,    98,    10,
+      27,    28,    11,   170,     2,   156,   157,    76,    77,    30,
+      31,    24,     3,    25,    32,    33,    47,    34,    30,    31,
+      65,    66,    67,    32,    33,     4,    34,    52,     5,    12,
+      13,    53,    14,    15,    22,    13,    54,    14,    15,    79,
+      80,   135,    16,    17,    82,    83,    84,    16,    17,   100,
+     139,   140,    13,    55,    14,    15,    69,    70,    71,    72,
+      73,    74,    16,    17,    16,    17,   156,   157,    56,    57,
+      59,    90,    60,    91,    92,    93,   101,   112,   113,   118,
+     117,   116,   161,   119,   123,   122,   132,   134,   142,   137,
+     143,   145,   147,   148,   126,   151,   149,   152,   159,   160,
+     163,   164,   154,   165,   166,   168,   171,   121,   136,   133,
+      46,   150,   169,   105,   138,   102,   107,   106,   108,   103,
+      86,     0,     0,     0,     0,     0,     0,   104
 };
 
 static const short yycheck[] =
 {
-       3,    10,   127,    12,    70,   130,    15,    30,   133,    27,
-      28,    30,   100,    16,     6,     6,    52,    26,    27,    28,
-      29,    47,    48,    49,   149,    44,   114,    27,    31,    27,
-      28,    29,   157,    99,     6,    53,    45,    46,    30,    30,
-     165,    50,    51,     6,    53,    68,     3,    45,    46,    27,
-      28,    29,    50,    51,     4,    53,    54,    53,    27,    28,
-      17,    18,    30,    13,    14,    42,    43,    45,    46,    39,
-      40,    41,    50,    51,    30,    53,    45,    46,     0,     1,
-      44,    50,    51,    54,    53,     7,    22,     9,     4,     5,
-      31,    32,     8,    96,     4,     5,    45,    46,     8,    27,
-      22,    17,    18,    25,    19,    20,     5,    17,    18,     8,
-      17,    18,    13,    14,     4,   118,     4,    25,    17,    18,
-      54,    53,   125,   126,    33,    34,    35,    36,    37,    38,
-      55,    16,    30,    22,    27,    30,     8,    54,    25,    30,
-       3,    55,     4,    27,    30,     5,    11,    30,    30,    30,
-      30,    30,     4,   156,    15,     4,    15,    30,     4,    10,
-      30,    11,    10,    30,     0,   111,   121,    64,   167,   114,
-      96,    35,    38,   140,    42,    49,    52,    55,    -1,    26,
-      -1,    -1,    59
+      14,    21,     3,   126,     6,    10,   129,    12,    52,   132,
+      15,    27,    28,    30,     6,    87,    17,    18,    42,    43,
+      34,    26,    27,    28,    29,     6,   149,    44,    30,    19,
+      20,    27,    28,    29,   157,    10,    56,    53,    30,   111,
+      45,    46,   165,    57,    19,    50,    51,    27,    53,    45,
+      46,    27,    28,    29,    50,    51,     4,    53,    54,     6,
+      27,    28,    30,     0,     1,    13,    14,    31,    32,    45,
+      46,    22,     9,    27,    50,    51,     4,    53,    45,    46,
+      39,    40,    41,    50,    51,    22,    53,    25,    25,     4,
+       5,     4,     7,     8,     4,     5,    30,     7,     8,    45,
+      46,   115,    17,    18,    47,    48,    49,    17,    18,   123,
+     124,   125,     5,    53,     7,     8,    33,    34,    35,    36,
+      37,    38,    17,    18,    17,    18,    13,    14,    16,    53,
+      30,    22,    44,    27,    30,    25,    54,     8,    30,    55,
+      54,    30,   156,    27,    55,    54,     3,    30,    30,     5,
+       4,    30,    30,    30,    15,     4,    11,     4,    30,    10,
+       4,    30,    15,    11,    10,    30,     0,    97,   118,   111,
+      15,   140,   167,    75,   123,    61,    81,    78,    85,    64,
+      44,    -1,    -1,    -1,    -1,    -1,    -1,    68
 };
 /* -*-C-*-  Note some compilers choke on comments on `#line' lines.  */
 #line 3 "/usr/share/bison/bison.simple"
@@ -1193,471 +1092,433 @@ yyreduce:
   switch (yyn) {
 
 case 4:
-#line 223 "parse.y"
+#line 122 "parse.y"
 {
-	  process_pragma(yyvsp[-1].t);
+	  open_src(yyvsp[-1].s, source_with);
 	}
     break;
 case 5:
-#line 228 "parse.y"
+#line 127 "parse.y"
 {
-	  open_src(yyvsp[-1].s, with);
+	  gp_warning("empty module");
 	}
     break;
 case 6:
-#line 232 "parse.y"
-{ }
+#line 132 "parse.y"
+{
+	  add_entity(mk_file(yyvsp[-3].t, state.src->type));
+	}
     break;
 case 7:
-#line 235 "parse.y"
+#line 137 "parse.y"
 {
-	  add_entity(mk_module(yyvsp[-3].t));
+	  gp_warning("empty public");
 	}
     break;
 case 8:
-#line 239 "parse.y"
-{ }
-    break;
-case 9:
-#line 242 "parse.y"
+#line 142 "parse.y"
 {
-	  add_entity(mk_public(yyvsp[-3].t));
+	  add_entity(mk_file(yyvsp[-3].t, state.src->type));
 	}
     break;
-case 10:
-#line 249 "parse.y"
+case 9:
+#line 149 "parse.y"
 {
 	  yyval.t = node_list(yyvsp[0].t, NULL);
 	}
     break;
-case 11:
-#line 254 "parse.y"
+case 10:
+#line 154 "parse.y"
 {
 	  yyval.t = node_list(yyvsp[-1].t, yyvsp[0].t);
 	}
     break;
+case 11:
+#line 161 "parse.y"
+{
+	  yyval.t = mk_pragma(yyvsp[-1].t);
+	}
+    break;
 case 12:
-#line 261 "parse.y"
+#line 166 "parse.y"
 {
 	  yyval.t = yyvsp[0].t;
         }
     break;
 case 13:
-#line 266 "parse.y"
+#line 171 "parse.y"
 { 
-          if (state.src->type == source) {
-            yyval.t = mk_proc(yyvsp[-3].t, storage_private, yyvsp[-2].t);
-          } else {
-            yyerror("procedures can only be defined in modules");
-          }
+	  yyval.t = mk_proc(yyvsp[-3].t, yyvsp[-2].t);
      	}
     break;
 case 14:
-#line 275 "parse.y"
+#line 176 "parse.y"
 { 
-	  if (state.src->type == source_with) {
-            yyval.t = mk_proc_prot(yyvsp[-1].t, storage_public);
-	  } else if (state.src->type == with) {
-            yyval.t = mk_proc_prot(yyvsp[-1].t, state.section.code_default);
-          } else {
-            yyerror("procedure declarations can only be in a public");
-          }
+	  yyval.t = mk_proc(yyvsp[-1].t, NULL);
      	}
     break;
 case 15:
-#line 286 "parse.y"
+#line 181 "parse.y"
 { 
-	  if (state.src->type == source) {
-            yyval.t = mk_func(yyvsp[-5].t, storage_private, yyvsp[-3].z, yyvsp[-2].t);
-          } else {
-            yyerror("functions can only be defined in modules");
-          }
+	  yyval.t = mk_func(yyvsp[-5].t, yyvsp[-3].z, yyvsp[-2].t);
      	}
     break;
 case 16:
-#line 295 "parse.y"
+#line 186 "parse.y"
 { 
-	  if (state.src->type == source_with) {
-            yyval.t = mk_func_prot(yyvsp[-3].t, storage_public, yyvsp[-1].z);
-	  } else if (state.src->type == with) {
-            yyval.t = mk_func_prot(yyvsp[-3].t, state.section.code_default, yyvsp[-1].z);
-          } else {
-            yyerror("function declarations can only be in a public");
-          }
+	  yyval.t = mk_func(yyvsp[-3].t, yyvsp[-1].z, NULL);
      	}
     break;
 case 17:
-#line 308 "parse.y"
+#line 193 "parse.y"
 {
  	  yyval.t = mk_head(yyvsp[0].s, NULL);
      	}
     break;
 case 18:
-#line 313 "parse.y"
+#line 198 "parse.y"
 {
  	  yyval.t = mk_head(yyvsp[-3].s, yyvsp[-1].t);
      	}
     break;
 case 19:
-#line 320 "parse.y"
+#line 205 "parse.y"
 {
 	  yyval.t = node_list(yyvsp[0].t, NULL);
 	}
     break;
 case 20:
-#line 325 "parse.y"
+#line 210 "parse.y"
 {
 	  yyval.t = node_list(yyvsp[-2].t, yyvsp[0].t);
 	}
     break;
 case 21:
-#line 332 "parse.y"
+#line 217 "parse.y"
 {	  
-	  if (state.src->type == source_with) {
-	    yyval.t = mk_decl(type_var, yyvsp[-1].z, storage_public, yyvsp[0].s, NULL);
-	  } else if (state.src->type == with) {
-	    yyval.t = mk_decl(type_var, yyvsp[-1].z, state.section.udata_default, yyvsp[0].s, NULL);
-	  } else {
-	    /* should only get here from inside a function or procedure */
-	    yyval.t = mk_decl(type_var, yyvsp[-1].z, storage_private, yyvsp[0].s, NULL);
-	  }
+	  yyval.t = mk_decl(type_var, yyvsp[-1].z, yyvsp[0].s, NULL);
         }
     break;
 case 22:
-#line 346 "parse.y"
+#line 224 "parse.y"
 {
  	  yyval.t = mk_body(yyvsp[-3].t, yyvsp[-1].t);
      	}
     break;
 case 23:
-#line 351 "parse.y"
+#line 229 "parse.y"
 {
  	  yyval.t = mk_body(NULL, yyvsp[-1].t);
      	}
     break;
 case 24:
-#line 358 "parse.y"
+#line 236 "parse.y"
 {
 	  yyval.t = node_list(yyvsp[0].t, NULL);
 	}
     break;
 case 25:
-#line 363 "parse.y"
+#line 241 "parse.y"
 {
 	  yyval.t = node_list(yyvsp[-1].t, yyvsp[0].t);
 	}
     break;
 case 26:
-#line 370 "parse.y"
+#line 248 "parse.y"
 { 
-	  if (state.src->type == source_with) {
-	    yyval.t = mk_decl_prot(yyvsp[-3].y, yyvsp[-2].z, storage_public, yyvsp[-1].s);
-	  } else if (state.src->type == with) {
-	    yyval.t = mk_decl_prot(yyvsp[-3].y, yyvsp[-2].z, state.section.udata_default, yyvsp[-1].s);
-	  } else {
-	    /* should only get here from inside a function or procedure */
-	    yyval.t = mk_decl(yyvsp[-3].y, yyvsp[-2].z, storage_private, yyvsp[-1].s, NULL);
-	  }
+	  yyval.t = mk_decl(yyvsp[-3].y, yyvsp[-2].z, yyvsp[-1].s, NULL);
         }
     break;
 case 27:
-#line 382 "parse.y"
+#line 253 "parse.y"
 { 
-	  if (state.src->type == source_with) {
-	    yyerror("initialized data can only appear in pal files");
-	    yyval.t = mk_decl_prot(yyvsp[-5].y, yyvsp[-4].z, storage_public, yyvsp[-3].s);
-	  } else if (state.src->type == with) {
-	    yyerror("initialized data can only appear in pal files");
-            yyval.t = mk_decl_prot(yyvsp[-5].y, yyvsp[-4].z, state.section.udata_default, yyvsp[-3].s);
-	  } else {
-	    yyval.t = mk_decl(yyvsp[-5].y, yyvsp[-4].z, storage_private, yyvsp[-3].s, yyvsp[-1].t);
-	  }
+	  yyval.t = mk_decl(yyvsp[-5].y, yyvsp[-4].z, yyvsp[-3].s, yyvsp[-1].t);
         }
     break;
 case 28:
-#line 397 "parse.y"
+#line 260 "parse.y"
 {
 	  yyval.y = type_const;
 	}
     break;
 case 29:
-#line 402 "parse.y"
+#line 265 "parse.y"
 {
 	  yyval.y = type_var;
 	}
     break;
 case 30:
-#line 409 "parse.y"
+#line 272 "parse.y"
 {
 	  yyval.z = size_bit;
 	}
     break;
 case 31:
-#line 414 "parse.y"
+#line 277 "parse.y"
 {
 	  yyval.z = size_byte;
 	}
     break;
 case 32:
-#line 421 "parse.y"
+#line 284 "parse.y"
 {
 	  yyval.t = node_list(yyvsp[0].t, NULL);
 	}
     break;
 case 33:
-#line 426 "parse.y"
+#line 289 "parse.y"
 {
 	  yyval.t = node_list(yyvsp[-1].t, yyvsp[0].t);
 	}
     break;
 case 34:
-#line 433 "parse.y"
+#line 296 "parse.y"
 {
 	  yyval.t = mk_assembly(yyvsp[-1].s);
 	}
     break;
 case 35:
-#line 438 "parse.y"
+#line 301 "parse.y"
 {
 	  yyval.t = mk_cond(yyvsp[-5].t, yyvsp[-3].t, NULL);
 	}
     break;
 case 36:
-#line 443 "parse.y"
+#line 306 "parse.y"
 {
 	  yyval.t = mk_cond(yyvsp[-6].t, yyvsp[-4].t, yyvsp[-3].t);
 	}
     break;
 case 37:
-#line 448 "parse.y"
+#line 311 "parse.y"
 {
 	  yyval.t= mk_loop(NULL, yyvsp[-1].t, NULL, yyvsp[0].t);	
 	}
     break;
 case 38:
-#line 453 "parse.y"
+#line 316 "parse.y"
 {
 	  yyval.t= mk_loop(NULL, NULL, NULL, yyvsp[0].t);
 	}
     break;
 case 39:
-#line 458 "parse.y"
+#line 321 "parse.y"
 {
 	  yyval.t = yyvsp[-1].t;
 	}
     break;
 case 40:
-#line 465 "parse.y"
+#line 328 "parse.y"
 {
 	  /* last statement is elsif */
 	  yyval.t = mk_cond(yyvsp[-2].t, yyvsp[0].t, NULL);
 	}
     break;
 case 41:
-#line 471 "parse.y"
+#line 334 "parse.y"
 {
 	  yyval.t = mk_cond(yyvsp[-3].t, yyvsp[-1].t, yyvsp[0].t);
 	}
     break;
 case 42:
-#line 476 "parse.y"
+#line 339 "parse.y"
 {
 	  /* last statement is else */
 	  yyval.t = mk_cond(NULL, yyvsp[0].t, NULL);
 	}
     break;
 case 43:
-#line 484 "parse.y"
+#line 347 "parse.y"
 {
 	  yyval.t = yyvsp[-3].t;
 	}
     break;
 case 44:
-#line 491 "parse.y"
+#line 354 "parse.y"
 {
 	  yyval.t = node_list(yyvsp[0].t, NULL);
 	}
     break;
 case 45:
-#line 496 "parse.y"
+#line 359 "parse.y"
 {
 	  yyval.t = node_list(yyvsp[-2].t, yyvsp[0].t);
 	}
     break;
 case 47:
-#line 505 "parse.y"
+#line 368 "parse.y"
 {
 	  yyval.t = mk_string(yyvsp[0].s);
         }
     break;
 case 49:
-#line 514 "parse.y"
+#line 377 "parse.y"
 {
 	  yyval.t = mk_binop(yyvsp[-1].o, yyvsp[-2].t, yyvsp[0].t);
 	}
     break;
 case 50:
-#line 519 "parse.y"
+#line 382 "parse.y"
 { yyval.o = op_eq; }
     break;
 case 52:
-#line 525 "parse.y"
+#line 388 "parse.y"
 {
 	  yyval.t = mk_binop(yyvsp[-1].o, yyvsp[-2].t, yyvsp[0].t);
 	}
     break;
 case 53:
-#line 530 "parse.y"
+#line 393 "parse.y"
 { yyval.o = op_land; }
     break;
 case 54:
-#line 531 "parse.y"
+#line 394 "parse.y"
 { yyval.o = op_lor; }
     break;
 case 56:
-#line 537 "parse.y"
+#line 400 "parse.y"
 {
 	  yyval.t = mk_binop(yyvsp[-1].o, yyvsp[-2].t, yyvsp[0].t);
 	}
     break;
 case 57:
-#line 542 "parse.y"
+#line 405 "parse.y"
 { yyval.o = op_and; }
     break;
 case 58:
-#line 543 "parse.y"
+#line 406 "parse.y"
 { yyval.o = op_or; }
     break;
 case 59:
-#line 544 "parse.y"
+#line 407 "parse.y"
 { yyval.o = op_xor; }
     break;
 case 61:
-#line 550 "parse.y"
+#line 413 "parse.y"
 {
 	  yyval.t = mk_binop(yyvsp[-1].o, yyvsp[-2].t, yyvsp[0].t);
 	}
     break;
 case 62:
-#line 555 "parse.y"
+#line 418 "parse.y"
 { yyval.o = op_lt; }
     break;
 case 63:
-#line 556 "parse.y"
+#line 419 "parse.y"
 { yyval.o = op_gt; }
     break;
 case 64:
-#line 557 "parse.y"
+#line 420 "parse.y"
 { yyval.o = op_eq; }
     break;
 case 65:
-#line 558 "parse.y"
+#line 421 "parse.y"
 { yyval.o = op_ne; }
     break;
 case 66:
-#line 559 "parse.y"
+#line 422 "parse.y"
 { yyval.o = op_gte; }
     break;
 case 67:
-#line 560 "parse.y"
+#line 423 "parse.y"
 { yyval.o = op_lte; }
     break;
 case 69:
-#line 566 "parse.y"
+#line 429 "parse.y"
 {
 	  yyval.t = mk_binop(yyvsp[-1].o, yyvsp[-2].t, yyvsp[0].t);
 	}
     break;
 case 70:
-#line 571 "parse.y"
+#line 434 "parse.y"
 { yyval.o = op_lsh; }
     break;
 case 71:
-#line 572 "parse.y"
+#line 435 "parse.y"
 { yyval.o = op_rsh; }
     break;
 case 73:
-#line 578 "parse.y"
+#line 441 "parse.y"
 {
 	  yyval.t = mk_binop(yyvsp[-1].o, yyvsp[-2].t, yyvsp[0].t);
 	}
     break;
 case 74:
-#line 583 "parse.y"
+#line 446 "parse.y"
 { yyval.o = op_add; }
     break;
 case 75:
-#line 584 "parse.y"
+#line 447 "parse.y"
 { yyval.o = op_sub; }
     break;
 case 77:
-#line 590 "parse.y"
+#line 453 "parse.y"
 {
 	  yyval.t = mk_binop(yyvsp[-1].o, yyvsp[-2].t, yyvsp[0].t);
 	}
     break;
 case 78:
-#line 595 "parse.y"
+#line 458 "parse.y"
 { yyval.o = op_mult; }
     break;
 case 79:
-#line 596 "parse.y"
+#line 459 "parse.y"
 { yyval.o = op_div; }
     break;
 case 80:
-#line 597 "parse.y"
+#line 460 "parse.y"
 { yyval.o = op_mod; }
     break;
 case 82:
-#line 603 "parse.y"
+#line 466 "parse.y"
 {
 	  yyval.t = mk_unop(yyvsp[-1].o, yyvsp[0].t);
 	}
     break;
 case 83:
-#line 608 "parse.y"
+#line 471 "parse.y"
 { yyval.o = op_neg; }
     break;
 case 84:
-#line 609 "parse.y"
+#line 472 "parse.y"
 { yyval.o = op_not; }
     break;
 case 85:
-#line 610 "parse.y"
+#line 473 "parse.y"
 { yyval.o = op_com; }
     break;
 case 86:
-#line 611 "parse.y"
+#line 474 "parse.y"
 { yyval.o = op_add; }
     break;
 case 87:
-#line 615 "parse.y"
+#line 478 "parse.y"
 {
 	  yyval.t = mk_symbol(yyvsp[0].s);
         }
     break;
 case 88:
-#line 620 "parse.y"
+#line 483 "parse.y"
 {
 	  /* function or procedure call */
 	  yyval.t = mk_call(yyvsp[-2].s, NULL);
 	}
     break;
 case 89:
-#line 626 "parse.y"
+#line 489 "parse.y"
 {
 	  /* function or procedure call with arguments */
 	  yyval.t = mk_call(yyvsp[-3].s, yyvsp[-1].t);
 	}
     break;
 case 90:
-#line 632 "parse.y"
+#line 495 "parse.y"
 {
 	  yyval.t = mk_constant(yyvsp[0].i);
 	}
     break;
 case 91:
-#line 637 "parse.y"
+#line 500 "parse.y"
 {
 	  yyval.t = yyvsp[-1].t;
 	}
@@ -1895,5 +1756,5 @@ yyreturn:
 #endif
   return yyresult;
 }
-#line 642 "parse.y"
+#line 505 "parse.y"
 

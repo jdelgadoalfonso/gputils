@@ -48,107 +48,6 @@ yyerror(char *message)
 
 int yylex(void);
 
-/* FIXME: Clean this up.  We need to read the pragmas then modify the data
-   so the mod doesn't start after the pragma statement. Maybe use the
-   parse tree to implement the pragmas. */
-
-static void
-process_pragma(tree *expr)
-{
-  tree *lhs;
-  tree *rhs;
-
-  switch (expr->tag) {
-  case node_binop:
-    lhs = expr->value.binop.p0;
-    rhs = expr->value.binop.p1;
-    if ((expr->value.binop.op != op_eq) ||
-        (lhs->tag != node_symbol)) {
-      gp_error("unknown pragma");
-    } else {
-      if (strcasecmp(lhs->value.symbol, "processor") == 0) {
-        if (rhs->tag != node_symbol) {
-          gp_error("invalid processor name");        
-        } else {
-          if (state.processor_chosen == false) {
-            select_processor(rhs->value.symbol);
-          }        
-        }
-      } else if (strcasecmp(lhs->value.symbol, "code_section") == 0) {
-        if (rhs->tag != node_symbol) {
-          /* FIXME: change from symbol to string */
-          gp_error("invalid code section name");
-        } else {
-          if (state.src->type == with) {            
-            if ((state.section.code) && 
-                (strcmp(rhs->value.symbol, state.section.code) == 0)) {
-              state.section.code_default = storage_local;
-            } else {
-              state.section.code_default = storage_extern;
-            }
-          } else {
-            if (state.src->type == source) {
-              gp_warning("section pragma's should be in .pub files");
-            }
-            if (state.section.code) {
-              gp_error("duplicate code section name");
-            } else {
-              state.section.code = rhs->value.symbol;
-            }
-          }        
-        }
-      } else if (strcasecmp(lhs->value.symbol, "udata_section") == 0) {
-        if (rhs->tag != node_symbol) {
-          gp_error("invalid udata section name");
-        } else {
-          if (state.src->type == with) {            
-            if ((state.section.udata) &&
-                (strcmp(rhs->value.symbol, state.section.udata) == 0)) {
-              state.section.udata_default = storage_local;
-            } else {
-              state.section.udata_default = storage_extern;
-            }
-          } else {
-            if (state.src->type == source) {
-              gp_warning("section pragma's should be in .pub files");
-            }
-            if (state.section.code) {
-              gp_error("duplicate udata section name");
-            } else {
-              state.section.udata = rhs->value.symbol;
-            }
-          }        
-        }
-      } else if (strcasecmp(lhs->value.symbol, "code_address") == 0) {
-        if (rhs->tag != node_constant) {
-          gp_error("invalid code address");
-        } else if (state.src->type == source) {            
-          state.section.code_addr = rhs->value.constant;
-          state.section.code_addr_valid = true;
-        } else {
-          gp_error("udata section addresses can only be in .pal files");
-        }
-      } else if (strcasecmp(lhs->value.symbol, "udata_address") == 0) {
-        if (rhs->tag != node_constant) {
-          gp_error("invalid udata address");
-        } else if (state.src->type == source) {            
-          state.section.udata_addr = rhs->value.constant;
-          state.section.udata_addr_valid = true;
-        } else {
-          gp_error("udata section addresses can only be in .pal files");
-        }
-      } else {
-        gp_error("unknown pragma \"%s\"", lhs->value.symbol);
-      }
-    }
-    break;
-  default:
-    gp_error("unknown pragma");
-  }
-  
-  return;
-}
-
 %}
 
 /* Bison declarations */
@@ -219,28 +118,29 @@ program:
 	;
 
 entity:
-	PRAGMA expr ';'
-	{
-	  process_pragma($2);
-	}
-	|
 	WITH IDENT ';'
 	{
-	  open_src($2, with);
+	  open_src($2, source_with);
 	}
 	|
-	MODULE IS END MODULE ';' { }
+	MODULE IS END MODULE ';'
+	{
+	  gp_warning("empty module");
+	}
 	|
 	MODULE IS element_list END MODULE ';'
 	{
-	  add_entity(mk_module($3));
+	  add_entity(mk_file($3, state.src->type));
 	}
 	|
-	PUBLIC_STORAGE IS END PUBLIC_STORAGE ';' { }
+	PUBLIC_STORAGE IS END PUBLIC_STORAGE ';'
+	{
+	  gp_warning("empty public");
+	}
 	|
 	PUBLIC_STORAGE IS element_list END PUBLIC_STORAGE ';'
 	{
-	  add_entity(mk_public($3));
+	  add_entity(mk_file($3, state.src->type));
 	}
 	;
 
@@ -257,6 +157,11 @@ element_list:
 	;
 
 element:
+	PRAGMA expr ';'
+	{
+	  $$ = mk_pragma($2);
+	}
+	|
 	decl
 	{
 	  $$ = $1;
@@ -264,42 +169,22 @@ element:
 	|
 	PROCEDURE head body PROCEDURE ';'
 	{ 
-          if (state.src->type == source) {
-            $$ = mk_proc($2, storage_private, $3);
-          } else {
-            yyerror("procedures can only be defined in modules");
-          }
+	  $$ = mk_proc($2, $3);
      	}
 	|
 	PROCEDURE head ';'
 	{ 
-	  if (state.src->type == source_with) {
-            $$ = mk_proc_prot($2, storage_public);
-	  } else if (state.src->type == with) {
-            $$ = mk_proc_prot($2, state.section.code_default);
-          } else {
-            yyerror("procedure declarations can only be in a public");
-          }
+	  $$ = mk_proc($2, NULL);
      	}
         |
 	FUNCTION_TOK head RETURN decl_size body FUNCTION_TOK ';'
 	{ 
-	  if (state.src->type == source) {
-            $$ = mk_func($2, storage_private, $4, $5);
-          } else {
-            yyerror("functions can only be defined in modules");
-          }
+	  $$ = mk_func($2, $4, $5);
      	}
         |
 	FUNCTION_TOK head RETURN decl_size ';'
 	{ 
-	  if (state.src->type == source_with) {
-            $$ = mk_func_prot($2, storage_public, $4);
-	  } else if (state.src->type == with) {
-            $$ = mk_func_prot($2, state.section.code_default, $4);
-          } else {
-            yyerror("function declarations can only be in a public");
-          }
+	  $$ = mk_func($2, $4, NULL);
      	}
 	;
 
@@ -330,14 +215,7 @@ arg_list:
 arg:
 	decl_size IDENT
 	{	  
-	  if (state.src->type == source_with) {
-	    $$ = mk_decl(type_var, $1, storage_public, $2, NULL);
-	  } else if (state.src->type == with) {
-	    $$ = mk_decl(type_var, $1, state.section.udata_default, $2, NULL);
-	  } else {
-	    /* should only get here from inside a function or procedure */
-	    $$ = mk_decl(type_var, $1, storage_private, $2, NULL);
-	  }
+	  $$ = mk_decl(type_var, $1, $2, NULL);
         }
 	;
 
@@ -368,27 +246,12 @@ decl_block:
 decl:
 	decl_type decl_size IDENT ';'
 	{ 
-	  if (state.src->type == source_with) {
-	    $$ = mk_decl_prot($1, $2, storage_public, $3);
-	  } else if (state.src->type == with) {
-	    $$ = mk_decl_prot($1, $2, state.section.udata_default, $3);
-	  } else {
-	    /* should only get here from inside a function or procedure */
-	    $$ = mk_decl($1, $2, storage_private, $3, NULL);
-	  }
+	  $$ = mk_decl($1, $2, $3, NULL);
         }
 	|
 	decl_type decl_size IDENT '=' expr ';'
 	{ 
-	  if (state.src->type == source_with) {
-	    yyerror("initialized data can only appear in pal files");
-	    $$ = mk_decl_prot($1, $2, storage_public, $3);
-	  } else if (state.src->type == with) {
-	    yyerror("initialized data can only appear in pal files");
-            $$ = mk_decl_prot($1, $2, state.section.udata_default, $3);
-	  } else {
-	    $$ = mk_decl($1, $2, storage_private, $3, $5);
-	  }
+	  $$ = mk_decl($1, $2, $3, $5);
         }
 	;
 

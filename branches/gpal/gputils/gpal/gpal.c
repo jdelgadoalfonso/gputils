@@ -316,12 +316,12 @@ compile(void)
  
   /* open and parse the source public file */
   state.src = NULL;
-  open_src(state.basefilename, source_with);
+  open_src(state.basefilename, source_public);
   if (state.src)
     yyparse();
 
   /* open input file */
-  open_src(state.srcfilename, source);
+  open_src(state.srcfilename, source_module);
 
   /* parse the input file */
   yyparse();
