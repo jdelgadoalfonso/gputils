@@ -31,8 +31,6 @@ void directory_block(void)
   char temp_buf[256];
   char *block;
   char *processor_name;
-  struct px *processor_info;
-  enum proc_class processor_class;
   int bytes_for_address;
   
   block = main_dir.dir.block;
@@ -60,14 +58,6 @@ void directory_block(void)
                           &block[COD_DIR_PROCESSOR],
                           8);
   printf("Processor         %s\n", processor_name);
-
-  processor_info = gp_find_processor(processor_name);
-  processor_class = gp_processor_class(processor_info->tag);
-  if (processor_class == PROC_CLASS_PIC16E) {
-    addrsize = 2;
-  } else {
-    addrsize = 1;
-  }
 
   bytes_for_address = gp_getl16(&block[COD_DIR_ADDRSIZE]);
   printf("Bytes for address: %d\n", bytes_for_address);

@@ -30,6 +30,8 @@ static DirBlockInfo main_dir;
 static int cod_lst_line_number = 0;
 static int blocks = 0;
 
+extern int _16bit_core;
+
 static void
 init_DirBlock(DirBlockInfo *a_dir)
 {
@@ -256,7 +258,8 @@ cod_lst_line(int line_type)
     gp_putl16(&lb.block[offset + COD_LS_SLINE], state.src->line_number);
 
     /* Write the address of the opcode. */
-    gp_putl16(&lb.block[offset + COD_LS_SLOC], state.lst.line.was_org);
+    gp_putl16(&lb.block[offset + COD_LS_SLOC], 
+              state.lst.line.was_org << _16bit_core);
 
     break;
   case COD_LAST_LST_LINE:
