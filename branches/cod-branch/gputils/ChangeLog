@@ -1,3 +1,7 @@
+2004-09-28 Craig Franklin <craigfranklin@users.sourceforge.net>
+  * Added time and date to COD files.
+  * Fixed error in gpvc time reporting.
+
 2004-09-25 Craig Franklin <craigfranklin@users.sourceforge.net>
   * Changed to byte addressing for 18xx cod files.
 
