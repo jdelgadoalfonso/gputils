@@ -1,0 +1,45 @@
+This following list contains items that need to be completed.  This 
+list is in no particular order.
+
+gputils
+  * Switch to xmalloc and obstacks.
+  * Start migrating to the GNU coding style.
+  * grep the source for FIXME and fix.
+  * Add number of pages and banks to the processor definitions and use it.
+  * Use dejagnu for testing.
+  * Prefix all visible library functions with gp_. Add _ to all 
+    others.
+
+gpal
+  * Use "_" instead of "." in asm file to be compatible with C.
+  * Add a macro/inline procedure feature.  Maybe a "pragma inline = true".
+    It would then have to be placed in the public.   
+  * Implement initialized data using idata sections.
+  * Write a gpmake to auto generate Makefiles or add auto dependency
+    feature to gpal.  gpal main.pal it figures out what needs to be
+    compiled.   
+  * Prevent the same With from being read multiple times.
+  * Clean up the test expressions code generator.  Keep the result in W not
+    the working register.
+  * Add backend for each family.
+  * Create a stdlib.  Add assert function and use it for simulation. newlib
+  * Figure out how to do pointers.  Maybe a new "pointer" type?
+  * Implement "rom" to go with variable and constant. dt "my string\0"
+  * Create icode in codegen and peep it.  Write that to asm file.
+  * Remove dead code.
+    
+gpasm
+  * Change to byte addressing in 18xx devices in COD files for MPLAB.
+  * Implement nested while loops.
+  * Clean up the byte verses word, data memory/program memory stuff.
+  * Move opcode generator from /gpasm/directive.c to 
+    /libgputils/opcode.c.
+  * Move COD file generation to library.
+  * Add macro names to symbol table in listing file.
+  * Add .ident for HLL tools 
+  * Add .def/.endef for embedding debug/optimization information
+  * Undefined coff symbols are always at the end of the coff table.
+  * Add relocations for the difference between symbols in the same section.
+
+gplink
+  * Check the 18xx relocations.
