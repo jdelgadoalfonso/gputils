@@ -72,7 +72,7 @@ init(void)
   state.outfilename = NULL;
 
   /* create the global symbol table that is case insensitive */
-  state.global = push_symbol_table(NULL, 1);
+  state.top = state.global = push_symbol_table(NULL, 1);
    
   return;
 }
@@ -101,6 +101,7 @@ select_processor(char *name)
       if (state.processor == no_processor) {
         state.processor = found->tag;
         state.processor_info = found;
+        scan_header();
         /* FIXME: should the processor name be defined as a symbol? */
       } else if (state.processor != found->tag ) {
         gp_warning("redefining processor");
@@ -297,15 +298,20 @@ static void
 compile(void)
 {
   /* symbol table */
-  state.global = push_symbol_table(state.global, 1);
+  state.top = push_symbol_table(state.top, 1);
 
   init_nodes();
   state.root = NULL;
 
   /* remove section names */
   state.section.code = NULL;
+  state.section.code_addr = 0;
+  state.section.code_addr_valid = false;
   state.section.code_default = storage_extern;
+
   state.section.udata = NULL;
+  state.section.udata_addr = 0;
+  state.section.udata_addr_valid = false;
   state.section.udata_default = storage_extern;
  
   /* open and parse the source public file */
@@ -320,11 +326,15 @@ compile(void)
   /* parse the input file */
   yyparse();
 
+  /* don't bother analyzing if there are already errors */
+  if (gp_num_errors)
+    return;
+
   /* check for semantic errors and write the code */
   analyze();
 
   /* destory symbol table for the current module */
-  state.global = pop_symbol_table(state.global);
+  state.top = pop_symbol_table(state.top);
 
   /* free all the memory */
   free_nodes();
@@ -371,19 +381,20 @@ assemble(char *file_name, gp_boolean asm_source)
   return;
 }
 
-static linked_list *last_file;
+static gp_linked_list *last_file;
 
 static void
 add_file_list(char *file_name)
 {
-  linked_list *new;
+  gp_linked_list *new;
+  char *name;
 
-  new = malloc(sizeof(*new));
-  new->item = malloc(strlen(file_name) + 3);
-  strcpy(new->item, file_name);
-  strcat(new->item, ".o");
-  new->prev = NULL;
-  new->next = NULL;
+  name = malloc(strlen(file_name) + 3);
+  strcpy(name, file_name);
+  strcat(name, ".o");
+
+  new = gp_list_make();
+  gp_list_annotate(new, name);
 
   if (state.file_list) {
     new->prev = last_file;
@@ -403,7 +414,7 @@ static void
 combine_output(void)
 {
   char command[BUFSIZ];
-  linked_list *list = state.file_list;
+  gp_linked_list *list = state.file_list;
 
   /* only link if commanded */
   if ((state.compile_only == true) || (state.no_link == true))
@@ -445,7 +456,7 @@ combine_output(void)
     gp_error("no files to link or archive");
   } else {
     while(list != NULL) {
-      strcat(command, list->item); 
+      strcat(command, gp_list_get(list)); 
       strcat(command, " ");
       list = list->next;
     }
@@ -459,7 +470,7 @@ combine_output(void)
   } else if (state.delete_temps == true) {
     list = state.file_list;
     while(list != NULL) {
-      unlink(list->item);
+      unlink(gp_list_get(list));
       list = list->next;
     }    
   

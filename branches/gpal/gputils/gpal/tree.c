@@ -232,6 +232,15 @@ mk_loop(tree *init, tree *exit, tree *incr, tree *body)
 }
 
 tree *
+mk_module(tree *body)
+{
+  tree *new = mk_node(node_module);
+  new->value.module.body = body;
+  
+  return new;
+}
+
+tree *
 mk_proc(tree *head, enum node_storage storage, tree *body)
 {
   tree *new = mk_node(node_proc);
@@ -248,6 +257,15 @@ mk_proc_prot(tree *head, enum node_storage storage)
   tree *new = mk_node(node_proc_prot);
   new->value.proc_prot.head = head;
   new->value.proc_prot.storage = storage;
+  
+  return new;
+}
+
+tree *
+mk_public(tree *body)
+{
+  tree *new = mk_node(node_public);
+  new->value.public.body = body;
   
   return new;
 }
@@ -290,7 +308,7 @@ node_list(tree *head, tree *tail)
 enum node_storage
 determine_storage(tree *node)
 {
-  enum node_storage storage;
+  enum node_storage storage = storage_unknown;
 
   switch(node->tag) {
   case node_decl:
@@ -355,22 +373,20 @@ find_node_name(tree *node)
 }
 
 tree *
-find_node(char *name, enum node_tag tag)
+find_node(tree *search, char *name, enum node_tag tag)
 {
-  tree *current = NULL;
   tree *found = NULL;
   char *node_name;
 
-  current = state.root;
-  while (current != NULL) {
-    if (current->tag == tag) {
-      node_name = find_node_name(current);
+  while (search != NULL) {
+    if (search->tag == tag) {
+      node_name = find_node_name(search);
       if (strcasecmp(node_name, name) == 0) {
-        found = current;
+        found = search;
         break;
       }
     }
-    current = current->next;
+    search = search->next;
   }
 
   return found;
@@ -516,6 +532,12 @@ print_node(tree *node, int level)
       print_node(node->value.loop.body, level);
     }
     break;
+  case node_module:
+    print_space(level);
+    printf("node_module\n");
+    if (node->value.module.body != NULL)  
+      print_node(node->value.module.body, level);
+    break;
   case node_proc:
     print_space(level);
     printf("node_proc\n");
@@ -529,6 +551,12 @@ print_node(tree *node, int level)
     printf("node_proc_prot\n");
     if (node->value.proc_prot.head != NULL)  
       print_node(node->value.proc_prot.head, level);
+    break;
+  case node_public:
+    print_space(level);
+    printf("node_public\n");
+    if (node->value.public.body != NULL)  
+      print_node(node->value.public.body, level);
     break;
   case node_string:
     print_space(level);

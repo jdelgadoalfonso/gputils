@@ -22,11 +22,7 @@ Boston, MA 02111-1307, USA.  */
 #ifndef __ANALYZE_H__
 #define __ANALYZE_H__
 
-/* symbol table functions */
-struct variable *add_global(char *name, char *alias, tree *node);
-struct variable *add_constant(char *name, int value, tree *node);
-struct variable *get_global(char *name);
-
 void analyze(void);
+void analyze_error(tree *node, const char *format, ...);
 
 #endif

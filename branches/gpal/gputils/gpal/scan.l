@@ -28,6 +28,7 @@ Boston, MA 02111-1307, USA.  */
 #include "libgputils.h"
 #include "gpal.h"
 #include "parse.h"
+#include "symbol.h"
 
 #define OPERATOR(x)  return (yylval.i = (x))
 /* YY_UNPUT not used, suppress the warning */
@@ -39,6 +40,13 @@ int stringtolong(char *string, int radix);
 #define ASM_BUF_SIZ 8096
 static char asm_buffer[ASM_BUF_SIZ];
 static int asm_index;
+
+/* header parser data */
+#define LINESIZ 520
+#define NUM_TOKENS 3
+
+int header_line_number;
+char header_file_name[LINESIZ];
 
 %}
 
@@ -81,6 +89,7 @@ DECCHAR [0-9]
 "if"			{ return IF; }
 "is"			{ return IS; }
 "loop"			{ return LOOP; }
+"module"		{ return MODULE; }
 "pragma"		{ return PRAGMA; }
 "procedure"		{ return PROCEDURE; }
 "public"		{ return PUBLIC_STORAGE; }
@@ -233,4 +242,98 @@ stringtolong(char *string, int radix)
   }
 
   return value;
+}
+
+static int
+convert_number(char *string)
+{
+  int value = 0;
+
+  if ((string[0] == 'H') && (string[1] == '\'')) {
+    if (string[2] == '-') {
+      string = &string[3];
+    } else {
+      string = &string[2];
+    }
+    string[strlen(string) - 1] = '\0';
+    value = stringtolong(string, 16);
+  } else if ((string[0] == '0') && (string[1] == 'x')) {  
+    string = &string[2];
+    value = stringtolong(string, 16);
+  } else if (string[0] == '.') {  
+    string = &string[1];
+    value = stringtolong(string, 10);
+  } else {
+    gp_error("unknown value %s on %i of \"%s\"",
+             string,
+             header_line_number,
+             header_file_name);
+  }
+
+  return value;
+}
+
+/* FIXME: Insert equ filename and line number into symbol table.  Maybe
+   use a file ID function.  Reference it for debug.  */
+   
+/* FIXME: Add a flag to prevent the header file from being read and to 
+   specify a different filename. */
+
+/* FIXME: Figure out how to handle reading header when processor is only
+   specified in a pragma. */
+
+/* FIXME: Split this off to another file. */
+
+void
+scan_header(void)
+{
+  FILE *header;
+  char linebuf[LINESIZ];
+  char *linept = linebuf;
+  char *array[NUM_TOKENS];
+  int i;
+
+  sprintf(header_file_name, "%s.inc", state.processor_info->names[1]);
+
+  header = fopen(header_file_name, "rt");
+  if (header == NULL) {
+    /* FIXME: need to search the include pathes */
+    gp_warning("couldn't open file \"%s\"", header_file_name);
+    return;
+  }
+
+  /* go to the beginning of the file */
+  fseek(header, 0L, 0);	  
+  header_line_number = 1;
+
+  /* scan the file looking for the equates */
+  while(fgets(linept, LINESIZ, header)) {
+
+    array[0] = strtok(linebuf, " \t\r\n");
+    if (array[0]) {
+      for (i = 1; i < NUM_TOKENS; i++) {
+        array[i] = strtok(NULL, " \t\r\n");
+        if (array[i] == NULL)
+          break;      
+      }
+
+      if (array[0] && array[1] && array[2] && 
+          (strcasecmp(array[1], "equ") == 0)) {
+        add_equ(array[0], convert_number(array[2])); 
+      }
+    }
+
+    /* set the line pointer to the beginning of the line buffer */
+    linept = linebuf;
+    
+    header_line_number++;
+
+  }
+
+  fclose(header);
+
+  printf("done reading header\n");
+
+  return;
+
 }
