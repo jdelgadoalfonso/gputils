@@ -32,7 +32,7 @@ struct variable {
   int value;				/* value if constant symbol */
 };
 
-void add_global(char *name, char *alias, tree *object);
+struct variable *add_global(char *name, char *alias, tree *object);
 struct variable *get_global(char *name);
 void write_asm_line(const char *format, ...);
 void write_label(char *label);
