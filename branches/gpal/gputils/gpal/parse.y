@@ -44,6 +44,9 @@ int yylex(void);
   int i;
   char *s;
   tree *t;
+  enum node_type y;
+  enum node_size z;
+  enum node_op o;
 }
 
 /* keywords */
@@ -70,15 +73,15 @@ int yylex(void);
 %type <s> line
 %type <i> '+', '-', '*', '/', '%', '!', '~'
 %type <t> expr, e0, e1, e2, e3, e4, e5, e6, e7, e8,
-%type <i> e1op, e2op, e3op, e4op, e5op, e6op, e7op, e8op
+%type <o> e1op, e2op, e3op, e4op, e5op, e6op, e7op, e8op
 %type <t> head
 %type <t> arg_list
 %type <t> arg
 %type <t> body
 %type <t> decl_block
 %type <t> decl
-%type <i> decl_type
-%type <i> decl_size
+%type <y> decl_type
+%type <z> decl_size
 %type <t> statement_block
 %type <t> statement
 %type <t> if_body
@@ -106,15 +109,15 @@ line:
 	|
 	WITH IDENT ';'
 	{
-	  open_src($2, true, false);
+	  open_src($2, with);
 	}
 	|
 	decl
 	{
 	  if (state.src->type == source_with) {
-            $1->value.decl.storage = PUBLIC_STORAGE;
+            $1->value.decl.storage = storage_public;
 	  } else if (state.src->type == with) {
-            $1->value.decl.storage = EXTERN_STORAGE;
+            $1->value.decl.storage = storage_extern;
           }
 	  add_entity($1);
         }
@@ -122,7 +125,7 @@ line:
 	PROCEDURE head body PROCEDURE ';'
 	{ 
           if (state.src->type == source) {
-            add_entity(mk_proc($2, PRIVATE_STORAGE, $3));
+            add_entity(mk_proc($2, storage_private, $3));
           } else {
             gp_error("procedures can only be defined in .pal files");
           }
@@ -131,9 +134,9 @@ line:
 	PROCEDURE head ';'
 	{ 
 	  if (state.src->type == source_with) {
-            add_entity(mk_proc($2, PUBLIC_STORAGE, NULL));
+            add_entity(mk_proc_prot($2, storage_public));
 	  } else if (state.src->type == with) {
-            add_entity(mk_proc($2, EXTERN_STORAGE, NULL));
+            add_entity(mk_proc_prot($2, storage_extern));
           } else {
             gp_error("procedure declarations can only be in .pub files");
           }
@@ -142,7 +145,7 @@ line:
 	FUNCTION_TOK head RETURN decl_size body FUNCTION_TOK ';'
 	{ 
 	  if (state.src->type == source) {
-            add_entity(mk_func($2, PRIVATE_STORAGE, $4, $5));
+            add_entity(mk_func($2, storage_private, $4, $5));
           } else {
             gp_error("functions can only be defined in .pal files");
           }
@@ -151,9 +154,9 @@ line:
 	FUNCTION_TOK head RETURN decl_size ';'
 	{ 
 	  if (state.src->type == source_with) {
-            add_entity(mk_func($2, PUBLIC_STORAGE, $4, NULL));
+            add_entity(mk_func_prot($2, storage_public, $4));
 	  } else if (state.src->type == with) {
-            add_entity(mk_func($2, EXTERN_STORAGE, $4, NULL));
+            add_entity(mk_func_prot($2, storage_extern, $4));
           } else {
             gp_error("function declarations can only be in .pub files");
           }
@@ -218,31 +221,31 @@ decl_block:
 decl:
 	decl_type decl_size parameter_list ';'
 	{ 
-	  $$ = mk_decl($1, $2, PRIVATE_STORAGE, $3);
+	  $$ = mk_decl($1, $2, storage_private, $3);
         }
 	;
 
 decl_type:
 	CONST_TYPE
 	{
-	  $$ = CONST_TYPE;
+	  $$ = type_const;
 	}
 	|
 	VAR_TYPE
 	{
-	  $$ = VAR_TYPE;
+	  $$ = type_var;
 	}
 	;
 
 decl_size:
 	BIT_SIZE
 	{
-	  $$ = BIT_SIZE;
+	  $$ = size_bit;
 	}
 	|
 	BYTE_SIZE
 	{
-	  $$ = BYTE_SIZE;
+	  $$ = size_byte;
 	}
 	;
 
@@ -341,7 +344,7 @@ e8:
 	}
 	;
 
-e8op:	'=' ;
+e8op:	'=' { $$ = op_eq; };
 
 e7:
 	e6
@@ -352,7 +355,8 @@ e7:
 	}
 	;
 
-e7op:	LOGICAL_AND | LOGICAL_OR;
+e7op:	  LOGICAL_AND { $$ = op_land; }
+	| LOGICAL_OR  { $$ = op_lor; };
 
 e6:
 	e5
@@ -363,7 +367,9 @@ e6:
 	}
 	;
 
-e6op:	'&' | '|' | '^' ;
+e6op:	  '&' { $$ = op_and; }
+	| '|' { $$ = op_or; }
+	| '^' { $$ = op_xor; };
 
 e5:
 	e4
@@ -374,7 +380,12 @@ e5:
 	}
 	;
 
-e5op:	'<' | '>' | EQUAL | NOT_EQUAL | GREATER_EQUAL | LESS_EQUAL ;
+e5op:	  '<'           { $$ = op_lt; }
+	| '>'           { $$ = op_gt; }
+	| EQUAL         { $$ = op_eq; }
+	| NOT_EQUAL     { $$ = op_ne; }
+	| GREATER_EQUAL { $$ = op_gte; }
+	| LESS_EQUAL    { $$ = op_lte; };
 
 e4:
 	e3
@@ -385,7 +396,8 @@ e4:
 	}
 	;
 
-e4op:	LSH | RSH ;
+e4op:	  LSH { $$ = op_lsh; }
+	| RSH { $$ = op_rsh; };
 
 e3:
 	e2
@@ -396,7 +408,8 @@ e3:
 	}
 	;
 
-e3op:   '+' | '-' ;
+e3op:     '+' { $$ = op_add; }
+	| '-' { $$ = op_sub; };
 
 e2:
 	e1
@@ -407,7 +420,9 @@ e2:
 	}
 	;
 
-e2op:   '*' | '/' | '%';
+e2op:     '*' { $$ = op_mult; }
+	| '/' { $$ = op_div; }
+	| '%' { $$ = op_mod; };
 
 e1:
 	e0
@@ -418,7 +433,10 @@ e1:
 	}
 	;
 
-e1op:	'-' | '!' | '~' | '+';
+e1op:	  '-' { $$ = op_neg; }
+	| '!' { $$ = op_not; }
+	| '~' { $$ = op_com; }
+	| '+' { $$ = op_add; };
 
 e0:
 	IDENT

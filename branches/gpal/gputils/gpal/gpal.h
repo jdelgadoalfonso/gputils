@@ -29,12 +29,6 @@ Boston, MA 02111-1307, USA.  */
 
 #include "tree.h"
 
-typedef struct entity_struct entity;
-struct entity_struct {
-  tree *node;
-  entity *next;
-};
-
 typedef struct list_struct file_list;
 struct list_struct {
   char *name;
@@ -66,7 +60,7 @@ extern struct gpal_state {
   struct symbol_table
     *type,				/* Symbol Types */
     *global;				/* Global symbols */
-  entity *list;				/* list of functions and procedures */
+  tree *root;				/* start of tree */
   struct source_context *src;		/* Top of the stack of source files */
   char *basefilename;			/* base filename */
   char *srcfilename;			/* source filename */
@@ -77,9 +71,11 @@ extern struct gpal_state {
   } output;
 } state;
 
+enum src_types { source, source_with, with };
+
 struct source_context {
   char *name;
-  enum src_types { source, source_with, with } type;
+  enum src_types type;
   FILE *f;
   struct yy_buffer_state *yybuf;
   unsigned int line_number;

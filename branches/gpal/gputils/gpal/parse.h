@@ -6,6 +6,9 @@ typedef union {
   int i;
   char *s;
   tree *t;
+  enum node_type y;
+  enum node_size z;
+  enum node_op o;
 } yystype;
 # define YYSTYPE yystype
 # define YYSTYPE_IS_TRIVIAL 1
