@@ -25,6 +25,7 @@ Boston, MA 02111-1307, USA.  */
 #include "gpal.h"
 #include "analyze.h"
 #include "codegen.h"
+#include "scan.h"
 #include "symbol.h"
 
 #ifdef STDC_HEADERS
@@ -73,15 +74,16 @@ analyze_error(tree *node, const char *format, ...)
   va_end(args);
 
   if (node) {
-    printf("%s:%d:error %s\n", node->file_name, node->line_number, buffer);
+    printf("%s:%d: error: %s\n",
+           get_compile(node->file_id),
+           node->line_number,
+           buffer);
   } else {
     printf("error %s\n", buffer);
   }
 
   return;
 }
-
-#if 0
 
 static void 
 analyze_warning(tree *node, const char *format, ...)
@@ -99,7 +101,10 @@ analyze_warning(tree *node, const char *format, ...)
   va_end(args);
 
   if (node) {
-    printf("%s:%d:warning %s\n", node->file_name, node->line_number, buffer);
+    printf("%s:%d: warning: %s\n",
+           get_compile(node->file_id),
+           node->line_number,
+           buffer);
   } else {
     printf("warning %s\n", buffer);
   }
@@ -107,8 +112,6 @@ analyze_warning(tree *node, const char *format, ...)
 
   return;
 }
-
-#endif
 
 static
 int list_length(tree *L)
@@ -634,6 +637,42 @@ analyze_declarations(void)
 
 }
 
+#define LINE_SIZ 520
+
+void
+analyze_select_processor(tree *expr, char *name)
+{
+  struct px *found = NULL;
+  char file_name[LINE_SIZ];
+
+  if (state.cmd_processor) {
+    analyze_warning(expr, "processor superseded by command line");
+  } else {
+    found = gp_find_processor(name);
+    if (found) {
+      if (state.processor == no_processor) {
+        state.processor = found->tag;
+        state.processor_info = found;
+        sprintf(file_name, "%s.inc", found->names[1]);
+        if (state.read_header) {
+          scan_header(file_name);
+        }
+      } else if (state.processor != found->tag ) {
+        analyze_warning(expr, "redefining processor");
+      }
+    } else {
+      analyze_error(expr, "unknown processor \"%s\"", name);
+    }
+   
+    /* load the instruction sets if necessary */
+    if ((state.processor_chosen == false) && 
+        (state.processor != no_processor)) {
+      /* FIXME select the correct code generator */
+      state.processor_chosen = true;
+    }
+  }
+}
+
 static void
 analyze_pragma(tree *expr, enum source_type type)
 {
@@ -646,86 +685,83 @@ analyze_pragma(tree *expr, enum source_type type)
     rhs = expr->value.binop.p1;
     if ((expr->value.binop.op != op_eq) ||
         (lhs->tag != node_symbol)) {
-      gp_error("unknown pragma");
+      analyze_error(expr, "unknown pragma");
     } else {
-      if (strcasecmp(lhs->value.symbol, "processor") == 0) {
-        if (rhs->tag != node_symbol) {
-          gp_error("invalid processor name");        
+      if (strcasecmp(lhs->value.string, "processor") == 0) {
+        if (rhs->tag != node_string) {
+          analyze_error(expr, "processor name must be a string");        
         } else {
-          if (state.processor_chosen == false) {
-            select_processor(rhs->value.symbol);
-          }        
+          analyze_select_processor(rhs, rhs->value.string);
         }
       } else if (strcasecmp(lhs->value.symbol, "code_section") == 0) {
-        if (rhs->tag != node_symbol) {
-          /* FIXME: change from symbol to string */
-          gp_error("invalid code section name");
+        if (rhs->tag != node_string) {
+          analyze_error(expr, "code section name must be a string");
         } else {
           if (type == source_with) {            
             if ((state.section.code) && 
-                (strcmp(rhs->value.symbol, state.section.code) == 0)) {
+                (strcmp(rhs->value.string, state.section.code) == 0)) {
               state.section.code_default = storage_local;
             } else {
               state.section.code_default = storage_extern;
             }
           } else {
             if (type == source_module) {
-              gp_warning("section pragma's should be in a public");
+              analyze_warning(expr, "section pragma's should be in a public");
             }
             if (state.section.code) {
-              gp_error("duplicate code section name");
+              analyze_error(expr, "duplicate code section name");
             } else {
-              state.section.code = rhs->value.symbol;
+              state.section.code = rhs->value.string;
             }
           }        
         }
-      } else if (strcasecmp(lhs->value.symbol, "udata_section") == 0) {
-        if (rhs->tag != node_symbol) {
-          gp_error("invalid udata section name");
+      } else if (strcasecmp(lhs->value.string, "udata_section") == 0) {
+        if (rhs->tag != node_string) {
+          analyze_error(expr, "udata section name must be a string");
         } else {
           if (type == source_with) {            
             if ((state.section.udata) &&
-                (strcmp(rhs->value.symbol, state.section.udata) == 0)) {
+                (strcmp(rhs->value.string, state.section.udata) == 0)) {
               state.section.udata_default = storage_local;
             } else {
               state.section.udata_default = storage_extern;
             }
           } else {
             if (type == source_module) {
-              gp_warning("section pragma's should be in a public");
+              analyze_warning(expr, "section pragma's should be in a public");
             }
             if (state.section.code) {
-              gp_error("duplicate udata section name");
+              analyze_error(expr, "duplicate udata section name");
             } else {
-              state.section.udata = rhs->value.symbol;
+              state.section.udata = rhs->value.string;
             }
           }        
         }
       } else if (strcasecmp(lhs->value.symbol, "code_address") == 0) {
         if (rhs->tag != node_constant) {
-          gp_error("invalid code address");
+          analyze_error(expr, "code address must be a constant");
         } else if (type == source_module) {            
           state.section.code_addr = rhs->value.constant;
           state.section.code_addr_valid = true;
         } else {
-          gp_error("udata section addresses can only be in modules");
+          analyze_error(expr, "udata section addresses can only be in modules");
         }
       } else if (strcasecmp(lhs->value.symbol, "udata_address") == 0) {
         if (rhs->tag != node_constant) {
-          gp_error("invalid udata address");
+          analyze_error(expr, "udata address must be a constant");
         } else if (type == source_module) {            
           state.section.udata_addr = rhs->value.constant;
           state.section.udata_addr_valid = true;
         } else {
-          gp_error("udata section addresses can only be in modules");
+          analyze_error(expr, "udata section addresses can only be in modules");
         }
       } else {
-        gp_error("unknown pragma \"%s\"", lhs->value.symbol);
+        analyze_error(expr, "unknown pragma \"%s\"", lhs->value.symbol);
       }
     }
     break;
   default:
-    gp_error("unknown pragma");
+    analyze_error(expr, "unknown pragma");
   }
   
   return;
@@ -870,6 +906,7 @@ void
 analyze(void)
 {
   tree *current;
+  tree *module = NULL;
   gp_boolean found_module = false;
 
   /* FIXME: manage memory better or at least try */
@@ -880,9 +917,10 @@ analyze(void)
   while (current) {
     if (FILE_TYPE(current) == source_module) {
       if (found_module) {
-        gp_error("found multiple modules in one file");
+        analyze_error(current, "found multiple modules in one file");
       } else {
         analyze_module(current);
+        module = current;
       }
       found_module = true;
     }
@@ -898,6 +936,15 @@ analyze(void)
     }
     current = current->next;
   }
+
+  if (!state.processor_chosen) {
+    analyze_error(module, "processor not selected");
+    return;
+  }
+
+  /* don't bother generating code if there are errors */
+  if (gp_num_errors)
+    return;
 
   /* open the output file */
   codegen_init_asm();

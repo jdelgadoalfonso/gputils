@@ -53,7 +53,9 @@ codegen_write_asm(const char *format, ...)
 static void
 codegen_line_number(tree *node)
 {
-  fprintf(state.output.f, ";#CSRC %s %d\n", node->file_name, node->line_number);
+  fprintf(state.output.f, ";#CSRC %s %d\n",
+          get_compile(node->file_id),
+          node->line_number);
 }
 
 static int label_number;
