@@ -64,10 +64,11 @@ extern struct gpal_state {
     int bsr_boundary;			/* 18xx bsr boundary location */
   } device;
   struct symbol_table
-    *stBuiltin,				/* Built-ins: instructions, pseudo-ops */
-    *stGlobal;				/* Global symbols */
+    *type,				/* Symbol Types */
+    *global;				/* Global symbols */
   entity *list;				/* list of functions and procedures */
   struct source_context *src;		/* Top of the stack of source files */
+  char *basefilename;			/* base filename */
   char *srcfilename;			/* source filename */
   char *outfilename;			/* output filename */
   char asmfilename[BUFSIZ];		/* asm output filename */
@@ -78,7 +79,7 @@ extern struct gpal_state {
 
 struct source_context {
   char *name;
-  enum src_types { source, with } type;
+  enum src_types { source, source_with, with } type;
   FILE *f;
   struct yy_buffer_state *yybuf;
   unsigned int line_number;
@@ -87,5 +88,6 @@ struct source_context {
 
 void select_processor(char *name);
 void process_pragma(tree *expr);
+void add_entity(tree *node);
 
 #endif

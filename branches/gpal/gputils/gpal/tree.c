@@ -1,4 +1,4 @@
-/* top level functions for gpal
+/* parse tree
    Copyright (C) 2003
    Craig Franklin
 
@@ -29,6 +29,7 @@ mk_node(enum node_tag tag)
 {
   tree *new = malloc(sizeof(*new));
   new->tag = tag;
+  new->file_name = state.src->name;
   new->line_number = state.src->line_number;
   return new;
 }
@@ -168,28 +169,6 @@ mk_unop(int op, tree *p0)
   new->value.unop.op = op;
   new->value.unop.p0 = p0;
   return new;
-}
-
-void
-add_entity(tree *node)
-{
-  entity *new = malloc(sizeof(*new));
-  entity *list = NULL;
-
-  new->node = node;
-  new->next = NULL;
-
-  if (state.list == NULL) {
-    state.list = new;
-  } else {
-    /* find the end of the list */
-    list = state.list;
-    while (list->next != NULL)
-      list = list->next;
-    
-    /* append new entity on the end of the list */
-    list->next = new;
-  }
 }
 
 void

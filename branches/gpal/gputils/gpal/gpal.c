@@ -66,6 +66,9 @@ init(void)
   state.processor = no_processor;
   state.processor_chosen = false;
   state.outfilename = NULL;
+
+  /* create the global symbol table that is case insensitive */
+  state.global = push_symbol_table(NULL, 1);
    
   return;
 }
@@ -143,6 +146,28 @@ process_pragma(tree *expr)
   }
   
   return;
+}
+
+void
+add_entity(tree *node)
+{
+  entity *new = malloc(sizeof(*new));
+  entity *list = NULL;
+
+  new->node = node;
+  new->next = NULL;
+
+  if (state.list == NULL) {
+    state.list = new;
+  } else {
+    /* find the end of the list */
+    list = state.list;
+    while (list->next != NULL)
+      list = list->next;
+    
+    /* append new entity on the end of the list */
+    list->next = new;
+  }
 }
 
 static void
@@ -246,13 +271,16 @@ static void
 compile(char *base_name)
 {
   /* symbol table */
-  state.stGlobal = push_symbol_table(NULL, 0);
+  state.global = push_symbol_table(state.global, 1);
   
   /* FIXME: free the memory too */
   state.list = NULL;
 
   /* open input file */
-  open_src(state.srcfilename, 0);
+  open_src(state.srcfilename, false, false);
+  
+  /* open the source public file */
+  open_src(state.basefilename, true, true);
 
   /* open output filename */
   strcpy(state.asmfilename, base_name);
@@ -273,8 +301,8 @@ compile(char *base_name)
   write_asm();
   fclose(state.output.f);
 
-  /* destory symbol table */
-  state.stGlobal = pop_symbol_table(state.stGlobal);
+  /* destory symbol table for the current module */
+  state.global = pop_symbol_table(state.global);
 
   /* free all the memory */
 
@@ -422,38 +450,39 @@ int
 main(int argc, char *argv[])
 {
   int i;
-  char *file_name;
   char *pc;
 
   init();
   process_args(argc, argv);
 
   for (i = 0; i < state.num_files; i++) {
-    file_name = strdup(state.file_name[i]);
-    pc = strrchr(file_name, '.');
+    state.basefilename = strdup(state.file_name[i]);
+    pc = strrchr(state.basefilename, '.');
     *pc++ = 0;
     state.srcfilename = state.file_name[i];
     
     if (strcasecmp(pc, "pal") == 0) {
       /* compile it */
-      compile(file_name);
-      assemble(file_name, false);
-      link_list(file_name);
+      compile(state.basefilename);
+      assemble(state.basefilename, false);
+      link_list(state.basefilename);
+    } else if (strcasecmp(pc, "pub") == 0) {
+      gp_error("public files are not compiled \"%s\"", state.file_name[i]);
     } else if (strcasecmp(pc, "asm") == 0) {
       /* assemble it */
-      assemble(file_name, true);
-      link_list(file_name);
+      assemble(state.basefilename, true);
+      link_list(state.basefilename);
     } else if ((strcasecmp(pc, "o") == 0) || (strcasecmp(pc, "a") == 0)) {
       /* add it to the list for linking */
-      link_list(file_name);
+      link_list(state.basefilename);
     } else {
       gp_error("unknown extension of \"%s\"", state.file_name[i]);
       exit(1);
     }
 
     /* free the new filename */
-    if (file_name)
-      free(file_name);
+    if (state.basefilename)
+      free(state.basefilename);
   }
 
   combine_output();

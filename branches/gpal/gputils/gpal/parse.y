@@ -1,5 +1,5 @@
 %{
-/* Parser for gpal
+/* Parser
    Copyright (C) 2003 
    Craig Franklin
 
@@ -79,7 +79,6 @@ int yylex(void);
 %type <t> decl
 %type <i> decl_type
 %type <i> decl_size
-%type <i> decl_storage
 %type <t> statement_block
 %type <t> statement
 %type <t> if_body
@@ -107,42 +106,57 @@ line:
 	|
 	WITH IDENT ';'
 	{
-	  open_src($2, 1);
+	  open_src($2, true, false);
 	}
 	|
 	decl
 	{
+	  if (state.src->type == source_with) {
+            $1->value.decl.storage = PUBLIC_STORAGE;
+	  } else if (state.src->type == with) {
+            $1->value.decl.storage = EXTERN_STORAGE;
+          }
 	  add_entity($1);
         }
 	|
 	PROCEDURE head body PROCEDURE ';'
 	{ 
-	  add_entity(mk_proc($2, PRIVATE_STORAGE, $3));
+          if (state.src->type == source) {
+            add_entity(mk_proc($2, PRIVATE_STORAGE, $3));
+          } else {
+            gp_error("procedures can only be defined in .pal files");
+          }
      	}
 	|
-	PUBLIC_STORAGE PROCEDURE head body PROCEDURE ';'
+	PROCEDURE head ';'
 	{ 
-          add_entity(mk_proc($3, PUBLIC_STORAGE, $4));
+	  if (state.src->type == source_with) {
+            add_entity(mk_proc($2, PUBLIC_STORAGE, NULL));
+	  } else if (state.src->type == with) {
+            add_entity(mk_proc($2, EXTERN_STORAGE, NULL));
+          } else {
+            gp_error("procedure declarations can only be in .pub files");
+          }
      	}
-	|
-	EXTERN_STORAGE PROCEDURE head ';'
-	{ 
-	  add_entity(mk_proc($3, EXTERN_STORAGE, NULL));
-     	}	
         |
 	FUNCTION_TOK head RETURN decl_size body FUNCTION_TOK ';'
 	{ 
-	  add_entity(mk_func($2, PRIVATE_STORAGE, $4, $5));
+	  if (state.src->type == source) {
+            add_entity(mk_func($2, PRIVATE_STORAGE, $4, $5));
+          } else {
+            gp_error("functions can only be defined in .pal files");
+          }
      	}
         |
-	PUBLIC_STORAGE FUNCTION_TOK head RETURN decl_size body FUNCTION_TOK ';'
+	FUNCTION_TOK head RETURN decl_size ';'
 	{ 
-	  add_entity(mk_func($3, PUBLIC_STORAGE, $5, $6));
-     	}
-        |
-	EXTERN_STORAGE FUNCTION_TOK head RETURN decl_size ';'
-	{ 
-	  add_entity(mk_func($3, EXTERN_STORAGE, $5, NULL));
+	  if (state.src->type == source_with) {
+            add_entity(mk_func($2, PUBLIC_STORAGE, $4, NULL));
+	  } else if (state.src->type == with) {
+            add_entity(mk_func($2, EXTERN_STORAGE, $4, NULL));
+          } else {
+            gp_error("function declarations can only be in .pub files");
+          }
      	}
 	;
 
@@ -204,12 +218,7 @@ decl_block:
 decl:
 	decl_type decl_size parameter_list ';'
 	{ 
-	  $$ = mk_decl($1, $2, 0, $3);
-        }
-	|
-	decl_storage decl_type decl_size parameter_list ';'
-	{
-	  $$ = mk_decl($2, $3, $1, $4);
+	  $$ = mk_decl($1, $2, PRIVATE_STORAGE, $3);
         }
 	;
 
@@ -234,23 +243,6 @@ decl_size:
 	BYTE_SIZE
 	{
 	  $$ = BYTE_SIZE;
-	}
-	;
-
-decl_storage:
-	EXTERN_STORAGE
-	{
-	  $$ = EXTERN_STORAGE;
-	}
-	|
-	PUBLIC_STORAGE
-	{
-	  $$ = PUBLIC_STORAGE;
-	}
-	|
-	VOLATILE_STORAGE
-	{
-	  $$ = VOLATILE_STORAGE;
 	}
 	;
 
