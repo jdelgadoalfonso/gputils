@@ -449,7 +449,7 @@ char *yytext;
 #define definition 3
 
 #line 7 "scan.l"
-/* lexical analyser for gpal
+/* lexical analyser
    Copyright (C) 2003 
    Craig Franklin
 
@@ -480,9 +480,10 @@ Boston, MA 02111-1307, USA.  */
 /* YY_UNPUT not used, suppress the warning */
 #define YY_NO_UNPUT
 
+static int found_eof(void);
 int stringtolong(char *string, int radix);
 
-#line 486 "scan.c"
+#line 487 "scan.c"
 
 /* Macros after this point can all be overridden by user definitions in
  * section 1.
@@ -633,9 +634,9 @@ YY_DECL
 	register char *yy_cp = NULL, *yy_bp = NULL;
 	register int yy_act;
 
-#line 45 "scan.l"
+#line 46 "scan.l"
 
-#line 639 "scan.c"
+#line 640 "scan.c"
 
 	if ( yy_init )
 		{
@@ -722,124 +723,120 @@ case YY_STATE_EOF(INITIAL):
 case YY_STATE_EOF(incl):
 case YY_STATE_EOF(define):
 case YY_STATE_EOF(definition):
-#line 46 "scan.l"
+#line 47 "scan.l"
 { 
-			  fclose(yyin);
-                          
-                          if (YY_CURRENT_BUFFER)
-			    yy_flush_buffer(YY_CURRENT_BUFFER);
-			  
-                          yyterminate();
+			  if (found_eof())
+			    yyterminate();
 			}
 	YY_BREAK
 case 1:
 YY_RULE_SETUP
-#line 54 "scan.l"
+#line 51 "scan.l"
 { return CONST_TYPE; }
 	YY_BREAK
 case 2:
 YY_RULE_SETUP
-#line 55 "scan.l"
+#line 52 "scan.l"
 { return BEGIN_KEY; }
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
-#line 56 "scan.l"
+#line 53 "scan.l"
 { return BIT_SIZE; }
 	YY_BREAK
 case 4:
 YY_RULE_SETUP
-#line 57 "scan.l"
+#line 54 "scan.l"
 { return BYTE_SIZE; }
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
-#line 58 "scan.l"
+#line 55 "scan.l"
 { return ELSE; }
 	YY_BREAK
 case 6:
 YY_RULE_SETUP
-#line 59 "scan.l"
+#line 56 "scan.l"
 { return ELSIF; }
 	YY_BREAK
 case 7:
 YY_RULE_SETUP
-#line 60 "scan.l"
+#line 57 "scan.l"
 { return END; }
 	YY_BREAK
 case 8:
 YY_RULE_SETUP
-#line 61 "scan.l"
+#line 58 "scan.l"
 { return EXTERN_STORAGE; }
 	YY_BREAK
 case 9:
 YY_RULE_SETUP
-#line 62 "scan.l"
+#line 59 "scan.l"
 { return FUNCTION_TOK; }
 	YY_BREAK
 case 10:
 YY_RULE_SETUP
-#line 63 "scan.l"
+#line 60 "scan.l"
 { return IF; }
 	YY_BREAK
 case 11:
 YY_RULE_SETUP
-#line 64 "scan.l"
+#line 61 "scan.l"
 { return IS; }
 	YY_BREAK
 case 12:
 YY_RULE_SETUP
-#line 65 "scan.l"
+#line 62 "scan.l"
 { return LOOP; }
 	YY_BREAK
 case 13:
 YY_RULE_SETUP
-#line 66 "scan.l"
+#line 63 "scan.l"
 { return PRAGMA; }
 	YY_BREAK
 case 14:
 YY_RULE_SETUP
-#line 67 "scan.l"
+#line 64 "scan.l"
 { return PROCEDURE; }
 	YY_BREAK
 case 15:
 YY_RULE_SETUP
-#line 68 "scan.l"
+#line 65 "scan.l"
 { return PUBLIC_STORAGE; }
 	YY_BREAK
 case 16:
 YY_RULE_SETUP
-#line 69 "scan.l"
+#line 66 "scan.l"
 { return RETURN; }
 	YY_BREAK
 case 17:
 YY_RULE_SETUP
-#line 70 "scan.l"
+#line 67 "scan.l"
 { return THEN; }
 	YY_BREAK
 case 18:
 YY_RULE_SETUP
-#line 71 "scan.l"
+#line 68 "scan.l"
 { return VAR_TYPE; }
 	YY_BREAK
 case 19:
 YY_RULE_SETUP
-#line 72 "scan.l"
+#line 69 "scan.l"
 { return VOLATILE_STORAGE; }
 	YY_BREAK
 case 20:
 YY_RULE_SETUP
-#line 73 "scan.l"
+#line 70 "scan.l"
 { return WHILE; }
 	YY_BREAK
 case 21:
 YY_RULE_SETUP
-#line 74 "scan.l"
+#line 71 "scan.l"
 { return WITH; }
 	YY_BREAK
 case 22:
 YY_RULE_SETUP
-#line 75 "scan.l"
+#line 72 "scan.l"
 {
 			  yylval.s = strdup(yytext);
 			  return IDENT;
@@ -847,7 +844,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 23:
 YY_RULE_SETUP
-#line 79 "scan.l"
+#line 76 "scan.l"
 {
 			  yylval.i = stringtolong(yytext + 2, 16);
                           return NUMBER;
@@ -855,7 +852,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 24:
 YY_RULE_SETUP
-#line 83 "scan.l"
+#line 80 "scan.l"
 {
 			  yylval.i = stringtolong(yytext, 10);
 			  return NUMBER;
@@ -863,62 +860,62 @@ YY_RULE_SETUP
 	YY_BREAK
 case 25:
 YY_RULE_SETUP
-#line 87 "scan.l"
+#line 84 "scan.l"
 OPERATOR(LSH);
 	YY_BREAK
 case 26:
 YY_RULE_SETUP
-#line 88 "scan.l"
+#line 85 "scan.l"
 OPERATOR(RSH);
 	YY_BREAK
 case 27:
 YY_RULE_SETUP
-#line 89 "scan.l"
+#line 86 "scan.l"
 OPERATOR(GREATER_EQUAL);
 	YY_BREAK
 case 28:
 YY_RULE_SETUP
-#line 90 "scan.l"
+#line 87 "scan.l"
 OPERATOR(LESS_EQUAL);
 	YY_BREAK
 case 29:
 YY_RULE_SETUP
-#line 91 "scan.l"
+#line 88 "scan.l"
 OPERATOR(EQUAL);
 	YY_BREAK
 case 30:
 YY_RULE_SETUP
-#line 92 "scan.l"
+#line 89 "scan.l"
 OPERATOR(NOT_EQUAL);
 	YY_BREAK
 case 31:
 YY_RULE_SETUP
-#line 93 "scan.l"
+#line 90 "scan.l"
 OPERATOR(LOGICAL_AND);
 	YY_BREAK
 case 32:
 YY_RULE_SETUP
-#line 94 "scan.l"
+#line 91 "scan.l"
 OPERATOR(LOGICAL_OR);
 	YY_BREAK
 case 33:
 YY_RULE_SETUP
-#line 96 "scan.l"
+#line 93 "scan.l"
 { }
 	YY_BREAK
 case 34:
 YY_RULE_SETUP
-#line 97 "scan.l"
+#line 94 "scan.l"
 { state.src->line_number++; }
 	YY_BREAK
 case 35:
 YY_RULE_SETUP
-#line 98 "scan.l"
+#line 95 "scan.l"
 { }
 	YY_BREAK
 case 36:
 YY_RULE_SETUP
-#line 99 "scan.l"
+#line 96 "scan.l"
 { 
 			  yylval.i = yytext[0];
 		          return yytext[0];
@@ -926,10 +923,10 @@ YY_RULE_SETUP
 	YY_BREAK
 case 37:
 YY_RULE_SETUP
-#line 104 "scan.l"
+#line 101 "scan.l"
 ECHO;
 	YY_BREAK
-#line 933 "scan.c"
+#line 930 "scan.c"
 
 	case YY_END_OF_BUFFER:
 		{
@@ -1809,20 +1806,41 @@ int main()
 	return 0;
 	}
 #endif
-#line 104 "scan.l"
+#line 101 "scan.l"
 
 
-void open_src(char *name, int iswith)
+void open_src(char *name, gp_boolean is_with, gp_boolean is_source_with)
 {
   extern FILE *yyin;
   struct source_context *new = malloc(sizeof(*new));
+  char *file_name;
+  int length;
+
+  if (is_with) {
+    /* construct the public file name */
+    length = strlen(name);
+    length += strlen(".pub") + 1;
+    file_name = malloc(length);
+    strcpy(file_name, name);
+    strcat(file_name, ".pub");
+  } else {
+    file_name = strdup(name);
+  }
+
   if (state.src)
     state.src->yybuf = YY_CURRENT_BUFFER;
 
-  new->f = fopen(name, "rt");
+  new->f = fopen(file_name, "rt");
   if (new->f == NULL) {
-    perror(name);
-    exit(1);
+    if (is_source_with) {
+      /* source files aren't required to have public files */
+      free(new);
+      free(file_name);
+      return;
+    } else {
+      perror(file_name);
+      exit(1);
+    }
   }
 
 #ifdef PARSE_DEBUG
@@ -1838,8 +1856,10 @@ void open_src(char *name, int iswith)
     yy_switch_to_buffer(yy_create_buffer(yyin, YY_BUF_SIZE));
   }
 
-  new->name = strdup(name);
-  if (iswith)
+  new->name = file_name;
+  if (is_source_with)
+    new->type = source_with;
+  else if (is_with)
     new->type = with;
   else
     new->type = source;
@@ -1847,6 +1867,38 @@ void open_src(char *name, int iswith)
   new->prev = state.src;
   
   state.src = new;
+}
+
+static
+int found_eof(void)
+{
+  struct source_context *old;
+  int terminate = 0;
+
+  /* switch to previous buffer */
+  old = state.src;
+  state.src = state.src->prev;
+
+  /* close the old file */
+  if (old->f != NULL) {
+    fclose(old->f);
+  }
+  free(old->name);
+  free(old);
+
+  if (state.src) {
+    /* Just a with file */
+    yy_delete_buffer(YY_CURRENT_BUFFER);
+    yy_switch_to_buffer(state.src->yybuf);
+  } else {
+    /* flush the buffer so we are ready for next parse */
+    if (YY_CURRENT_BUFFER)
+      yy_flush_buffer(YY_CURRENT_BUFFER);
+
+    terminate = 1;
+  }
+
+  return terminate;
 }
 
 int

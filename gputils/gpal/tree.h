@@ -1,4 +1,4 @@
-/* top level functions for gpal
+/* parse tree
    Copyright (C) 2003
    Craig Franklin
 
@@ -103,10 +103,6 @@ typedef struct node_struct {
     } unop;
   } value;
 
-  /* node information */
-  gp_boolean remove;
-  gp_boolean generated;
-
   /* debug information */
   char *file_name;  
   int line_number;
@@ -115,7 +111,6 @@ typedef struct node_struct {
 
 #define HEAD(L) (L)->value.list.head
 #define TAIL(L) (L)->value.list.tail
-
 
 tree *mk_node(enum node_tag tag);
 tree *mk_body(tree *decl, tree *statements);
@@ -133,7 +128,6 @@ tree *mk_string(char *value);
 tree *mk_symbol(char *value);
 tree *mk_unop(int op, tree *p0);
 
-void add_entity(tree *node);
 void print_node(tree *node, int level);
 
 #endif

@@ -34,19 +34,37 @@ Boston, MA 02111-1307, USA.  */
 /* prototypes */
 static void write_statements(tree *statements);
 
+/* FIXME: this function is common with gpasm/scan.l */
+
+static char *
+to_lower_case(char *name)
+{
+  char *new;
+  char *ptr;
+
+  ptr = new = strdup(name);
+
+  while (*ptr != '\0') {
+    *ptr = tolower(*ptr);
+    ptr++;
+  }
+
+  return new;
+}
+
 void
 add_global(char *name, char *alias, tree *object)
 {
   struct symbol *sym;
   struct variable *var;
 
-  sym = get_symbol(state.stGlobal, name);
+  sym = get_symbol(state.global, name);
   if (sym == NULL) {
-    sym = add_symbol(state.stGlobal, name);
+    sym = add_symbol(state.global, name);
     var = malloc(sizeof(*var));
     annotate_symbol(sym, var);
     var->node = object;
-    var->alias = strdup(alias);
+    var->alias = to_lower_case(alias);
     var->is_constant = false;
     var->is_public = false;
     var->is_external = false;
@@ -64,9 +82,9 @@ add_constant(char *name, int value)
   struct symbol *sym;
   struct variable *var;
 
-  sym = get_symbol(state.stGlobal, name);
+  sym = get_symbol(state.global, name);
   if (sym == NULL) {
-    sym = add_symbol(state.stGlobal, name);
+    sym = add_symbol(state.global, name);
     var = malloc(sizeof(*var));
     annotate_symbol(sym, var);
     var->node = NULL;
@@ -88,7 +106,7 @@ get_global(char *name)
   struct symbol *sym;
   struct variable *var = NULL;
 
-  sym = get_symbol(state.stGlobal, name);
+  sym = get_symbol(state.global, name);
   if (sym == NULL) {
     gp_error("undefined symbol \"%s\"", name);
   } else {
@@ -198,13 +216,14 @@ int list_length(tree *L)
 static void
 write_call(tree *statement)
 {
-  struct variable *var;
 
   fprintf(state.output.f, ";#CSRC %s %d\n", 
           state.srcfilename,
           statement->line_number);
 
 /*
+  struct variable *var;
+
   var = get_global(statement->value.call.name);
   if (var == NULL)
     return;
