@@ -1,5 +1,0 @@
-public types is
-
-  debug : constant boolean = true;
-
-end public;
