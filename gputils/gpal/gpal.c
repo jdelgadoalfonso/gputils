@@ -380,8 +380,9 @@ process_args( int argc, char *argv[])
 static void
 compile(void)
 {
-  /* symbol table */
+  /* symbol tables */
   state.top = push_symbol_table(state.top, 1);
+  state.type = push_symbol_table(state.type, 1);
 
   init_nodes();
   state.root = NULL;
@@ -416,6 +417,7 @@ compile(void)
 
   /* destory symbol table for the current module */
   state.top = pop_symbol_table(state.top);
+  state.type = pop_symbol_table(state.type);
 
   /* free all the memory */
   free_nodes();
@@ -564,6 +566,11 @@ init(void)
 
   /* create the global symbol table that is case insensitive */
   state.top = state.global = push_symbol_table(NULL, 1);
+
+  /* create the type symbol table that is case insensitive */
+  state.type = push_symbol_table(NULL, 1);
+
+  add_type_prims();
 
 #ifdef PARSE_DEBUG
   {

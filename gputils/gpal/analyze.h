@@ -25,5 +25,14 @@ Boston, MA 02111-1307, USA.  */
 void analyze(void);
 void analyze_select_processor(tree *node, char *name);
 void analyze_error(tree *node, const char *format, ...);
+void analyze_warning(tree *node, const char *format, ...);
+
+int can_evaluate(tree *p, gp_boolean gen_errors);
+int evaluate(tree *p);
+int maybe_evaluate(tree *p);
+
+void analyze_get_array(tree *symbol, struct variable *var);
+void analyze_call(tree *call, gp_boolean in_expr);
+void analyze_expr(tree *expr);
 
 #endif

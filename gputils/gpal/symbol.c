@@ -28,6 +28,7 @@ Boston, MA 02111-1307, USA.  */
 #include "libgputils.h"
 #include "gpal.h"
 #include "analyze.h"
+#include "symbol.h"
 
 struct variable *
 add_global(char *name, char *alias, tree *node)
@@ -41,11 +42,10 @@ add_global(char *name, char *alias, tree *node)
     var = malloc(sizeof(*var));
     annotate_symbol(sym, var);
     var->alias = gp_lower_case(alias);
+    var->tag = sym_unknown;
     var->class = storage_unknown;
     var->type = NULL;
     var->is_init = false;
-    var->is_equ = false;
-    var->is_constant = false;
     var->value = 0;
     var->file_id = node->file_id;
     var->line_number = node->line_number;
@@ -77,13 +77,21 @@ get_global(char *name)
 }
 
 struct variable *
-add_constant(char *name, int value, tree *node)
+add_constant(char *name, int value, tree *node, char *type)
 {
   struct variable *var;
 
   var = add_global(name, name, node);
-  var->is_constant = true;
-  var->value = value;
+  if (var) {
+    if (type) {
+      var->type = get_type(type);   
+      if (var->type == NULL) {
+        analyze_error(node, "unknown symbol type \"%s\"", type);
+      }
+    }
+    var->tag = sym_const;
+    var->value = value;
+  }
 
   return var;
 }
@@ -100,11 +108,10 @@ add_equ(char *name, int value)
     var = malloc(sizeof(*var));
     annotate_symbol(sym, var);
     var->alias = strdup(name);
+    var->tag = sym_equ;
     var->class = storage_unknown;
     var->type = NULL;
     var->is_init = true;
-    var->is_equ = true;
-    var->is_constant = true;
     var->value = value;
     var->file_id = state.src->file_id;
     var->line_number = state.src->line_number;
@@ -128,7 +135,9 @@ struct variable *
 add_global_symbol(char *name,
                   char *prefix,
                   tree *symbol,
-                  enum node_storage class)
+                  enum sym_tag tag,
+                  enum node_storage class,
+                  char *type)
 {
   char buffer[BUFSIZ];
   struct variable *var;
@@ -139,8 +148,205 @@ add_global_symbol(char *name,
     sprintf(buffer, "%s", name);
 
   var = add_global(name, buffer, symbol);
-  if (var)
+  if (var) {
+    if (type) {
+      var->type = get_type(type);   
+      if (var->type == NULL) {
+        analyze_error(symbol, "unknown symbol type \"%s\"", type);
+      }
+    }
+    var->tag = tag;
     var->class = class;
+  }
 
   return var;
+}
+
+void
+add_type_prim(char *name, int size, int bitsize)
+{
+  struct symbol *sym;
+  struct type *new;
+
+  sym = get_symbol(state.type, name);
+  if (sym == NULL) {
+    sym = add_symbol(state.type, name);
+    new = malloc(sizeof(*new));
+    annotate_symbol(sym, new);
+    new->tag = type_prim;
+    new->size = size;
+    new->bitsize = bitsize;
+    new->nelts = 1;
+    new->start = 0;
+    new->end = 0;
+    new->prim = NULL;
+  } else {
+    analyze_error(NULL, "redefinition of type \"%s\"", name);
+  }
+  
+  return;
+}
+
+void
+add_type_array(char *name, int start, int end, char *type)
+{
+  struct symbol *sym;
+  struct type *new;
+  struct symbol *prim;
+  struct type *prim_type = NULL;
+
+  prim = get_symbol(state.type, type);
+  if (prim == NULL) {
+    analyze_error(NULL, "unknown type \"%s\"", type);
+    return;
+  } else {
+    prim_type = get_symbol_annotation(prim);
+    assert(prim_type != NULL);
+    if (prim_type->tag != type_prim) {
+      analyze_error(NULL, "arrays can't be of derived type \"%s\"", type);
+      return;
+    }
+  }
+
+  sym = get_symbol(state.type, name);
+  if (sym == NULL) {
+    sym = add_symbol(state.type, name);
+    new = malloc(sizeof(*new));
+    annotate_symbol(sym, new);
+    new->tag = type_array;
+    new->size = 0;
+    new->bitsize = 0;
+    new->nelts = end - start + 1;
+    new->start = start;
+    new->end = end;
+    new->prim = prim_type;
+  } else {
+    analyze_error(NULL, "redefinition of type \"%s\"", name);
+  }
+  
+  return;
+}
+
+void
+add_type_enum(char *name)
+{
+  struct symbol *sym;
+  struct type *new;
+  struct symbol *prim;
+  struct type *prim_type = NULL;
+
+  prim = get_symbol(state.type, "byte");
+  if (prim == NULL) {
+    assert(0);
+  } else {
+    prim_type = get_symbol_annotation(prim);
+    assert(prim_type != NULL);
+  }
+
+  sym = get_symbol(state.type, name);
+  if (sym == NULL) {
+    sym = add_symbol(state.type, name);
+    new = malloc(sizeof(*new));
+    annotate_symbol(sym, new);
+    new->tag = type_enum;
+    new->size = 0;
+    new->bitsize = 0;
+    new->nelts = 0;
+    new->start = 0;
+    new->end = 0;
+    new->prim = prim_type;
+  } else {
+    analyze_error(NULL, "redefinition of type \"%s\"", name);
+  }
+  
+  return ;
+}
+
+void
+add_type_alias(char *name, char *type)
+{
+  struct symbol *sym;
+  struct type *new;
+  struct symbol *prim;
+  struct type *prim_type;
+
+  prim = get_symbol(state.type, type);
+  if (prim == NULL) {
+    analyze_error(NULL, "unknown type \"%s\"", type);
+    return;
+  } else {
+    prim_type = get_symbol_annotation(prim);
+    assert(prim_type != NULL);
+  }
+
+  sym = get_symbol(state.type, name);
+  if (sym == NULL) {
+    sym = add_symbol(state.type, name);
+    new = malloc(sizeof(*new));
+    annotate_symbol(sym, new);
+    new->tag = type_alias;
+    new->size = 0;
+    new->bitsize = 0;
+    new->nelts = 0;
+    new->start = 0;
+    new->end = 0;
+    new->prim = prim_type;
+  } else {
+    analyze_error(NULL, "redefinition of type \"%s\"", name);
+  }
+  
+  return;
+}
+
+struct type *
+get_type(char *name)
+{
+  struct symbol *sym;
+  struct type *type = NULL;
+
+  sym = get_symbol(state.type, name);
+  if (sym != NULL) {
+    type = get_symbol_annotation(sym);
+  }
+
+  return type;
+}
+
+/* determine the size of a type in bytes */
+
+int
+type_size(struct type *type)
+{
+  int size = 0;
+
+  switch (type->tag) {
+  case type_prim:
+    size = type->size + type->bitsize;
+    break;
+  case type_array:
+    size = type->nelts * type_size(type->prim);
+    break;
+  case type_enum:
+    size = type_size(type->prim);
+    break;
+  case type_alias:
+    size = type_size(type->prim);
+    break;
+  default:
+    assert(0);
+  }
+
+  return size;
+}
+
+void
+add_type_prims(void)
+{
+  add_type_prim("bit",   0, 1);
+  add_type_prim("byte",  1, 0);
+  add_type_prim("word",  2, 0);
+  add_type_prim("long",  3, 0);
+  add_type_prim("float", 3, 0);
+
+  return;
 }

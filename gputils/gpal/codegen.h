@@ -31,6 +31,7 @@ void codegen_jump(char *label);
 
 void codegen_call(char *label, enum node_storage storage);
 void codegen_banksel(char *label);
+void codegen_bankisel(char *label);
 void codegen_test(tree *node, char *label);
 void codegen_expr(tree *statement);
 void codegen_assembly(tree *assembly);
@@ -38,9 +39,9 @@ void codegen_put_mem(struct variable *var, gp_boolean add_banksel);
 void codegen_init_proc(char *name, 
                        enum node_storage storage,
                        gp_boolean is_func);
-void codegen_finish_proc(void);
+void codegen_finish_proc(gp_boolean add_return);
 void codegen_init_data(void);
-void codegen_write_data(char *label, enum node_storage storage);
+void codegen_write_data(char *label, int size, enum node_storage storage);
 void codegen_finish_data(void);
 char *codegen_get_temp(void);
 void codegen_init_asm(void);

@@ -96,6 +96,11 @@ codegen_banksel(char *label)
   codegen_write_asm("banksel %s", label);
 }
 
+void
+codegen_bankisel(char *label)
+{
+  codegen_write_asm("bankisel %s", label);
+}
 
 void
 codegen_test(tree *node, char *label)
@@ -142,7 +147,7 @@ void
 codegen_put_mem(struct variable *var, gp_boolean add_banksel)
 {
 
-  if (var->is_equ) { 
+  if (var->tag == sym_equ) { 
     /* This is an equate from the processor header file.  gpal doesn't
        get type information from that file.  It has to assume that 
        the constant is a register address */
@@ -176,9 +181,12 @@ codegen_init_proc(char *name, enum node_storage storage, gp_boolean is_func)
 }
 
 void
-codegen_finish_proc(void)
+codegen_finish_proc(gp_boolean add_return)
 {
-  fprintf(state.output.f, "  return\n\n");
+  if (add_return) {
+    codegen_write_asm("return");
+  }
+  fprintf(state.output.f, "\n");
 }
 
 void
@@ -208,10 +216,10 @@ codegen_init_data(void)
 }
 
 void
-codegen_write_data(char *label, enum node_storage storage)
+codegen_write_data(char *label, int size, enum node_storage storage)
 {
 
-  fprintf(state.output.f, "%s res 1\n", label);
+  fprintf(state.output.f, "%s res %i\n", label, size);
 
   if (storage == storage_public)
     codegen_write_asm("global %s", label);
