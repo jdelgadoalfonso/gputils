@@ -4,7 +4,7 @@
 %x definition
 
 %{
-/* lexical analyser for gpal
+/* lexical analyser
    Copyright (C) 2003 
    Craig Franklin
 
@@ -35,6 +35,7 @@ Boston, MA 02111-1307, USA.  */
 /* YY_UNPUT not used, suppress the warning */
 #define YY_NO_UNPUT
 
+static int found_eof(void);
 int stringtolong(char *string, int radix);
 
 %}
@@ -44,12 +45,8 @@ DECCHAR [0-9]
 
 %%
 <<EOF>>			{ 
-			  fclose(yyin);
-                          
-                          if (YY_CURRENT_BUFFER)
-			    yy_flush_buffer(YY_CURRENT_BUFFER);
-			  
-                          yyterminate();
+			  if (found_eof())
+			    yyterminate();
 			}
 "const"			{ return CONST_TYPE; }
 "begin"			{ return BEGIN_KEY; }
@@ -103,17 +100,38 @@ DECCHAR [0-9]
 
 %%
 
-void open_src(char *name, int iswith)
+void open_src(char *name, gp_boolean is_with, gp_boolean is_source_with)
 {
   extern FILE *yyin;
   struct source_context *new = malloc(sizeof(*new));
+  char *file_name;
+  int length;
+
+  if (is_with) {
+    /* construct the public file name */
+    length = strlen(name);
+    length += strlen(".pub") + 1;
+    file_name = malloc(length);
+    strcpy(file_name, name);
+    strcat(file_name, ".pub");
+  } else {
+    file_name = strdup(name);
+  }
+
   if (state.src)
     state.src->yybuf = YY_CURRENT_BUFFER;
 
-  new->f = fopen(name, "rt");
+  new->f = fopen(file_name, "rt");
   if (new->f == NULL) {
-    perror(name);
-    exit(1);
+    if (is_source_with) {
+      /* source files aren't required to have public files */
+      free(new);
+      free(file_name);
+      return;
+    } else {
+      perror(file_name);
+      exit(1);
+    }
   }
 
 #ifdef PARSE_DEBUG
@@ -129,8 +147,10 @@ void open_src(char *name, int iswith)
     yy_switch_to_buffer(yy_create_buffer(yyin, YY_BUF_SIZE));
   }
 
-  new->name = strdup(name);
-  if (iswith)
+  new->name = file_name;
+  if (is_source_with)
+    new->type = source_with;
+  else if (is_with)
     new->type = with;
   else
     new->type = source;
@@ -138,6 +158,38 @@ void open_src(char *name, int iswith)
   new->prev = state.src;
   
   state.src = new;
+}
+
+static
+int found_eof(void)
+{
+  struct source_context *old;
+  int terminate = 0;
+
+  /* switch to previous buffer */
+  old = state.src;
+  state.src = state.src->prev;
+
+  /* close the old file */
+  if (old->f != NULL) {
+    fclose(old->f);
+  }
+  free(old->name);
+  free(old);
+
+  if (state.src) {
+    /* Just a with file */
+    yy_delete_buffer(YY_CURRENT_BUFFER);
+    yy_switch_to_buffer(state.src->yybuf);
+  } else {
+    /* flush the buffer so we are ready for next parse */
+    if (YY_CURRENT_BUFFER)
+      yy_flush_buffer(YY_CURRENT_BUFFER);
+
+    terminate = 1;
+  }
+
+  return terminate;
 }
 
 int
