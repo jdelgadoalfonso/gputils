@@ -5,12 +5,14 @@ bin_PROGRAMS = gpal
 CPPFLAGS = @CPPFLAGS@ -I${top_srcdir}/libgputils -I${top_srcdir}/include
 
 gpal_SOURCES=\
+	analyze.c \
 	codegen.c \
 	codegen14.c \
 	gpal.c \
 	parse.y \
 	scan.l \
 	tree.c \
+	analyze.h \
 	codegen.h \
 	codegen14.h \
 	gpal.h \

@@ -23,6 +23,7 @@ Boston, MA 02111-1307, USA.  */
 
 #include "libgputils.h"
 #include "gpal.h"
+#include "analyze.h"
 #include "codegen.h"
 #include "codegen14.h"
 
@@ -30,89 +31,171 @@ Boston, MA 02111-1307, USA.  */
 #include <stdarg.h>
 #endif
 
-/* prototypes */
-static void write_statements(tree *statements);
+/* used for naming temporary data registers */
+int temp_number;
+int max_temp_number;
 
-/* FIXME: this function is common with gpasm/scan.l */
-
-static char *
-to_lower_case(char *name)
+void 
+codegen_write_asm(const char *format, ...)
 {
-  char *new;
-  char *ptr;
+  va_list args;
+  char buffer[BUFSIZ]; 
 
-  ptr = new = strdup(name);
+  va_start(args, format);
+  vsprintf(buffer, format, args);
+  va_end(args);
 
-  while (*ptr != '\0') {
-    *ptr = tolower(*ptr);
-    ptr++;
-  }
+  fprintf(state.output.f, "  %s\n", buffer);
 
-  return new;
-}
-
-struct variable *
-add_global(char *name, char *alias, tree *object)
-{
-  struct symbol *sym;
-  struct variable *var = NULL;
-
-  sym = get_symbol(state.global, name);
-  if (sym == NULL) {
-    sym = add_symbol(state.global, name);
-    var = malloc(sizeof(*var));
-    annotate_symbol(sym, var);
-    var->node = object;
-    var->alias = to_lower_case(alias);
-    var->is_constant = false;
-    var->is_public = false;
-    var->is_external = false;
-    var->value = 0;
-  } else {
-    gp_error("duplicate symbol \"%s\"", name);
-  }
-  
-  return var;
-}
-
-void
-add_constant(char *name, int value)
-{
-  struct symbol *sym;
-  struct variable *var;
-
-  sym = get_symbol(state.global, name);
-  if (sym == NULL) {
-    sym = add_symbol(state.global, name);
-    var = malloc(sizeof(*var));
-    annotate_symbol(sym, var);
-    var->node = NULL;
-    var->alias = NULL;
-    var->is_constant = true;
-    var->is_public = false;
-    var->is_external = false;
-    var->value = value;
-  } else {
-    gp_error("duplicate symbol \"%s\"", name);
-  }
-  
   return;
 }
 
-struct variable *
-get_global(char *name)
-{
-  struct symbol *sym;
-  struct variable *var = NULL;
+static int label_number;
 
-  sym = get_symbol(state.global, name);
-  if (sym == NULL) {
-    gp_error("undefined symbol \"%s\"", name);
+char *
+codegen_next_label(void)
+{
+  char label[BUFSIZ];
+  sprintf(label, "_%i", label_number++);
+  return strdup(label);
+}
+
+void
+codegen_write_label(char *label)
+{
+  fprintf(state.output.f, "%s:\n", label);
+}
+
+void
+codegen_jump(char *label)
+{
+  codegen_write_asm("goto %s", label);
+}
+
+void
+codegen_call(char *label, enum node_storage storage)
+{
+  if (storage == storage_extern) {
+    codegen_write_asm("pagesel %s", label);
+  }
+  codegen_write_asm("call %s", label);
+
+}
+
+void
+codegen_banksel(char *label)
+{
+  codegen_write_asm("banksel %s", label);
+}
+
+
+void
+codegen_test(tree *node, char *label)
+{
+
+  fprintf(state.output.f, ";#CSRC %s %d\n", 
+          node->file_name,
+          node->line_number);
+
+  temp_number = 0;
+
+  write_test(node, label);
+
+  if (temp_number > max_temp_number)
+    max_temp_number = temp_number;
+
+}
+
+void
+codegen_expr(tree *statement)
+{
+
+  fprintf(state.output.f, ";#CSRC %s %d\n", 
+          statement->file_name,
+          statement->line_number);
+
+  temp_number = 0;
+
+  gen_expr(statement);
+
+  if (temp_number > max_temp_number)
+    max_temp_number = temp_number;
+
+  return;
+}
+
+void
+codegen_put_mem(struct variable *var, gp_boolean add_banksel)
+{
+
+  if (var->is_equ) { 
+    /* This is an equate from the processor header file.  gpal doesn't
+       get type information from that file.  It has to assume that 
+       the constant is a register address */
+    if (add_banksel) {
+      codegen_write_asm("banksel %s", var->value);
+    }    
+    gen_put_reg(var->value);
   } else {
-    var = get_symbol_annotation(sym);
+    if (add_banksel) {
+      codegen_write_asm("banksel %s", var->alias);
+    }
+    gen_put_mem(var->alias);
   }
 
-  return var;
+  return;
+}
+
+void
+codegen_init_proc(char *name, enum node_storage storage, gp_boolean is_func)
+{
+  if (is_func) {
+    fprintf(state.output.f, "; function %s\n", name);
+  } else {
+    fprintf(state.output.f, "; procedure %s\n", name);
+  }
+
+  codegen_write_label(name);
+  if (storage == storage_public)
+    codegen_write_asm("global %s", name);
+
+}
+
+void
+codegen_finish_proc(void)
+{
+  fprintf(state.output.f, "  return\n\n");
+}
+
+void
+codegen_init_data(void)
+{
+  fprintf(state.output.f, "; declarations \n");
+  fprintf(state.output.f, ".udata_%s udata\n", state.basefilename);
+  codegen_write_label(LOCAL_DATA_LABEL);
+}
+
+void
+codegen_write_data(char *label, enum node_storage storage)
+{
+
+  fprintf(state.output.f, "%s res 1\n", label);
+
+  if (storage == storage_public)
+    codegen_write_asm("global %s", label);
+
+}
+
+void
+codegen_finish_data(void)
+{
+  int i;
+
+  for (i = 0; i < max_temp_number; i++) 
+    fprintf(state.output.f, "%s_temp_%d res 1\n", state.basefilename, i);
+
+  fprintf(state.output.f, "\n");
+
 }
 
 static void
@@ -134,31 +217,72 @@ write_header(void)
     gp_error("processor not selected");
   } 
 
+  fprintf(state.output.f, ".code_%s code\n", state.basefilename);
+
+  return;
+}
+
+void
+codegen_init_asm(void)
+{
+
+  /* open output filename */
+  strcpy(state.asmfilename, state.basefilename);
+  strcat(state.asmfilename, ".asm");
+  state.output.f = fopen(state.asmfilename, "w");
+  if (state.output.f == NULL) {
+    perror(state.asmfilename);
+    exit(1);
+  }
+
+  label_number = 0;
+
+  write_header();
+
+  return;
+}
+
+/* write all the external symbols in the global symbol table */
+
+static void
+write_externs(void)
+{
+  struct variable *var;
+  int i;
+  struct symbol *sym;
+  gp_boolean first_time = true;
+
+  for (i = 0; i < HASH_SIZE; i++) {
+    for (sym = state.global->hash_table[i]; sym; sym = sym->next) {
+      var = get_symbol_annotation(sym);
+      if ((var) && (var->class == storage_extern)) {
+        if (first_time == true)  {
+          fprintf(state.output.f, "; external symbols\n");
+          first_time = false;
+        }
+        fprintf(state.output.f, "  extern %s\n", var->alias);
+      }
+    }
+  }
+
+  if (first_time == false)
+    fprintf(state.output.f, "\n");
+
   return;
 }
 
 static void
 write_startup(void)
 {
-  tree *current = NULL;
-  tree *head;
+  struct variable *var;
 
-  current = state.root;
-
-  while (current != NULL) {
-    if (current->tag == node_proc) {
-      head = current->value.proc.head;
-      assert(head != NULL);
-      if (strcmp(head->value.head.name, "main") == 0) {
-        /* a procedure named "main" exists so add the startup code */
-        fprintf(state.output.f, "; startup and interrupt vectors\n");
-        fprintf(state.output.f, "STARTUP code\n");
-        fprintf(state.output.f, "  pagesel main\n");
-        fprintf(state.output.f, "  goto main\n\n");
-        break;     
-      }
-    }
-    current = current->next;
+  var = get_global("main");
+  if ((var) && (var->node->tag == node_proc)) {
+    /* a procedure named "main" exists so add the startup code */
+    fprintf(state.output.f, "; startup and interrupt vectors\n");
+    fprintf(state.output.f, "STARTUP code\n");
+    fprintf(state.output.f, "  pagesel main\n");
+    fprintf(state.output.f, "  goto main\n\n");
   }
 
 }
@@ -169,725 +293,14 @@ write_footer(void)
   fprintf(state.output.f, "  end\n\n");
 }
 
-void 
-write_asm_line(const char *format, ...)
-{
-  va_list args;
-  char buffer[BUFSIZ]; 
-
-  va_start(args, format);
-  vsprintf(buffer, format, args);
-  va_end(args);
-
-  fprintf(state.output.f, "  %s\n", buffer);
-
-  return;
-}
-
-static int label_number = 0;
-
-char *
-next_label(void)
-{
-  char label[BUFSIZ];
-  sprintf(label, "_%i", label_number++);
-  return strdup(label);
-}
-
 void
-write_label(char *label)
+codegen_close_asm(void)
 {
-  fprintf(state.output.f, "%s:\n", label);
-}
-
-static
-int list_length(tree *L)
-{
-  if (L == NULL) {
-    return 0;
-  } else {
-    return 1 + list_length(LIST_TAIL(L));
-  }
-}
-
-static void
-write_call(tree *statement)
-{
-  struct variable *var;
-  int call_length;
-  int def_length;
-  tree *head;
-  tree *def_args;
-  tree *call_args;
-  gp_boolean first_time = true;
-  tree *arg_node;
-  tree *arg_symbol;
-  char *arg_name;
-
-  fprintf(state.output.f, ";#CSRC %s %d\n", 
-          state.srcfilename,
-          statement->line_number);
-
-  var = get_global(statement->value.call.name);
-  if (var == NULL) {
-    return;
-  }
-
-  if (var->node->tag == node_proc)
-    head = PROC_HEAD(var->node);
-  else
-    head = FUNC_HEAD(var->node);
-
-  call_args = CALL_ARGS(statement);
-  def_args = HEAD_ARGS(head);
-
-  if (call_args) {
-    call_length = list_length(call_args);
-    def_length = list_length(def_args);
-    /* FIXME: should also check argument type */
-    if (call_length != def_length) {
-      gp_error("incorrect number of arguments in call");
-      return;
-    }
-  }
-
-  while (call_args) {
-    arg_node = LIST_HEAD(def_args);
-    assert(arg_node->tag == node_decl);
-    arg_symbol = DECL_EXPR(arg_node);
-    assert(arg_symbol->tag == node_symbol);
-    arg_name = to_lower_case(arg_symbol->value.symbol);
-    if (first_time) {
-      fprintf(state.output.f, "  banksel %s_%s\n", var->alias, arg_name);
-      first_time = false;
-    }
-    gen_expr(LIST_HEAD(call_args));
-    /*gen_put_mem(arg_name);*/
-    write_asm_line("movwf %s_%s", var->alias, arg_name);
-    if (arg_name)
-      free(arg_name);
-    def_args = LIST_TAIL(def_args);
-    call_args = LIST_TAIL(call_args);
-  }
-
-  fprintf(state.output.f, "  pagesel %s\n", statement->value.call.name);
-  fprintf(state.output.f, "  call %s\n", statement->value.call.name);
-
-  return;
-}
-
-int temp_number;
-int max_temp_number;
-char *code_name;
-
-static void
-write_expression(tree *statement)
-{
-  tree *lhs;
-  tree *rhs;
-  struct variable *var;
-  char *lhs_name;
-
-  fprintf(state.output.f, ";#CSRC %s %d\n", 
-          state.srcfilename,
-          statement->line_number);
-  
-  if ((statement->tag != node_binop) || 
-      (statement->value.binop.op != op_eq)) {
-    gp_error("invalid expression");
-    return;
-  }
-
-  lhs = statement->value.binop.p0;
-  rhs = statement->value.binop.p1;
-
-  if (lhs->tag != node_symbol) {
-    gp_error("invalid lvalue in assignment");
-    return;
-  }
-  
-  var = get_global(lhs->value.symbol);
-  lhs_name = var->alias;
-
-  temp_number = 0;
-  gen_expr(rhs);
-
-  if (var->is_constant) {
-    if (var->is_equ) {
-      /* This is an equate from the processor header file.  gpal doesn't
-         get type information from that file.  It has to assume that 
-         the constant is a register address */
-      gen_put_reg(var->value);
-    } else {
-      gp_error("incorrect l-value \"%s\"", lhs->value.symbol);
-    }  
-  } else {
-    gen_put_mem(lhs_name);
-  }
-
-  if (temp_number > max_temp_number)
-    max_temp_number = temp_number;
-
-}
-
-static void
-write_cond(tree *cond)
-{
-  char *end_label = NULL;
-
-  /* else doesn't have a condition */
-  if (cond->value.cond.cond != NULL) {
-    end_label = next_label();
-    fprintf(state.output.f, ";#CSRC %s %d\n", 
-            state.srcfilename,
-            cond->value.cond.cond->line_number);
-    temp_number = 0;
-    write_test(cond->value.cond.cond, end_label);
-    if (temp_number > max_temp_number)
-      max_temp_number = temp_number;
-  }
-  
-  /* write the body of the code */
-  write_statements(cond->value.cond.body);
-  
-  /* if there is a condition generate a label at the end of the body */
-  if (cond->value.cond.cond != NULL) {
-    write_label(end_label);
-    if (end_label)
-      free(end_label);
-  }
-  
-  /* generate next conditional block, if there is one */
-  if (cond->value.cond.next != NULL)
-    write_cond(cond->value.cond.next);
-}
-
-static void
-write_loop(tree *loop)
-{
-  char *start_label = NULL;
-
-  /* write out initalization code */
-  if (loop->value.loop.init != NULL) {
-    write_statements(loop->value.loop.init);
-  }
- 
-  start_label = next_label();
-  write_label(start_label);
-
-  /* write the body of the loop */
-  if (loop->value.loop.body != NULL)
-    write_statements(loop->value.loop.body);
-
-  /* write the increment statements */
-  if (loop->value.loop.incr != NULL)
-    write_statements(loop->value.loop.incr);
-
-  /* write the exit statements */
-  if (loop->value.loop.exit != NULL) {
-    fprintf(state.output.f, ";#CSRC %s %d\n", 
-            state.srcfilename,
-            loop->value.loop.exit->line_number);
-    temp_number = 0;
-    write_test(loop->value.loop.exit, start_label);
-    if (temp_number > max_temp_number)
-      max_temp_number = temp_number;
-  } else {
-    write_asm_line("goto %s", start_label);
-  }
-
-  if (start_label)
-    free(start_label);
-}
-
-static void
-write_statements(tree *statements)
-{
-  tree *list;
-  tree *statement;
-
-  list = statements;
-  assert(list->tag == node_list);
-  while(list) {
-    statement = LIST_HEAD(list);
-    switch(statement->tag) {
-    case node_call:
-      write_call(statement);
-      break;
-    case node_cond:
-      write_cond(statement);  
-      break;
-    case node_loop:
-      write_loop(statement);
-      break; 
-    default:
-      write_expression(statement);
-    }
-    list = LIST_TAIL(list);
-  }
-
-}
-
-static void
-write_decl(tree *decl, char *name, gp_boolean is_public)
-{
-  tree *expr;
-  tree *list;  
-  tree *symbol;
-  char alias[BUFSIZ];
-  struct variable *var;
-
-  assert(decl->tag == node_decl);
-  expr = DECL_EXPR(decl);
-
-  if (expr->tag == node_list) {
-    /* local data is in a list */
-    for (list = expr; list; list = LIST_TAIL(list)) {
-      symbol = LIST_HEAD(list);
-      assert(symbol->tag == node_symbol);
-      sprintf(alias, "%s_%s", name, symbol->value.symbol);
-      var = add_global(symbol->value.symbol, alias, symbol);
-      if (decl->value.decl.type == type_var) {
-        fprintf(state.output.f, "%s res 1\n", var->alias);
-        if (is_public) {
-          fprintf(state.output.f, "  global %s\n", var->alias);
-        }
-      }
-    }
-  } else if (expr->tag == node_symbol) {
-    /* arguments are symbols only */  
-    symbol = expr;
-    sprintf(alias, "%s_%s", name, symbol->value.symbol);
-    var = add_global(symbol->value.symbol, alias, symbol);
-    if (var) {
-      fprintf(state.output.f, "%s res 1\n", var->alias);
-      if (is_public) {
-        fprintf(state.output.f, "  global %s\n", var->alias);
-      }
-    }
-  } else {
-    assert(0);
-  }
-
-}
-
-static void
-write_declarations(void)
-{
-  tree *current = NULL;
-  int first_time = 1;
-  tree *list;  
-  tree *symbol;
-  tree *lhs;
-  tree *rhs;
-
-  current = state.root;
-
-  while (current != NULL) {
-    if ((current->tag == node_decl) && 
-        (current->value.decl.storage != storage_extern)) {
-      if ((current->value.decl.type == type_const) &&
-          (current->value.decl.storage != 0)) {
-        gp_error("constants can't be public or volatile");
-      } 
-      /* FIXME: only bytes are supported so far */
-      assert(current->value.decl.size == size_byte);
-      if (first_time) {
-        fprintf(state.output.f, "; declarations \n");
-        fprintf(state.output.f, "  udata\n");
-        first_time = 0;      
-      }
-      for (list = current->value.decl.expr; list; list = LIST_TAIL(list)) {
-        symbol = LIST_HEAD(list);
-        if (current->value.decl.type == type_var) {
-          assert(symbol->tag == node_symbol);
-          fprintf(state.output.f, "%s res 1\n", symbol->value.symbol);
-          if (current->value.decl.storage == storage_public) {
-            fprintf(state.output.f, "  global %s\n", symbol->value.symbol);
-          }
-          add_global(symbol->value.symbol, symbol->value.symbol, current);
-        } else if (current->value.decl.type == type_const) {
-          assert(symbol->tag == node_binop);
-          lhs = symbol->value.binop.p0;
-          assert(lhs->tag == node_symbol);
-          rhs = symbol->value.binop.p1;
-          assert(rhs->tag == node_constant);
-          add_constant(lhs->value.symbol, rhs->value.constant);
-        }
-      }
-    }
-    current = current->next;
-  }
-
-  if (!first_time)
-    fprintf(state.output.f, "\n");
-
-}
-
-static void
-write_procedure(tree *procedure, int is_func)
-{
-  tree *head;
-  tree *body;
-  struct variable *var;
-  char *name;
-  tree *args;
-  tree *decl;
-  tree *statements;
-  tree *argument;
-  int i;
-  int storage;
-
-  if (is_func) {
-    head = procedure->value.func.head;
-    storage = procedure->value.func.storage;
-    body = procedure->value.func.body;
-  } else {
-    head = procedure->value.proc.head;
-    storage = procedure->value.proc.storage;
-    body = procedure->value.proc.body;
-  }
-
-  if (storage == storage_extern)
-    return;
-
-  assert(head->tag == node_head);  
-  assert(body->tag == node_body); 
-  args = head->value.head.args;
-  decl = body->value.body.decl;
-  statements = body->value.body.statements; 
-
-  var = add_global(HEAD_NAME(head), HEAD_NAME(head), procedure);
-  if (var) {
-    name = var->alias;
-    code_name = var->alias;
-  } else {
-    return;
-  }
-
-  if (is_func) {
-    fprintf(state.output.f, "; function %s\n", name);
-  } else {
-    fprintf(state.output.f, "; procedure %s\n", name);
-  }
-
-  /* data memory section */
-  if ((args != NULL) || (decl != NULL)) {
-    fprintf(state.output.f, ".udata_%s udata\n", name);
-    /* the procedure or function has arguments */ 
-    if (args != NULL) {
-      assert(args->tag == node_list);
-      for (; args; args = LIST_TAIL(args)) {
-        argument = LIST_HEAD(args);
-        assert(argument->tag == node_decl);
-        assert(argument->value.decl.type == 0);
-        /* FIXME: only bytes are supported so far */
-        assert(argument->value.decl.size == size_byte);
-        write_decl(argument, name, true);
-      }  
-    }
-    /* the procedure or function has local variables */ 
-    if (decl != NULL) {
-      assert(decl->tag == node_list);
-      for (; decl; decl = LIST_TAIL(decl)) {
-        argument = LIST_HEAD(decl);
-        assert(argument->tag == node_decl);
-        /* FIXME: only bytes are supported so far */
-        assert(argument->value.decl.size == size_byte);
-        if (argument->value.decl.type == type_var)
-          write_decl(argument, name, false);
-
-      }  
-    }
-    
-    fprintf(state.output.f, "\n");
-  }
-
-  /* program memory section */
-  fprintf(state.output.f, ".code_%s code\n", name);
-  write_label(name);
-  if (storage == storage_public)
-    fprintf(state.output.f, "  global %s\n", name);
-  max_temp_number = 0;
-  write_statements(statements);
-  fprintf(state.output.f, "  return\n");
-  fprintf(state.output.f, "\n");
-
-  /* temp data section */
-  if (max_temp_number) {
-    /* FIXME: overlay this if possible */
-    fprintf(state.output.f, ".udata_%s_temp udata\n", name);
-    for(i = 0; i < max_temp_number; i++)
-      fprintf(state.output.f, "%s_temp_%d res 1\n", name, i);
-      
-    fprintf(state.output.f, "\n");
-  }
-
-}
-
-static void
-extern_name(char *name1, char *name2, tree *symbol)
-{
-  char buffer[BUFSIZ];
-  struct variable *var;
-
-  if (name2)
-    sprintf(buffer, "%s_%s", name1, name2);
-  else
-    sprintf(buffer, "%s", name1);
-
-  var = add_global(buffer, buffer, symbol);
-  if (var)
-    fprintf(state.output.f, "  extern %s\n", var->alias);
-
-  return;
-}
-
-static void
-extern_args(char *main_name, tree *list)
-{
-  tree *decl;
-  tree *symbol;
-
-  while (list) {
-    decl = LIST_HEAD(list);
-    assert(decl->tag == node_decl);
-    symbol = decl->value.decl.expr;
-    assert(symbol->tag == node_symbol);
-    extern_name(main_name, symbol->value.symbol, symbol);
-    list = LIST_TAIL(list);
-  }
-
-}
-
-static enum node_storage
-determine_storage(tree *node)
-{
-  enum node_storage storage;
-
-  switch(node->tag) {
-  case node_decl:
-    storage = DECL_STOR(node);
-    break;
-  case node_decl_prot:
-    storage = DECL_PROT_STOR(node);
-    break;
-  case node_func:
-    storage = FUNC_STOR(node);
-    break;
-  case node_func_prot:
-    storage = FUNC_PROT_STOR(node);
-    break; 
-  case node_proc:
-    storage = PROC_STOR(node);
-    break;
-  case node_proc_prot:
-    storage = PROC_PROT_STOR(node);
-    break;
-  default:
-    assert(0);
-  }   
-
-  return storage;
-}
-
-static void
-write_externs(void)
-{
-  tree *current = NULL;
-  char *name;
-  tree *args = NULL;
-  tree *symbol = NULL;
-  gp_boolean first_time = true;
-
-  current = state.root;
-  while (current != NULL) {
-    if (determine_storage(current) == storage_extern) {
-      if (first_time == true)  {
-        fprintf(state.output.f, "; external symbols\n");
-        first_time = false;
-      }
-      switch(current->tag) {
-      case node_decl_prot:
-        symbol = LIST_HEAD(current->value.decl.expr);
-        extern_name(symbol->value.symbol, NULL, symbol);
-        break;
-      case node_func_prot:
-        name = current->value.func.head->value.head.name;
-        args = current->value.func.head->value.head.args;
-        extern_name(name, NULL, current);
-        extern_args(name, args);
-        break; 
-      case node_proc_prot:
-        name = current->value.proc.head->value.head.name;
-        args = current->value.proc.head->value.head.args;
-        extern_name(name, NULL, current);
-        extern_args(name, args);
-        break;
-      case node_decl:
-      case node_func:
-      case node_proc:
-      default:
-        assert(0);
-      }
-    }
-    current = current->next;
-  }
-
-  if (first_time == false)
-    fprintf(state.output.f, "\n");
-
-  return;
-}
-
-static char *
-find_node_name(tree *node)
-{
-  tree *symbol;
-  tree *head;
-  char *name = NULL;
-
-  switch(node->tag) {
-  case node_decl:
-    symbol = LIST_HEAD(DECL_EXPR(node));
-    assert(symbol->tag == node_symbol);
-    name = symbol->value.symbol;
-    break;
-  case node_decl_prot:
-    symbol = LIST_HEAD(DECL_PROT_EXPR(node));
-    assert(symbol->tag == node_symbol);
-    name = symbol->value.symbol;
-    break;
-  case node_func:
-    head = FUNC_HEAD(node);
-    name = HEAD_NAME(head);
-    break;
-  case node_func_prot:
-    head = FUNC_PROT_HEAD(node);
-    name = HEAD_NAME(head);
-    break; 
-  case node_proc:
-    head = PROC_HEAD(node);
-    name = HEAD_NAME(head);
-    break;
-  case node_proc_prot:
-    head = PROC_PROT_HEAD(node);
-    name = HEAD_NAME(head);
-    break;
-  default:
-    assert(0);
-  }   
-
-  return name;
-}
-
-static tree *
-find_node(char *name, enum node_tag tag)
-{
-  tree *current = NULL;
-  tree *found = NULL;
-  char *node_name;
-
-  current = state.root;
-  while (current != NULL) {
-    if (current->tag == tag) {
-      node_name = find_node_name(current);
-      if (strcasecmp(node_name, name) == 0) {
-        found = current;
-        break;
-      }
-    }
-    current = current->next;
-  }
-
-  return found;
-}
-
-static void
-remove_public_prots(void)
-{
-  tree *current = NULL;
-  tree *def;
-  gp_boolean remove_prot;
-
-  /* FIXME: need to check that the prototype matches the function */
-
-  /* remove the public prototypes */
-  current = state.root;
-  while (current != NULL) {
-    remove_prot = false;
-    if (determine_storage(current) == storage_public) {
-      switch(current->tag) {
-      case node_decl:
-      case node_func:
-      case node_proc:
-        /* do nothing */
-        break;
-      case node_decl_prot:
-        def = find_node(find_node_name(current), node_decl);
-        DECL_STOR(def) = storage_public;
-        remove_prot = true;
-        break;
-      case node_func_prot:
-        def = find_node(find_node_name(current), node_func);
-        FUNC_STOR(def) = storage_public;
-        remove_prot = true;
-        break; 
-      case node_proc_prot:
-        def = find_node(find_node_name(current), node_proc);
-        PROC_STOR(def) = storage_public;
-        remove_prot = true;
-        break;
-      default:
-        break;
-      }
-      if (remove_prot) {
-         if (current->prev == NULL ) {
-           state.root = current->next;
-         } else {
-           current->prev->next = current->next;      
-         }
-      }
-    }	
-
-    current = current->next;
-  }  
-
-}
-
-void
-write_asm(void)
-{
-  tree *current = NULL;
-
-  remove_public_prots();
-
-  write_header();
-  write_startup();
-  write_declarations();
   write_externs();
-
-  /* write out all the source */
-  current = state.root;
-  while (current != NULL) {
-    switch(current->tag) {
-    case node_decl:
-    case node_decl_prot:
-    case node_func_prot:
-    case node_proc_prot:
-      /* do nothing */
-      break;
-    case node_func:
-      write_procedure(current, 1);
-      break; 
-    case node_proc:
-      write_procedure(current, 0);
-      break;
-    default:
-      assert(0);
-    }
-    current = current->next;
-  }
-
+  write_startup();
   write_footer();  
+  
+  fclose(state.output.f);
+
+  return;
 }
