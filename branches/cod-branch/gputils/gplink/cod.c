@@ -49,9 +49,15 @@ init_DirBlock(DirBlockInfo *a_dir)
 
   /* Initialize the directory block with known data. It'll be written
    * to the .cod file after everything else */
-
+  gp_cod_strncpy(&a_dir->dir.block[COD_DIR_SOURCE], 
+	         "FIXME",
+	         COD_DIR_DATE - COD_DIR_SOURCE);
+  gp_cod_date(&a_dir->dir.block[COD_DIR_DATE], 
+              COD_DIR_TIME - COD_DIR_DATE);
+  gp_cod_time(&a_dir->dir.block[COD_DIR_TIME], 
+              COD_DIR_VERSION - COD_DIR_TIME);
   gp_cod_strncpy(&a_dir->dir.block[COD_DIR_VERSION], 
-	         GPLINK_VERSION_STRING,
+	         VERSION,
 	         COD_DIR_COMPILER - COD_DIR_VERSION);
   gp_cod_strncpy(&a_dir->dir.block[COD_DIR_COMPILER], 
 	         "gplink",
@@ -582,6 +588,7 @@ cod_symbol_table(struct symbol_table *table)
 void
 cod_close_file(void)
 {
+  char *processor_name;
 
   if(!state.cod.enabled)
     return;
@@ -596,9 +603,12 @@ cod_close_file(void)
 
   cod_write_code();
 
+  processor_name = gp_upper_case(gp_processor_name(state.processor, 2));
+
   gp_cod_strncpy(&main_dir.dir.block[COD_DIR_PROCESSOR], 
-	         gp_processor_name(state.processor, 2),
+	         processor_name,
 	         COD_DIR_LSYMTAB - COD_DIR_PROCESSOR);
+  free(processor_name);
 
   write_directory();
   fclose(state.cod.f);
