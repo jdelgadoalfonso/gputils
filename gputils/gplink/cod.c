@@ -279,7 +279,8 @@ cod_lst_line(int line_type)
     gp_putl16(&lb.block[offset + COD_LS_SLINE], state.lst.src->line_number);
 
     /* Write the address of the opcode. */
-    gp_putl16(&lb.block[offset + COD_LS_SLOC], state.lst.was_org);
+    gp_putl16(&lb.block[offset + COD_LS_SLOC],
+              state.lst.was_org << state.byte_addr);
 
     break;
   case COD_LAST_LST_LINE:
