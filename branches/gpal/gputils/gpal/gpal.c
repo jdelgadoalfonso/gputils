@@ -130,14 +130,15 @@ get_compile(int id)
 static gp_linked_list *last_link;
 
 static void
-add_link(char *link)
+add_link(char *base, char *extension)
 {
   gp_linked_list *new;
   char *name;
 
-  name = malloc(strlen(link) + 3);
-  strcpy(name, link);
-  strcat(name, ".o");
+  name = malloc(strlen(base) + strlen(extension)+ 2);
+  strcpy(name, base);
+  strcat(name, ".");
+  strcat(name, extension);
 
   new = gp_list_make();
   gp_list_annotate(new, name);
@@ -533,6 +534,7 @@ combine_output(void)
   if (system(command)) {
     gp_num_errors++;
   } else if (state.delete_temps == true) {
+    /* FIXME: this will delete any objects or libs passed as inputs */
     list = state.link;
     while(list != NULL) {
       unlink(gp_list_get(list));
@@ -599,25 +601,32 @@ main(int argc, char *argv[])
     
     state.basefilename = strdup(state.srcfilename);
     pc = strrchr(state.basefilename, '.');
-    *pc++ = 0;
-    
-    if (strcasecmp(pc, "pal") == 0) {
-      /* compile it */
-      compile();
-      assemble(state.basefilename, false);
-      add_link(state.basefilename);
-    } else if (strcasecmp(pc, "pub") == 0) {
-      gp_error("public files are not compiled \"%s\"", state.srcfilename);
-    } else if (strcasecmp(pc, "asm") == 0) {
-      /* assemble it */
-      assemble(state.basefilename, true);
-      add_link(state.basefilename);
-    } else if ((strcasecmp(pc, "o") == 0) || (strcasecmp(pc, "a") == 0)) {
-      /* add it to the list for linking */
-      add_link(state.basefilename);
+    if (pc) {
+      *pc = 0;
+
+      if (strcasecmp(pc, "pal") == 0) {
+        /* compile it */
+        compile();
+        assemble(state.basefilename, false);
+        add_link(state.basefilename, "o");
+      } else if (strcasecmp(pc, "pub") == 0) {
+        gp_error("public files are not compiled %s", state.srcfilename);
+      } else if (strcasecmp(pc, "asm") == 0) {
+        /* assemble it */
+        assemble(state.basefilename, true);
+        add_link(state.basefilename, "o");
+      } else if (strcasecmp(pc, "o") == 0) {
+        /* add the object to the list for linking */
+        add_link(state.basefilename, "o");
+      } else if (strcasecmp(pc, "a") == 0) {
+        /* add the archive to the list for linking */
+        add_link(state.basefilename, "a");
+      } else {
+        gp_error("unknown extension of %s", state.srcfilename);
+        exit(1);
+      }
     } else {
-      gp_error("unknown extension of \"%s\"", state.srcfilename);
-      exit(1);
+      gp_error("file name %s is missing an extension", state.srcfilename);
     }
 
     /* free the new filename */

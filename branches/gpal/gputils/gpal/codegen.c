@@ -63,6 +63,8 @@ typedef void data_func2(char *name,
 #define LOAD_CONSTANT (*(data_func1*)func_ptr->load_constant)
 #define LOAD_FILE (*(data_func2*)func_ptr->load_file)
 #define STORE_FILE (*(data_func2*)func_ptr->store_file)
+#define LOAD_INDIRECT (*(data_func2*)func_ptr->load_indirect)
+#define STORE_INDIRECT (*(data_func2*)func_ptr->store_indirect)
 
 /****************************************************************************/
 /* Common Assembly Functions                                                */
@@ -118,6 +120,7 @@ codegen_jump(char *label)
 void
 codegen_call(char *label, enum node_storage storage)
 {
+ 
   if (storage == storage_extern) {
     codegen_write_asm("pagesel %s", label);
   }
@@ -138,6 +141,37 @@ codegen_assembly(tree *assembly)
 /****************************************************************************/
 /* Memory access                                                            */
 /****************************************************************************/
+
+/* calculate the byte address of the data and put it in FSR */
+
+void
+codegen_indirect(tree *offset,
+                 struct variable *var,
+                 int element_size,
+                 gp_boolean new_expr)
+{
+
+  /* FIXME: the default pointer size needs to be selected (size_uint8 for
+     now ) */
+
+  /* indirect access */
+  if (new_expr) {
+    codegen_expr(offset, size_uint8);
+  } else {
+    gen_expr(offset);
+  }
+  if (var->type->start != 0) {
+    /* shift the offset for the first element */
+    CODEGEN(op_add, size_uint8, true, 0 - var->type->start, NULL);
+  }
+  if (element_size != 1) {
+    /* scale the offset by the element size */
+    CODEGEN(op_mult, size_uint8, true, element_size, NULL);
+  }
+  codegen_write_asm("addlw %s", var->alias); 
+  codegen_write_asm("movwf FSR"); 
+
+}
 
 /* load the register file into the working register */
 
@@ -161,23 +195,17 @@ codegen_load_file(tree *symbol, struct variable *var)
           LOAD_FILE(var->alias, codegen_size, offset, false);
         }
       } else {
-        /* indirect access */
-        gen_expr(SYM_OFST(symbol));
-        if (element_size != 1) {
-          /* scale the offset by the element size */
-          CODEGEN(op_mult, codegen_size, true, element_size, NULL);
-        }
-        codegen_write_asm("addlw %s", var->alias); 
+        codegen_indirect(SYM_OFST(symbol), var, element_size, false);
         if (var->class == storage_extern) {
-          codegen_write_asm("bankisel %s", var->alias);
+          LOAD_INDIRECT(var->alias, codegen_size, 0, true);
+        } else {
+          LOAD_INDIRECT(var->alias, codegen_size, 0, false);
         }
-        codegen_write_asm("movf FSR, w", var->alias); 
       }
     } else {
-      analyze_error(symbol, "symbol \"%s\" is not an array",
+      analyze_error(symbol, "symbol %s is not an array",
                     SYM_NAME(symbol));
     }
-
   } else {
     if (var->class == storage_extern) {
       LOAD_FILE(var->alias, codegen_size, 0, true);
@@ -187,27 +215,6 @@ codegen_load_file(tree *symbol, struct variable *var)
   }
 
   return;
-}
-
-/* load the FSR with the symbol and offset */
-
-void
-codegen_indirect(struct variable *var, tree *offset)
-{
-  int element_size;
-
-  /* FIXME: set the codegen_size */
-
-  codegen_expr(offset, size_uint8);
-  element_size = type_size(var->type->prim);
-  if (element_size != 1) {
-    /* scale the offset by the element size */
-    /* FIXME: incorrect, temp regs will be messed up */
-    CODEGEN(op_mult, codegen_size, true, element_size, NULL);
-  }
-  codegen_write_asm("addlw %s", var->alias); 
-  codegen_write_asm("movwf FSR");
-
 }
 
 /* store the working register in memory */
@@ -227,9 +234,11 @@ codegen_store(struct variable *var,
         STORE_FILE(var->alias, codegen_size, offset, false);
       }    
     } else {
-      codegen_write_asm("bankisel %s", var->alias);
-      /* FIXME: need to support multibyte words */
-      codegen_write_asm("movwf INDF");
+      if (var->class == storage_extern) {
+        STORE_INDIRECT(var->alias, codegen_size, 0, true);
+      } else {
+        STORE_INDIRECT(var->alias, codegen_size, 0, false);
+      }
     }
   } else {
     if (var->class == storage_extern) {
@@ -276,10 +285,10 @@ gen_binop_expr(tree *expr)
   /* calculate right hand side */
   gen_expr(rhs);
 
-  if (lhs->tag == node_constant) {
+  if (lhs->tag == node_call) {
     reg1 = codegen_get_temp(codegen_size);
     STORE_FILE(reg1, codegen_size, 0, false);
-    analyze_call(expr, true);    
+    analyze_call(expr, true, codegen_size);    
     CODEGEN(expr->value.binop.op, codegen_size, false, 0, reg1);
   } else if (lhs->tag == node_constant) {
     CODEGEN(expr->value.binop.op, codegen_size, true, lhs->value.constant, NULL);
@@ -325,7 +334,7 @@ gen_expr(tree *expr)
     codegen_load_file(expr, var);
     break;
   case node_call:
-    analyze_call(expr, true);    
+    analyze_call(expr, true, codegen_size);    
     break;
   case node_constant:
     LOAD_CONSTANT(expr->value.constant, codegen_size);
