@@ -93,6 +93,7 @@ enum node_storage {
 
 enum source_type {
   source_unknown,
+  source_header,   /* a processor header file */
   source_module,   /* a source file */
   source_public,   /* the public file for the module being compiled */
   source_with      /* the public file for a external module */ 
@@ -167,7 +168,7 @@ typedef struct node_struct {
   tree *next;
 
   /* debug information */
-  char *file_name;  
+  int file_id;
   int line_number;
 
 } node;

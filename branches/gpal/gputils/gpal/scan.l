@@ -41,13 +41,6 @@ int stringtolong(char *string, int radix);
 static char asm_buffer[ASM_BUF_SIZ];
 static int asm_index;
 
-/* header parser data */
-#define LINESIZ 520
-#define NUM_TOKENS 3
-
-int header_line_number;
-char header_file_name[LINESIZ];
-
 %}
 
 HEXCHAR [0-9a-f]
@@ -99,14 +92,14 @@ DECCHAR [0-9]
 "volatile"		{ return VOLATILE_STORAGE; }
 "while"			{ return WHILE; }
 "with"			{ return WITH; }
+\"[^;\n\"]+\"		{
+			  yytext[yyleng - 1] = '\0';
+			  yylval.s = strdup(yytext + 1);
+                          return STRING;
+			}
 [_a-z][_0-9a-z]*	{
 			  yylval.s = strdup(yytext);
 			  return IDENT;
-			}
-\"[^"]+\"		{
-			  yytext[yyleng - 1] = '\0';
-			  yylval.s = strdup(yytext + 1);
-			  return STRING;
 			}
 0x{HEXCHAR}+		{
 			  yylval.i = stringtolong(yytext + 2, 16);
@@ -134,6 +127,27 @@ DECCHAR [0-9]
 			}
 
 %%
+
+static void
+search_pathes(struct source_context *new, char *name)
+{
+  char tryname[BUFSIZ];
+  gp_linked_list *path = state.path;
+
+  while (path) {
+    strcpy(tryname, gp_list_get(path));
+    strcat(tryname, COPY_CHAR);
+    strcat(tryname, name);
+    new->f = fopen(tryname, "rt");
+    if(new->f) {
+      new->name = strdup(tryname);
+      break;
+    }  
+    path = path->next;
+  }
+
+  return; 
+}
 
 void open_src(char *name, enum source_type type)
 {
@@ -164,26 +178,28 @@ void open_src(char *name, enum source_type type)
       free(file_name);
       return;
     } else {
-      perror(file_name);
-      exit(1);
+      /* search the include pathes */
+      search_pathes(new, file_name);
+      if (new->f == NULL) {
+        perror(file_name);
+        exit(1);
+      }
+    }
+  } else {
+    new->name = file_name;
+  }
+
+  /* the header scan uses a seperate lexer/parser */
+  if (type != source_header) {
+    yyin = new->f;
+
+    if (state.src) {
+      yy_switch_to_buffer(yy_create_buffer(yyin, YY_BUF_SIZE));
     }
   }
 
-  yyin = new->f;
-
-  if (state.src) {
-    yy_switch_to_buffer(yy_create_buffer(yyin, YY_BUF_SIZE));
-  }
-
-#ifdef PARSE_DEBUG
-  {
-    extern int yydebug;
-    yydebug = 1;
-  }
-#endif
-
-  new->name = file_name;
   new->type = type;
+  new->file_id = add_compile(file_name);
   new->line_number = 1;
   new->prev = state.src;
   
@@ -269,50 +285,29 @@ convert_number(char *string)
     string = &string[1];
     value = stringtolong(string, 10);
   } else {
-    gp_error("unknown value %s on %i of \"%s\"",
-             string,
-             header_line_number,
-             header_file_name);
+    gp_error("%s:%i:error unknown value \"%s\"",
+             state.src->name,
+             state.src->line_number,
+             string);
   }
 
   return value;
 }
 
-/* FIXME: Insert equ filename and line number into symbol table.  Maybe
-   use a file ID function.  Reference it for debug.  */
-   
-/* FIXME: Add a flag to prevent the header file from being read and to 
-   specify a different filename. */
-
-/* FIXME: Figure out how to handle reading header when processor is only
-   specified in a pragma. */
-
-/* FIXME: Split this off to another file. */
-
 void
-scan_header(void)
+scan_header(char *file_name)
 {
-  FILE *header;
+  #define NUM_TOKENS 3
+  #define LINESIZ 520
   char linebuf[LINESIZ];
   char *linept = linebuf;
   char *array[NUM_TOKENS];
   int i;
 
-  sprintf(header_file_name, "%s.inc", state.processor_info->names[1]);
-
-  header = fopen(header_file_name, "rt");
-  if (header == NULL) {
-    /* FIXME: need to search the include pathes */
-    gp_warning("couldn't open file \"%s\"", header_file_name);
-    return;
-  }
-
-  /* go to the beginning of the file */
-  fseek(header, 0L, 0);	  
-  header_line_number = 1;
+  open_src(file_name, source_header);
 
   /* scan the file looking for the equates */
-  while(fgets(linept, LINESIZ, header)) {
+  while(fgets(linept, LINESIZ, state.src->f)) {
 
     array[0] = strtok(linebuf, " \t\r\n");
     if (array[0]) {
@@ -331,13 +326,15 @@ scan_header(void)
     /* set the line pointer to the beginning of the line buffer */
     linept = linebuf;
     
-    header_line_number++;
+    state.src->line_number++;;
 
   }
 
-  fclose(header);
+  if (state.processor_info) {
+    add_equ(state.processor_info->defined_as, 1);
+  }
 
-  printf("done reading header\n");
+  close_file();
 
   return;
 

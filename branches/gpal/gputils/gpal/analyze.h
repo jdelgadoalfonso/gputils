@@ -23,6 +23,7 @@ Boston, MA 02111-1307, USA.  */
 #define __ANALYZE_H__
 
 void analyze(void);
+void analyze_select_processor(tree *node, char *name);
 void analyze_error(tree *node, const char *format, ...);
 
 #endif
