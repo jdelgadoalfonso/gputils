@@ -1,5 +1,5 @@
-/* libgputils typedefs
-   Copyright (C) 2001, 2002, 2003
+/* code generation
+   Copyright (C) 2003
    Craig Franklin
 
 This file is part of gputils.
@@ -19,9 +19,24 @@ along with gputils; see the file COPYING.  If not, write to
 the Free Software Foundation, 59 Temple Place - Suite 330,
 Boston, MA 02111-1307, USA.  */
 
-#ifndef __GPTYPES_H__
-#define __GPTYPES_H__
+#ifndef __CODEGEN_H__
+#define __CODEGEN_H__
 
-typedef enum { false = (0 == 1), true = (0 == 0) } gp_boolean;
+struct variable {
+  char *alias;
+  tree *node;
+  gp_boolean is_constant;		/* true if constant symbol */
+  gp_boolean is_public;			/* true if public symbol */
+  gp_boolean is_external;		/* true if defined elsewere */
+  gp_boolean is_equ;			/* true if processor header equate */
+  int value;				/* value if constant symbol */
+};
+
+void add_global(char *name, char *alias, tree *object);
+struct variable *get_global(char *name);
+void write_asm_line(const char *format, ...);
+void write_label(char *label);
+extern int temp_number;
+void write_asm(void);
 
 #endif
