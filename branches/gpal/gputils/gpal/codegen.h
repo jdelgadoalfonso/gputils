@@ -37,6 +37,7 @@ struct variable *get_global(char *name);
 void write_asm_line(const char *format, ...);
 void write_label(char *label);
 extern int temp_number;
+extern char *code_name;
 void write_asm(void);
 
 #endif
