@@ -196,8 +196,10 @@ typedef struct node_struct {
 #define DECL_PROT_STOR(D)  (D)->value.decl_prot.storage
 #define DECL_PROT_EXPR(D)  (D)->value.decl_prot.expr
 #define FUNC_HEAD(F)       (F)->value.func.head
+#define FUNC_STOR(F)       (F)->value.func.storage
 #define FUNC_BODY(F)       (F)->value.func.body
 #define FUNC_PROT_HEAD(F)  (F)->value.func_prot.head
+#define FUNC_PROT_STOR(F)  (F)->value.func_prot.storage
 #define FUNC_PROT_BODY(F)  (F)->value.func_prot.body
 #define HEAD_NAME(H)       (H)->value.head.name
 #define HEAD_ARGS(H)       (H)->value.head.args
@@ -208,8 +210,10 @@ typedef struct node_struct {
 #define LOOP_INCR(L)       (L)->value.loop.incr
 #define LOOP_BODY(L)       (L)->value.loop.body
 #define PROC_HEAD(P)       (P)->value.proc.head
+#define PROC_STOR(F)       (F)->value.proc.storage
 #define PROC_BODY(P)       (P)->value.proc.body
 #define PROC_PROT_HEAD(P)  (P)->value.proc_prot.head
+#define PROC_PROT_STOR(P)  (P)->value.proc_prot.storage
 #define PROC_PROT_BODY(P)  (P)->value.proc_prot.body
 #define UNOP_OP(B)         (B)->value.unop.op
 #define UNOP_ARG(B)        (B)->value.unop.p0
@@ -224,6 +228,7 @@ tree *mk_call(char *name, tree *args);
 tree *mk_constant(int value);
 tree *mk_cond(tree *cond, tree *body, tree *next);
 tree *mk_decl(enum node_type type, enum node_size size, enum node_storage storage, tree *expr);
+tree *mk_decl_prot(enum node_type type, enum node_size size, enum node_storage storage, tree *expr);
 tree *mk_func(tree *head, enum node_storage storage, enum node_size ret, tree *body);
 tree *mk_func_prot(tree *head, enum node_storage storage, enum node_size ret);
 tree *mk_head(char *name, tree *args);
