@@ -1,3 +1,0 @@
-files gblconflict1.o gblconflict2.o
-
-include 16f877a.lkr
