@@ -100,25 +100,42 @@ char *get_compile(int id);
 
 /* type data */
 
+enum type_tag {
+  type_unknown,
+  type_prim,				/* primative (bit, byte, ...) */
+  type_array,				/* array of other types */
+  type_enum,				/* enumeration */
+  type_alias				/* type alias */
+};
+
 struct type {
+  enum type_tag tag;                    /* which type */
   int size;				/* size in bytes */
   int bitsize;				/* size in bits */
-  int nelts;				/* number of elements */
-  int start;				/* first element number */
-  int end;				/* last element number */
-  gp_boolean is_derived;		/* the symbol is derived from others */
+  int nelts;				/* number of elements or enums */
+  int start;				/* first element number or value */
+  int end;				/* last element number or value */
   struct type *prim;			/* primative type it is derived from */  
 };
 
 /* symbol data */
 
+enum sym_tag {
+  sym_unknown,
+  sym_proc,				/* procedure */
+  sym_func,				/* function */
+  sym_udata,				/* uninitialized data */
+  sym_idata,				/* initialized data */
+  sym_const,				/* constant */
+  sym_equ				/* equate */
+};
+
 struct variable {
   char *alias;
+  enum sym_tag tag;			/* symbol tag */
   enum node_storage class;		/* storage class */
   struct type *type;			/* symbol type */
   gp_boolean is_init;			/* the symbol has been initialized */
-  gp_boolean is_equ;			/* true if processor header equate */
-  gp_boolean is_constant;		/* true if constant symbol */
   int value;				/* value if constant symbol */
   int file_id;				/* file symbol was defined in */
   int line_number;			/* line number symbol was defined on */

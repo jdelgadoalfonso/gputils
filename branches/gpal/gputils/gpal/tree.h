@@ -41,6 +41,7 @@ enum node_tag {
   node_loop,
   node_pragma,
   node_proc,
+  node_return,
   node_string,
   node_symbol, 
   node_type,
@@ -164,8 +165,12 @@ typedef struct node_struct {
       tree *head;
       tree *body;
     } proc;
+    tree *ret;
     char *string;
-    char *symbol;
+    struct {
+      char *name;
+      tree *offset;
+    } symbol;
     struct {
       char *type;
       tree *start;
@@ -219,6 +224,8 @@ typedef struct node_struct {
 #define PROC_HEAD(P)       (P)->value.proc.head
 #define PROC_STOR(F)       (F)->value.proc.storage
 #define PROC_BODY(P)       (P)->value.proc.body
+#define SYM_NAME(T)        (T)->value.symbol.name
+#define SYM_OFST(T)        (T)->value.symbol.offset
 #define TYPE_TYPE(T)       (T)->value.type.type
 #define TYPE_START(T)      (T)->value.type.start
 #define TYPE_END(T)        (T)->value.type.end
@@ -246,8 +253,9 @@ tree *mk_head(char *name, tree *args);
 tree *mk_loop(tree *init, tree *exit, tree *incr, tree *body);
 tree *mk_pragma(tree *pragma);
 tree *mk_proc(tree *head, tree *body);
+tree *mk_return(tree *ret);
 tree *mk_string(char *value);
-tree *mk_symbol(char *value);
+tree *mk_symbol(char *name, tree *offset);
 tree *mk_type(char *type, tree *start, tree *end, tree *list, char *of);
 tree *mk_unop(enum node_op op, tree *p0);
 

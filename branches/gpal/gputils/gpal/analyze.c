@@ -25,6 +25,7 @@ Boston, MA 02111-1307, USA.  */
 #include "gpal.h"
 #include "analyze.h"
 #include "codegen.h"
+#include "codegen14.h"
 #include "scan.h"
 #include "symbol.h"
 
@@ -37,6 +38,9 @@ void analyze_statements(tree *statement);
 
 static gp_linked_list *data_memory;
 static gp_linked_list *last_link;
+
+static gp_boolean generating_function;
+static gp_boolean found_return;
 
 /* create a linked list of all the data memory used */
 
@@ -85,7 +89,7 @@ analyze_error(tree *node, const char *format, ...)
   return;
 }
 
-static void 
+void 
 analyze_warning(tree *node, const char *format, ...)
 {
   va_list args;
@@ -183,7 +187,15 @@ add_arg_symbols(tree *node, char *name, enum node_storage storage)
 
   while (arg) {
     assert(arg->tag == node_arg);
-    var = add_global_symbol(ARG_NAME(arg), name, arg, storage);
+    var = add_global_symbol(ARG_NAME(arg),
+                            name,
+                            arg,
+                            sym_udata,
+                            storage,
+                            ARG_TYPE(arg));
+    if (var->type->tag == type_array) {
+      analyze_error(arg, "arguments can not be arrays");     
+    }
     if ((var->class == storage_private) ||
         (var->class == storage_public)) {    
       add_link(var);
@@ -197,7 +209,7 @@ add_arg_symbols(tree *node, char *name, enum node_storage storage)
 /* can the expression be evaluated at compile time */
 
 int
-can_evaluate(tree *p)
+can_evaluate(tree *p, gp_boolean gen_errors)
 {
   struct variable *var;
 
@@ -205,24 +217,31 @@ can_evaluate(tree *p)
   case node_constant:
     return 1;
   case node_symbol:
-    var = get_global(p->value.symbol);
+    var = get_global(SYM_NAME(p));
     if (var) {
-      if (var->is_constant) {
+      if ((var->tag == sym_const) || (var->tag == sym_equ)) {
         return 1;
       } else {
-        analyze_error(p, "symbol is not a constant (%s)", p->value.symbol);    
+        if (gen_errors) { 
+          analyze_error(p, "symbol is not a constant (%s)", SYM_NAME(p));    
+        }
         return 0;
       }
     } else {
-      analyze_error(p, "symbol not previously defined (%s)", p->value.symbol);    
+      if (gen_errors) {
+        analyze_error(p, "symbol not previously defined (%s)", SYM_NAME(p));    
+      }
       return 0;
     }
   case node_unop:
-    return can_evaluate(p->value.unop.p0);
+    return can_evaluate(p->value.unop.p0, gen_errors);
   case node_binop:
-    return can_evaluate(p->value.binop.p0) && can_evaluate(p->value.binop.p1);
+    return can_evaluate(p->value.binop.p0, gen_errors) && 
+           can_evaluate(p->value.binop.p1, gen_errors);
   case node_string:
-    analyze_error(p, "illegal argument (%s)", p->value.string);
+    if (gen_errors) {
+      analyze_error(p, "illegal argument (%s)", p->value.string);
+    }
     return 0;
   default:
     assert(0);
@@ -241,7 +260,7 @@ evaluate(tree *p)
   case node_constant:
     return p->value.constant;
   case node_symbol:
-    var = get_global(p->value.symbol);
+    var = get_global(SYM_NAME(p));
     return var->value;
   case node_unop:
     switch (p->value.unop.op) {
@@ -299,7 +318,7 @@ maybe_evaluate(tree *p)
 {
   int r;
 
-  if (p && can_evaluate(p)) {
+  if (p && can_evaluate(p, true)) {
     r = evaluate(p);
   } else {
     r = 0;
@@ -309,16 +328,16 @@ maybe_evaluate(tree *p)
 }
 
 static int
-test_symbol(tree *node)
+test_symbol(tree *node, char *name)
 {
   struct symbol *sym;
 
   /* FIXME: need to test symbol type too.  Can't use procedure name in 
      and expression. */
 
-  sym = get_symbol(state.top, node->value.symbol);
+  sym = get_symbol(state.top, name);
   if (sym == NULL) {
-    analyze_error(node, "unknown symbol \"%s\"", node->value.symbol);
+    analyze_error(node, "unknown symbol \"%s\"", name);
     return 1;
   }
 
@@ -335,9 +354,15 @@ scan_tree(tree *expr)
     return;
 
   switch (expr->tag) {
+  case node_arg:
+    test_symbol(expr, ARG_NAME(expr));
+    break;
   case node_binop:
     scan_tree(BINOP_LEFT(expr));
     scan_tree(BINOP_RIGHT(expr));
+    break;
+  case node_call:
+    test_symbol(expr, CALL_NAME(expr));
     break;
   case node_constant:
     break;
@@ -345,34 +370,114 @@ scan_tree(tree *expr)
     scan_tree(BINOP_RIGHT(expr));
     break;
   case node_symbol:
-    test_symbol(expr);
+    test_symbol(expr, SYM_NAME(expr));
     break;
   default:
+    print_node(expr, 0);
     assert(0);
   }
 
 }
 
+static int
+analyze_check_array(tree *symbol, struct variable *var)
+{
+  int offset;
+
+  offset = evaluate(SYM_OFST(symbol));
+  if ((offset < var->type->start) || (offset > var->type->end)) {
+    analyze_error(symbol, "array index %i is out of range", offset);
+  }
+
+  /* In memory, the arrays always start at 0. */
+  offset = offset - var->type->start;
+
+  /* scale the offset by the size of the array elements */
+  offset = offset * type_size(var->type->prim);
+
+  return offset;
+}
+
+/* If a symbol has an offset, use this function to fetch the value and put
+   it in w. */
+
 void
-analyze_call(tree *call)
+analyze_get_array(tree *symbol, struct variable *var)
+{
+  int offset;
+  int element_size;
+
+  if ((var) && (var->type) && (var->type->tag == type_array)) {
+    if (can_evaluate(SYM_OFST(symbol), false)) {
+      /* direct access */
+      offset = analyze_check_array(symbol, var);
+      if (var->class == storage_extern) {
+        codegen_banksel(var->alias);
+        gen_get_mem_offset(var->alias, offset);
+        codegen_banksel(LOCAL_DATA_LABEL);
+      } else {
+        gen_get_mem_offset(var->alias, offset);
+      }
+    } else {
+      /* indirect access */
+      gen_expr(SYM_OFST(symbol));
+      element_size = type_size(var->type->prim);
+      if (element_size != 1) {
+        /* scale the offset by the element size */
+        gen_binop_constant(op_mult, element_size);
+      }
+      codegen_write_asm("addlw %s", var->alias); 
+      if (var->class == storage_extern) {
+        codegen_bankisel(var->alias);
+      }
+      gen_get_mem("FSR");          
+    }
+  } else {
+    analyze_error(symbol, "symbol \"%s\" is not an array", SYM_NAME(symbol));
+  }
+
+  return;
+}
+
+static tree *
+arg_to_symbol(tree *arg)
+{
+  tree *symbol;
+  
+  symbol = mk_symbol(ARG_NAME(arg), NULL);
+  symbol->file_id = arg->file_id;
+  symbol->line_number = arg->line_number;
+
+  return symbol;
+}
+
+void
+analyze_call(tree *call, gp_boolean in_expr)
 {
   struct variable *var;
   tree *def;
   tree *head;
   tree *def_args;
   tree *call_args;
-  struct variable *def_var;
-  struct variable *call_var;
+  tree *assignment;
 
   var = get_global(CALL_NAME(call));
   if (var) {
     def = var->node;
     if (def->tag == node_proc) {
       head = PROC_HEAD(var->node);
+      if (in_expr) {
+        analyze_error(call, "procedures can not be called in expressions");
+        return;
+      }
     } else if (def->tag == node_func) {
       head = FUNC_HEAD(var->node);
+      if (!in_expr) {
+        analyze_error(call, "functions can only be called in expressions");
+        return;
+      }
     } else {
-      analyze_error(call, "name in call is not a function or procedure");
+      analyze_error(call, "name in the call is not a function or procedure");
       return;
     }
   } else {
@@ -395,18 +500,10 @@ analyze_call(tree *call)
 
     if ((ARG_DIR(def_args) == dir_in) ||
         (ARG_DIR(def_args) == dir_inout)) {
-      /* write the expression */
-      codegen_expr(call_args);
-
-      /* store the result in the memory mapped argument */
-      def_var = get_global(ARG_NAME(def_args));
-      assert(def_var != NULL);
-      if (def_var->class == storage_extern) {
-        codegen_put_mem(def_var, true);
-        codegen_banksel(LOCAL_DATA_LABEL);
-      } else {
-        codegen_put_mem(def_var, false);
-      }
+      assignment = mk_binop(op_eq, arg_to_symbol(def_args), call_args);
+      assignment->file_id = call_args->file_id;
+      assignment->line_number = call_args->line_number;
+      analyze_expr(assignment);
     }
 
     def_args = def_args->next;
@@ -414,6 +511,8 @@ analyze_call(tree *call)
   }
 
   codegen_call(var->alias, var->class);
+
+  /* FIXME: any outs in the function call will over write the result in w */
 
   /* read data from the inout/out of the function or procedure */
   call_args = CALL_ARGS(call);
@@ -423,14 +522,11 @@ analyze_call(tree *call)
 
     if ((ARG_DIR(def_args) == dir_inout) ||
         (ARG_DIR(def_args) == dir_out)) {
-      /* write the expression */
-      codegen_expr(def_args);
-
-      /* store the result in the memory mapped argument */
       if (call_args->tag == node_symbol) {
-        call_var = get_global(call_args->value.symbol);
-        assert(call_var != NULL);
-        codegen_put_mem(call_var, false);
+        assignment = mk_binop(op_eq, call_args, def_args);
+        assignment->file_id = call_args->file_id;
+        assignment->line_number = call_args->line_number;
+        analyze_expr(assignment);
       } else {
         analyze_error(call_args, "call argument must be a symbol");
       }
@@ -516,6 +612,9 @@ analyze_expr(tree *expr)
   tree *left;
   tree *right;
   struct variable *var;
+  gp_boolean is_direct = true;
+  int offset = 0;
+  int element_size;
 
   if ((expr->tag != node_binop) || (BINOP_OP(expr) != op_eq)) {
     analyze_error(expr, "expression is missing \"=\"");
@@ -531,22 +630,79 @@ analyze_expr(tree *expr)
   }
 
   /* verify all symbols in the expression are in the symbol table */
-  test_symbol(left);
+  test_symbol(left, SYM_NAME(left));
   scan_tree(right);
+
+  /* fetch the symbol's alias */
+  var = get_global(SYM_NAME(left));
+  assert(var != NULL);
+  assert(var->type != NULL);
+
+  /* calculate the offset for indirect accesses if necessary */
+  if (SYM_OFST(left)) {
+    if (var->type->tag == type_array) {
+      if (can_evaluate(SYM_OFST(left), false)) {
+        /* direct access with an offset */
+        is_direct = true;
+        offset = analyze_check_array(left, var);
+      } else {
+        /* indirect access */
+        is_direct = false;
+        codegen_expr(SYM_OFST(left));
+        element_size = type_size(var->type->prim);
+        if (element_size != 1) {
+          /* scale the offset by the element size */
+          /* FIXME: incorrect, temp regs will be messed up */
+          gen_binop_constant(op_mult, element_size);
+        }
+        codegen_write_asm("addlw %s", var->alias); 
+        gen_put_mem("FSR");
+      }
+    } else {
+      analyze_error(left, "lvalue \"%s\" is not an array", SYM_NAME(left));
+    }
+  }
 
   /* write the expression */
   codegen_expr(right);
 
-  /* fetch the symbols alias */
-  var = get_global(left->value.symbol);
-  assert(var != NULL);
-
   /* put the result in memory */
-  if (var->class == storage_extern) {
-    codegen_put_mem(var, true);
-    codegen_banksel(LOCAL_DATA_LABEL);
+  if (SYM_OFST(left)) {
+    if (is_direct) {
+      if (var->class == storage_extern) {
+        codegen_banksel(var->alias);
+        gen_put_mem_offset(var->alias, offset);
+        codegen_banksel(LOCAL_DATA_LABEL);
+      } else {
+        gen_put_mem_offset(var->alias, offset);
+      }    
+    } else {
+      codegen_bankisel(var->alias);
+      gen_put_mem("INDF");
+    }
   } else {
-    codegen_put_mem(var, false);
+    if (var->class == storage_extern) {
+      codegen_put_mem(var, true);
+      codegen_banksel(LOCAL_DATA_LABEL);
+    } else {
+      codegen_put_mem(var, false);
+    }
+  }
+
+}
+
+static void
+analyze_return(tree *ret)
+{
+  
+  found_return = true;
+  
+  if (generating_function) {
+    scan_tree(ret->value.ret);
+    codegen_expr(ret->value.ret);
+    codegen_write_asm("return");
+  } else {
+    analyze_error(ret, "returns can only appear in a function body");
   }
 }
 
@@ -571,13 +727,16 @@ analyze_statements(tree *statement)
       analyze_assembly(statement);
       break;
     case node_call:
-      analyze_call(statement);
+      analyze_call(statement, false);
       break;
     case node_cond:
       analyze_cond(statement);  
       break;
     case node_loop:
       analyze_loop(statement);
+      break; 
+    case node_return:
+      analyze_return(statement);
       break; 
     default:
       analyze_expr(statement);
@@ -601,8 +760,10 @@ analyze_procedure(tree *procedure, gp_boolean is_func)
 
   /* local symbol table */
   state.top = push_symbol_table(state.top, 1);
-
+  found_return = false;
+  
   if (is_func) {
+    generating_function = true;
     head = FUNC_HEAD(procedure);
     body = FUNC_BODY(procedure);
   } else {
@@ -625,12 +786,17 @@ analyze_procedure(tree *procedure, gp_boolean is_func)
     assert(decl->tag == node_decl);
     if (DECL_KEY(decl) == key_var) {
       add_link(add_global_symbol(DECL_NAME(decl), 
-               proc_name,
-               decl,
-               storage_private));
+                                 proc_name,
+                                 decl,
+                                 sym_udata,
+                                 storage_private,
+                                 DECL_TYPE(decl)));
     } else if (DECL_KEY(decl) == key_const) {
       if (DECL_INIT(decl)) {
-        add_constant(DECL_NAME(decl), maybe_evaluate(DECL_INIT(decl)), decl);
+        add_constant(DECL_NAME(decl),
+                     maybe_evaluate(DECL_INIT(decl)),
+                     decl,
+                     DECL_TYPE(decl));
       } else {
         analyze_error(decl, "missing constant value");
       }
@@ -647,16 +813,20 @@ analyze_procedure(tree *procedure, gp_boolean is_func)
     codegen_banksel(LOCAL_DATA_LABEL);
   }
   analyze_statements(statements);
-  codegen_finish_proc();
+  codegen_finish_proc(!generating_function);
+
+  if ((is_func) && (!found_return)) {
+    analyze_error(procedure, "function is missing return");
+  }
 
   /* scan the local data, if a location is used add it to the list */
   if (state.optimize.trival_expressions) {
-  
-    
+
   }
-  
+
   /* remove the local table */
   state.top = pop_symbol_table(state.top);
+  generating_function = false;
 
   return;
 }
@@ -669,7 +839,9 @@ analyze_declarations(void)
 
   while(list) {
     var = gp_list_get(list);
-    codegen_write_data(var->alias, var->class);
+    assert(var != NULL);
+    assert(var->type != NULL);
+    codegen_write_data(var->alias, type_size(var->type), var->class);
     list = list->next;
   }
 
@@ -731,7 +903,7 @@ analyze_pragma(tree *expr, enum source_type type)
         } else {
           analyze_select_processor(rhs, rhs->value.string);
         }
-      } else if (strcasecmp(lhs->value.symbol, "code_section") == 0) {
+      } else if (strcasecmp(SYM_NAME(lhs), "code_section") == 0) {
         if (rhs->tag != node_string) {
           analyze_error(expr, "code section name must be a string");
         } else {
@@ -775,7 +947,7 @@ analyze_pragma(tree *expr, enum source_type type)
             }
           }        
         }
-      } else if (strcasecmp(lhs->value.symbol, "code_address") == 0) {
+      } else if (strcasecmp(SYM_NAME(lhs), "code_address") == 0) {
         if (rhs->tag != node_constant) {
           analyze_error(expr, "code address must be a constant");
         } else if (type == source_module) {            
@@ -784,7 +956,7 @@ analyze_pragma(tree *expr, enum source_type type)
         } else {
           analyze_error(expr, "udata section addresses can only be in modules");
         }
-      } else if (strcasecmp(lhs->value.symbol, "udata_address") == 0) {
+      } else if (strcasecmp(SYM_NAME(lhs), "udata_address") == 0) {
         if (rhs->tag != node_constant) {
           analyze_error(expr, "udata address must be a constant");
         } else if (type == source_module) {            
@@ -794,7 +966,7 @@ analyze_pragma(tree *expr, enum source_type type)
           analyze_error(expr, "udata section addresses can only be in modules");
         }
       } else {
-        analyze_error(expr, "unknown pragma \"%s\"", lhs->value.symbol);
+        analyze_error(expr, "unknown pragma \"%s\"", SYM_NAME(lhs));
       }
     }
     break;
@@ -805,11 +977,42 @@ analyze_pragma(tree *expr, enum source_type type)
   return;
 }
 
+/* add all of the types to the type table */
+
 static void
 analyze_type(tree *type)
 {
-  /* FIXME: finish the type checking */
+  int enum_num;
+  tree *list;
+  int start;
+  int end;
 
+  if (TYPE_LIST(type)) {
+    /* enumerated type */
+    add_type_enum(TYPE_TYPE(type));
+    enum_num = 0;
+    list = TYPE_LIST(type);
+    while (list) {
+      if (list->tag == node_symbol) {
+        /* add the constant to the global symbol table */
+        add_constant(SYM_NAME(list), enum_num++, list, TYPE_TYPE(type));
+      } else {
+        analyze_error(list, "enumerated list must be symbols");
+      }
+      list = list->next;
+    }
+  } else if (TYPE_START(type)) {
+    /* array type */
+    if ((can_evaluate(TYPE_START(type), true)) && 
+         can_evaluate(TYPE_END(type), true)) {
+      start = evaluate(TYPE_START(type));
+      end = evaluate(TYPE_END(type));
+      add_type_array(TYPE_TYPE(type), start, end, TYPE_OF(type));
+    }
+  } else {
+    /* alias */
+    add_type_alias(TYPE_TYPE(type), TYPE_OF(type));
+  }
 
 
 }
@@ -830,8 +1033,6 @@ analyze_module(tree *file)
       analyze_pragma(current->value.pragma, FILE_TYPE(file));
       break;
     case node_type:
-      analyze_type(current);
-      break;
     case node_decl:
     case node_proc:
     case node_func:
@@ -846,19 +1047,48 @@ analyze_module(tree *file)
   while (current) {
     switch (current->tag) {
     case node_pragma:
+      break;
     case node_type:
+      analyze_type(current);
       break;
     case node_decl:
-      name = find_node_name(current);
-      var = add_global_symbol(name, NULL, current, storage_private);
       if (DECL_KEY(current) == key_var) {
+        var = add_global_symbol(DECL_NAME(current), 
+                                NULL,
+                                current, 
+                                sym_udata,
+                                storage_private,
+                                DECL_TYPE(current));
         add_link(var);
+      } else {
+        if (DECL_INIT(current)) {
+          add_constant(DECL_NAME(current),
+                       maybe_evaluate(DECL_INIT(current)),
+                       current,
+                       DECL_TYPE(current));
+        } else {
+          analyze_error(current, "missing constant value");
+        }
       }
       break;
     case node_proc:
+      name = find_node_name(current);
+      add_global_symbol(name,
+                        NULL,
+                        current,
+                        sym_proc,
+                        storage_private,
+                        NULL);
+      add_arg_symbols(current, name, storage_private);     
+      break;
     case node_func:
       name = find_node_name(current);
-      add_global_symbol(name, NULL, current, storage_private);
+      add_global_symbol(name,
+                        NULL,
+                        current,
+                        sym_func,
+                        storage_private,
+                        NULL);
       add_arg_symbols(current, name, storage_private);     
       break;
     default:
@@ -900,31 +1130,70 @@ analyze_public(tree *file)
   while (current) {
     switch (current->tag) {
     case node_pragma:
-      break;
     case node_type:
+      break;
     case node_decl:
+      name = find_node_name(current);
+      if (FILE_TYPE(file) == source_public) {
+        var = get_global(name);
+        if (var) {
+          var->class = storage_public;       
+        } else {
+          analyze_error(current, "missing definition for \"%s\"", name); 
+        }
+      } else if (FILE_TYPE(file) == source_with) {
+        add_global_symbol(name,
+                          NULL,
+                          current,
+                          sym_udata,
+                          state.section.code_default,
+                          DECL_TYPE(current));
+      } else {
+        assert(0);
+      }
+      break;
     case node_proc:
+      name = find_node_name(current);
+      if (FILE_TYPE(file) == source_public) {
+        var = get_global(name);
+        if (var) {
+          make_proc_public(var, current);
+        } else {
+          analyze_error(current, "missing definition for \"%s\"", name); 
+        }
+      } else if (FILE_TYPE(file) == source_with) {
+        add_global_symbol(name,
+                          NULL,
+                          current,
+                          sym_proc,
+                          state.section.code_default,
+                          NULL);
+        add_arg_symbols(current, name, state.section.udata_default);
+      } else {
+        assert(0);
+      }
+      break;
     case node_func:
       name = find_node_name(current);
       if (FILE_TYPE(file) == source_public) {
         var = get_global(name);
         if (var) {
-          if (current->tag == node_decl) {
-            var->class = storage_public;       
-          } else {
-            make_proc_public(var, current);
-          }
+          make_proc_public(var, current);
         } else {
-          analyze_error(current, "missing definition"); 
+          analyze_error(current, "missing definition for \"%s\"", name); 
         }
       } else if (FILE_TYPE(file) == source_with) {
-        add_global_symbol(name, NULL, current, state.section.code_default);
-        if (current->tag != node_decl) {
-          add_arg_symbols(current, name, state.section.udata_default);
-        }
+        add_global_symbol(name,
+                          NULL,
+                          current,
+                          sym_func,
+                          state.section.code_default,
+                          NULL);
+        add_arg_symbols(current, name, state.section.udata_default);
       } else {
         assert(0);
       }
+
       break;
     default:
       assert(0);
@@ -971,6 +1240,7 @@ analyze(void)
 
   /* FIXME: manage memory better or at least try */
   data_memory = NULL;
+  generating_function = false;
 
   /* add all procedures and data to the global symbol table */
   current = state.root;

@@ -325,6 +325,11 @@ statement:
 	  $$ = mk_assembly(strdup("  nop"));
 	}
 	|
+	RETURN expr ';'
+	{
+	  $$ = mk_return($2);
+	}
+	|
 	ASM ';'
 	{
 	  $$ = mk_assembly($1);
@@ -340,7 +345,7 @@ statement:
 	  $$ = mk_cond($2, $4, $5);
 	}
 	|
-	CASE IDENT { case_ident = mk_symbol($2); } IS case_body END CASE ';'
+	CASE IDENT { case_ident = mk_symbol($2, NULL); } IS case_body END CASE ';'
 	{
 	  $$ = $5;
 	}
@@ -352,14 +357,14 @@ statement:
           tree *increment;
           
           /* IDENT = range.start; */
-          init = mk_binop(op_eq, mk_symbol($2), $4.start);
+          init = mk_binop(op_eq, mk_symbol($2, NULL), $4.start);
           
           /* IDENT = IDENT + 1; */
-          increment = mk_binop(op_eq, mk_symbol($2), 
-                               mk_binop(op_add, mk_symbol($2), mk_constant(1)));
+          increment = mk_binop(op_eq, mk_symbol($2, NULL), 
+                               mk_binop(op_add, mk_symbol($2, NULL), mk_constant(1)));
           
           /* while (IDENT <= range.end) then loop */
-          exit = mk_binop(op_lte, mk_symbol($2), $4.end);
+          exit = mk_binop(op_lte, mk_symbol($2, NULL), $4.end);
 
 	  $$ = mk_loop(init, exit, increment, $5);
 	}
@@ -558,7 +563,12 @@ e0:
 	|
 	IDENT
         {
-	  $$ = mk_symbol($1);
+	  $$ = mk_symbol($1, NULL);
+        }
+	|
+	IDENT '[' expr ']'
+        {
+	  $$ = mk_symbol($1, $3);
         }
 	|
 	IDENT '(' ')'

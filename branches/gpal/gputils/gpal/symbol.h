@@ -24,11 +24,22 @@ Boston, MA 02111-1307, USA.  */
 
 struct variable *add_global(char *name, char *alias, tree *node);
 struct variable *get_global(char *name);
-struct variable *add_constant(char *name, int value, tree *node);
+struct variable *add_constant(char *name, int value, tree *node, char *type);
 void add_equ(char *name, int value);
 struct variable * add_global_symbol(char *name,
                                     char *prefix,
                                     tree *symbol,
-                                    enum node_storage class);
+                                    enum sym_tag tag,
+                                    enum node_storage class,
+                                    char *type);
+void add_type_prim(char *name, int size, int bitsize);
+void add_type_array(char *name, int start, int end, char *type);
+void add_type_enum(char *name);
+void add_type_alias(char *name, char *type);
+struct type *get_type(char *name);
+int type_size(struct type *type);
+void add_type_prims(void);
+
+#define SYM_TYPE(x) (x->type->tag)
 
 #endif
