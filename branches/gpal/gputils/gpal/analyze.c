@@ -26,6 +26,7 @@ Boston, MA 02111-1307, USA.  */
 #include "symbol.h"
 #include "analyze.h"
 #include "codegen.h"
+#include "optimize.h"
 #include "scan.h"
 
 #ifdef STDC_HEADERS
@@ -82,7 +83,7 @@ analyze_error(tree *node, const char *format, ...)
   vsprintf(buffer, format, args);
   va_end(args);
 
-  if (node) {
+  if ((node) && (node->file_id)) {
     printf("%s:%d: error: %s\n",
            get_compile(node->file_id),
            node->line_number,
@@ -109,7 +110,7 @@ analyze_warning(tree *node, const char *format, ...)
   vsprintf(buffer, format, args);
   va_end(args);
 
-  if (node) {
+  if ((node) && (node->file_id)) {
     printf("%s:%d: warning: %s\n",
            get_compile(node->file_id),
            node->line_number,
@@ -622,13 +623,21 @@ analyze_test(tree *test, char *end_label)
   if (scan_tree(test, size_unknown)) {
     return 1;
   }
-  
+
   size = scan_size;
+
+  if (size == size_unknown) {
+    /* the size couldn't be determined (i. e. 0 = 1), so use the default */
+    size = size_uint8;
+  }
 
   /* check the symbol sizes */
   if (scan_tree(test, size)) {
     return 1;
   }
+
+  /* optimize the expression */
+  test = optimize_expr(test);
  
   codegen_test(test, end_label, size);
 
@@ -641,19 +650,30 @@ analyze_cond(tree *cond, char *last_label)
   char *end_label = NULL;
   char *local_label = NULL;
 
+  /* conditional with a constant expression */
+  if (state.optimize.constant_folding &&
+      (COND_TEST(cond)) && 
+      (can_evaluate(COND_TEST(cond), false))) {
+    if (evaluate(COND_TEST(cond))) {
+      analyze_statements(COND_BODY(cond));
+    }
+    return;
+  }
+
+  /* create a label at the end of all the conditional blocks */  
   if (last_label) {
     local_label = last_label;
   } else {
     local_label = codegen_next_label();
   }
-
+  
   /* else doesn't have a condition */
   if (COND_TEST(cond)) {
     end_label = codegen_next_label();
     if (analyze_test(COND_TEST(cond), end_label))
       return;
   }
-  
+
   /* write the body of the code */
   analyze_statements(COND_BODY(cond));
 
@@ -661,14 +681,14 @@ analyze_cond(tree *cond, char *last_label)
   if (COND_NEXT(cond)) {
     codegen_jump(local_label);
   }
-  
+
   /* if there is a condition generate a label at the end of the body */
   if (COND_TEST(cond)) {
     codegen_write_label(end_label);
     if (end_label)
       free(end_label);
   }
-  
+
   /* generate next conditional block, if there is one */
   if (COND_NEXT(cond)) {
     analyze_cond(COND_NEXT(cond), local_label);
@@ -689,16 +709,28 @@ analyze_loop(tree *loop)
 {
   char *start_label = NULL;
   char *end_label = NULL;
-
-  start_label = codegen_next_label();
+  gp_boolean loop_forever = false;
 
   analyze_statements(LOOP_INIT(loop));
+
+  /* loop with a constant exit expression */
+  if (state.optimize.constant_folding &&
+      (LOOP_EXIT(loop)) && 
+      (can_evaluate(LOOP_EXIT(loop), false))) {
+    if (evaluate(LOOP_EXIT(loop))) {
+      loop_forever = true;
+    } else {
+      return;
+    }
+  }
+
+  start_label = codegen_next_label();
 
   /* place the label for looping */
   codegen_write_label(start_label);
 
   /* write the exit statements */
-  if (LOOP_EXIT(loop)) {
+  if (!(loop_forever) && (LOOP_EXIT(loop))) {
     end_label = codegen_next_label();
     if (analyze_test(LOOP_EXIT(loop), end_label))
       return;
@@ -714,7 +746,7 @@ analyze_loop(tree *loop)
   codegen_jump(start_label);
 
   /* place the label for exiting */
-  if (LOOP_EXIT(loop)) {  
+  if ((!loop_forever) && (LOOP_EXIT(loop))) {  
     codegen_write_label(end_label);
   }
 
@@ -783,6 +815,9 @@ analyze_expr(tree *expr)
     }
   }
 
+  /* optimize the expression */
+  right = optimize_expr(right);
+
   /* write the expression */
   codegen_expr(right, size);
 
@@ -799,6 +834,7 @@ analyze_return(tree *ret)
   if (generating_function) {
     if (scan_tree(ret->value.ret, return_size))
       return;
+    ret->value.ret = optimize_expr(ret->value.ret);
     codegen_expr(ret->value.ret, return_size);
     codegen_store(return_var, false, 0, NULL);
     codegen_write_asm("return");

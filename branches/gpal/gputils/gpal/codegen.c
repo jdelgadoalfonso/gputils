@@ -40,6 +40,7 @@ static int temp_number;
 static int max_temp_number;
 static int codegen_working_bytes;
 static enum size_tag codegen_size;
+int codegen_bytes;
 
 static struct function_pointer_struct *func_ptr;
 
@@ -81,6 +82,23 @@ codegen_write_asm(const char *format, ...)
   va_end(args);
 
   fprintf(state.output.f, "  %s\n", buffer);
+
+  return;
+}
+
+void 
+codegen_write_comment(const char *format, ...)
+{
+  va_list args;
+  char buffer[BUFSIZ]; 
+
+  if (state.verbose_asm) {
+    va_start(args, format);
+    vsprintf(buffer, format, args);
+    va_end(args);
+   
+    fprintf(state.output.f, "; %s\n", buffer);
+  }
 
   return;
 }
@@ -274,46 +292,43 @@ gen_unop_expr(tree *expr)
 }
 
 static void
-gen_binop_expr(tree *expr)
+gen_binop_expr(enum node_op op, tree *p0, tree *p1)
 {
-  tree *lhs = expr->value.binop.p0;
-  tree *rhs = expr->value.binop.p1;
   char *reg1 = NULL;
   char *reg2 = NULL;
   struct variable *var;
 
-  /* calculate right hand side */
-  gen_expr(rhs);
+  gen_expr(p1);
 
-  if (lhs->tag == node_call) {
+  if (p0->tag == node_call) {
     reg1 = codegen_get_temp(codegen_size);
     STORE_FILE(reg1, codegen_size, 0, false);
-    analyze_call(expr, true, codegen_size);    
-    CODEGEN(expr->value.binop.op, codegen_size, false, 0, reg1);
-  } else if (lhs->tag == node_constant) {
-    CODEGEN(expr->value.binop.op, codegen_size, true, lhs->value.constant, NULL);
-  } else if (lhs->tag == node_symbol) { 
-    var = get_global(SYM_NAME(lhs));
+    analyze_call(p0, true, codegen_size);    
+    CODEGEN(op, codegen_size, false, 0, reg1);
+  } else if (p0->tag == node_constant) {
+    CODEGEN(op, codegen_size, true, p0->value.constant, NULL);
+  } else if (p0->tag == node_symbol) { 
+    var = get_global(SYM_NAME(p0));
     if (var->tag == sym_const) {
-      CODEGEN(expr->value.binop.op, codegen_size, true, var->value, NULL);
-    } else if (SYM_OFST(lhs)) {
+      CODEGEN(op, codegen_size, true, var->value, NULL);
+    } else if (SYM_OFST(p0)) {
       /* it is a complex expression, so save temp data */
       reg1 = codegen_get_temp(codegen_size);
       reg2 = codegen_get_temp(codegen_size);
       STORE_FILE(reg1, codegen_size, 0, false);
-      codegen_load_file(lhs, var);
+      codegen_load_file(p0, var);
       STORE_FILE(reg2, codegen_size, 0, false);
       LOAD_FILE(reg1, codegen_size, 0, false);
-      CODEGEN(expr->value.binop.op, codegen_size, false, 0, reg2);
+      CODEGEN(op, codegen_size, false, 0, reg2);
     } else {
-      CODEGEN(expr->value.binop.op, codegen_size, false, 0, var->alias);
+      CODEGEN(op, codegen_size, false, 0, var->alias);
     }
   } else {
     /* it is a complex expression so save temp data */
     reg1 = codegen_get_temp(codegen_size);
     STORE_FILE(reg1, codegen_size, 0, false);
-    gen_expr(lhs);
-    CODEGEN(expr->value.binop.op, codegen_size, false, 0, reg1);
+    gen_expr(p0);
+    CODEGEN(op, codegen_size, false, 0, reg1);
   }
 
   if (reg1)
@@ -351,7 +366,18 @@ gen_expr(tree *expr)
     gen_unop_expr(expr);
     break;
   case node_binop:
-    gen_binop_expr(expr);
+    if ((expr->value.binop.op == op_lsh) ||
+        (expr->value.binop.op == op_rsh)) {
+      /* for shifts it is best to calculate the left side first */
+      gen_binop_expr(expr->value.binop.op,
+                     expr->value.binop.p1,
+                     expr->value.binop.p0);
+    } else {
+      /* for all others calculate the right side first */
+      gen_binop_expr(expr->value.binop.op,
+                     expr->value.binop.p0,
+                     expr->value.binop.p1);
+    }
     break;
   default:
     assert(0);
@@ -362,19 +388,19 @@ gen_expr(tree *expr)
 /* Store the number of bytes required for the working register */
 
 static int
-codegen_store_size(enum size_tag size)
+codegen_setup(enum size_tag size)
 {
-  int working_bytes;
+  codegen_size = size;
+  codegen_bytes = prim_size(size);
 
-  working_bytes = prim_size(size);
-  if (working_bytes > codegen_working_bytes) {
-    codegen_working_bytes = working_bytes;
+  if (codegen_bytes > codegen_working_bytes) {
+    codegen_working_bytes = codegen_bytes;
   }
   
-  if (working_bytes != 1) {
+  if (codegen_bytes != 1) {
     /* The w register isn't used as the working register so save data
        memory. */
-    return working_bytes;
+    return codegen_bytes;
   }
 
   return 0;
@@ -386,8 +412,7 @@ codegen_test(tree *node, char *label, enum size_tag size)
 
   codegen_line_number(node);
 
-  temp_number = codegen_store_size(size);
-  codegen_size = size;
+  temp_number = codegen_setup(size);
 
   gen_expr(node);
   codegen_write_asm("btfsc STATUS, Z");
@@ -404,8 +429,7 @@ codegen_expr(tree *statement, enum size_tag size)
 
   codegen_line_number(statement);
 
-  temp_number = codegen_store_size(size);
-  codegen_size = size;
+  temp_number = codegen_setup(size);
 
   gen_expr(statement);
 
@@ -423,9 +447,9 @@ void
 codegen_init_proc(char *name, enum node_storage storage, gp_boolean is_func)
 {
   if (is_func) {
-    fprintf(state.output.f, "; function %s\n", name);
+    codegen_write_comment("function %s", name);
   } else {
-    fprintf(state.output.f, "; procedure %s\n", name);
+    codegen_write_comment("procedure %s", name);
   }
 
   codegen_write_label(name);
@@ -450,7 +474,7 @@ codegen_finish_proc(gp_boolean add_return)
 void
 codegen_init_data(void)
 {
-  fprintf(state.output.f, "; declarations \n");
+  codegen_write_comment("declarations");
 
   if (state.section.udata) {
     if (state.section.udata_addr_valid) {
@@ -529,7 +553,7 @@ write_externs(void)
           ((var->class == storage_extern) ||
            (var->class == storage_local))){
         if (first_time == true)  {
-          fprintf(state.output.f, "; external symbols\n");
+          codegen_write_comment("external symbols");
           first_time = false;
         }
         fprintf(state.output.f, "  extern %s\n", var->alias);
@@ -565,6 +589,7 @@ codegen_init_asm(void)
   max_temp_number = 0;
   codegen_working_bytes = 1;
   codegen_size = size_uint8;
+  codegen_bytes = prim_size(codegen_size);
 
   gp_date_string(buffer);
 
@@ -613,7 +638,7 @@ codegen_close_asm(void)
   var = get_global("main");
   if ((var) && (var->node->tag == node_proc)) {
     /* a procedure named "main" exists so add the startup code */
-    fprintf(state.output.f, "; startup and interrupt vectors\n");
+    codegen_write_comment("startup and interrupt vectors\n");
     fprintf(state.output.f, "STARTUP code\n");
     fprintf(state.output.f, "  pagesel main\n");
     fprintf(state.output.f, "  goto main\n\n");
