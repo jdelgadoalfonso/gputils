@@ -87,6 +87,7 @@ struct variable *add_constant(char *name, int value, tree *node, char *type);
 void add_equ(char *name, int value);
 struct variable * add_global_symbol(char *name,
                                     char *prefix,
+                                    gp_boolean mangle_name,
                                     tree *symbol,
                                     enum sym_tag tag,
                                     enum node_storage class,

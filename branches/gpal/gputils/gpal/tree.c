@@ -42,7 +42,7 @@ create_block(void)
 {
   tree_block *new;
   
-  new = malloc(sizeof(tree_block));
+  new = malloc(sizeof(*new));
   new->next = NULL;
 
   return new;

@@ -41,7 +41,7 @@ load_constant14(int value, enum size_tag size)
 {
   int num_bytes;
   
-  if ((size == size_uint8) || (size == size_uint8)) {
+  if ((size == size_int8) || (size == size_uint8)) {
     codegen_write_asm("movlw %#x", value & 0xff);
     return;
   }
@@ -85,7 +85,7 @@ load_file14(char *name, enum size_tag size, int offset, gp_boolean add_banksel)
   }
   
   /* W is used as the working register for single byte types. */
-  if ((size == size_uint8) || (size == size_uint8)) {
+  if ((size == size_int8) || (size == size_uint8)) {
     ADD_BANKSEL(name);
     codegen_write_asm("movf %s%s, w", name, offset_buffer);
     ADD_BANKSEL(LOCAL_DATA_LABEL);
@@ -138,7 +138,7 @@ store_file14(char *name, enum size_tag size, int offset, gp_boolean add_banksel)
     sprintf(offset_buffer, " + %#x", offset);
   }
   
-  if ((size == size_uint8) || (size == size_uint8)) {
+  if ((size == size_int8) || (size == size_uint8)) {
     ADD_BANKSEL(name);
     codegen_write_asm("movwf %s%s", name, offset_buffer);
     ADD_BANKSEL(LOCAL_DATA_LABEL);
@@ -171,6 +171,66 @@ store_file14(char *name, enum size_tag size, int offset, gp_boolean add_banksel)
     ADD_BANKSEL(name);
     codegen_write_asm("movwf %s%s", name, offset_buffer);
     ADD_BANKSEL(WORKING_LABEL);
+  }
+
+}
+
+/* The byte address is in FSR.  Load the data to the working register */
+
+static void
+load_indirect14(char *name,
+                enum size_tag size,
+                int offset,
+                gp_boolean add_bankisel)
+{
+  int num_bytes;
+  int i;
+
+  if (add_bankisel) {
+    codegen_write_asm("bankisel %s", name);
+  }
+
+  if ((size == size_int8) || (size == size_uint8)) {
+    codegen_write_asm("movf INDF, w");
+    return;
+  }
+
+  num_bytes = prim_size(size);
+
+  for (i = 0; i < num_bytes; i++) {
+    codegen_write_asm("movf INDF, w");
+    codegen_write_asm("movwf %s + %i", WORKING_LABEL, i);
+    codegen_write_asm("incf FSR, f");
+  }
+
+}
+
+/* The byte address is in FSR.  Store the working register in memory. */
+
+static void
+store_indirect14(char *name,
+                 enum size_tag size,
+                 int offset,
+                 gp_boolean add_bankisel)
+{
+  int num_bytes;
+  int i;
+
+  if (add_bankisel) {
+    codegen_write_asm("bankisel %s", name);
+  }
+
+  if ((size == size_int8) || (size == size_uint8)) {
+    codegen_write_asm("movwf INDF");
+    return;
+  }
+
+  num_bytes = prim_size(size);
+
+  for (i = 0; i < num_bytes; i++) {
+    codegen_write_asm("movf %s + %i, w", WORKING_LABEL, i);
+    codegen_write_asm("movwf INDF");
+    codegen_write_asm("incf FSR, f");
   }
 
 }
@@ -383,8 +443,12 @@ do_mult(enum size_tag size, gp_boolean is_const, int value, char *name)
     load_constant14(0, size);
     codegen_write_label(label1);
     do_add(size, is_const, value, name);
-    /* FIXME: need multibyte decfsz */
-    codegen_write_asm("decfsz %s, f", reg1);
+    if ((size == size_uint8) || (size == size_uint8)) {
+      codegen_write_asm("decfsz %s, f", reg1);
+    } else {
+      /* FIXME: need multibyte decfsz */
+    
+    }
     codegen_write_asm("goto %s", label1);
     break;
   case size_int8:
@@ -537,6 +601,7 @@ do_neg(enum size_tag size, gp_boolean is_const, int value, char *name)
   case size_uint32:
   case size_int32:
     do_sub(size, true, 0, NULL);
+    break;
   case size_float:
   default:
     assert(0);
@@ -1181,4 +1246,6 @@ struct function_pointer_struct codegen14_func = {
   (long int)load_constant14,
   (long int)load_file14,
   (long int)store_file14,
+  (long int)load_indirect14,
+  (long int)store_indirect14
 };

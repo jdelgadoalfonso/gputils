@@ -223,7 +223,6 @@ typedef struct node_struct {
 #define LOOP_INCR(L)       (L)->value.loop.incr
 #define LOOP_BODY(L)       (L)->value.loop.body
 #define PROC_HEAD(P)       (P)->value.proc.head
-#define PROC_STOR(F)       (F)->value.proc.storage
 #define PROC_BODY(P)       (P)->value.proc.body
 #define SYM_NAME(T)        (T)->value.symbol.name
 #define SYM_OFST(T)        (T)->value.symbol.offset

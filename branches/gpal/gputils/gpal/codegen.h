@@ -35,7 +35,10 @@ void codegen_assembly(tree *assembly);
 
 void codegen_test(tree *node, char *label, enum size_tag size);
 void codegen_expr(tree *statement, enum size_tag size);
-void codegen_indirect(struct variable *var, tree *offset);
+void codegen_indirect(tree *offset,
+                      struct variable *var,
+                      int element_size,
+                      gp_boolean new_expr);
 void codegen_store(struct variable *var,
                    gp_boolean constant_offset,
                    int offset,
@@ -61,6 +64,8 @@ struct function_pointer_struct {
   long int load_constant;
   long int load_file;
   long int store_file;
+  long int load_indirect;
+  long int store_indirect;
 };
 
 #endif
