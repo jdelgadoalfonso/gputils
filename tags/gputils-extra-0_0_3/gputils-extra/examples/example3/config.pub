@@ -1,0 +1,9 @@
+
+with types;
+with p16f877;
+
+public config is
+
+  pragma processor = "16f877";
+  
+end public;
