@@ -49,7 +49,6 @@ extern struct gpal_state {
     gp_boolean trival_expressions;
     gp_boolean unused_mem;
   } optimize;
-  gp_boolean verbose_asm;		/* write comments in assembly file */
   gp_linked_list *path;			/* list of include paths */
   gp_linked_list *file;			/* list of compiled files */
   gp_boolean cmd_processor;		/* processor chose on command line */
@@ -73,7 +72,7 @@ extern struct gpal_state {
     *memory,				/* All data memory */
     *type;				/* Symbol Types */
   tree *root;				/* start of tree */
-  tree *module;				/* current module being processed */
+  tree *module;				/* current tree being processed  */
   struct source_context *src;		/* Top of the stack of source files */
   char *basefilename;			/* base filename */
   char *srcfilename;			/* source filename */

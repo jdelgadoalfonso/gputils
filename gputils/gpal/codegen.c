@@ -88,13 +88,11 @@ codegen_write_comment(const char *format, ...)
   va_list args;
   char buffer[BUFSIZ]; 
 
-  if (state.verbose_asm) {
-    va_start(args, format);
-    vsprintf(buffer, format, args);
-    va_end(args);
+  va_start(args, format);
+  vsprintf(buffer, format, args);
+  va_end(args);
    
-    fprintf(state.output.f, "; %s\n", buffer);
-  }
+  fprintf(state.output.f, "; %s\n", buffer);
 
   return;
 }
@@ -102,11 +100,7 @@ codegen_write_comment(const char *format, ...)
 void
 codegen_line_number(tree *node)
 {
-
-  assert(node->file_id != 0);
-  fprintf(state.output.f, ";#CSRC %s %d\n",
-          get_file_name(node->file_id),
-          node->line_number);
+  fprintf(state.output.f, "#line %d\n", node->line_number);
 }
 
 char *
@@ -362,8 +356,10 @@ gen_expr(tree *expr)
     gen_unop_expr(expr);
     break;
   case node_binop:
-    if ((expr->value.binop.op == op_lsh) ||
-        (expr->value.binop.op == op_rsh)) {
+    if (expr->value.binop.op == op_assign) {
+      analyze_error(expr, "assign operator = should be equal operator ==");
+    } else if ((expr->value.binop.op == op_lsh) ||
+               (expr->value.binop.op == op_rsh)) {
       /* for shifts it is best to calculate the left side first */
       gen_binop_expr(expr->value.binop.op,
                      expr->value.binop.p1,
@@ -502,7 +498,7 @@ codegen_write_data(char *label, int size, enum node_storage storage)
 }
 
 void
-codegen_finish_data()
+codegen_temp_data()
 {
   int i;
 
@@ -513,8 +509,6 @@ codegen_finish_data()
 
   for (i = 0; i < max_temp_number; i++) 
     fprintf(state.output.f, "_%s_temp_%d res 1\n", FILE_NAME(state.module), i);
-
-  fprintf(state.output.f, "\n");
 
 }
 
@@ -561,6 +555,8 @@ codegen_init_asm()
           GPAL_VERSION_STRING,
           buffer);
 
+  fprintf(state.output.f, "#file \"%s\"\n\n", state.srcfilename);
+
   if (state.processor_chosen) {
     fprintf(state.output.f, "  processor %s\n", 
             state.processor_info->names[1]);
@@ -599,12 +595,14 @@ codegen_close_asm(void)
   var = get_global("main");
   if ((var) && (var->node->tag == node_proc)) {
     /* a procedure named "main" exists so add the startup code */
-    codegen_write_comment("startup and interrupt vectors\n");
+    codegen_write_comment("startup and interrupt vectors");
     fprintf(state.output.f, "STARTUP code\n");
+    codegen_line_number(var->node);
     fprintf(state.output.f, "  pagesel %s\n", var->alias);
     fprintf(state.output.f, "  goto %s\n\n", var->alias);
   }
 
+  fprintf(state.output.f, "#eof\n\n");
   fprintf(state.output.f, "  end\n\n");
 
   fclose(state.output.f);

@@ -70,7 +70,6 @@ DECCHAR [0-9]
 	  		    exit(1);
 			  }
 			}
-"and"			{ return AND; }
 "array"			{ return ARRAY; }
 "begin"			{ return BEGIN_KEY; }
 "case"			{ return CASE; }
@@ -85,12 +84,9 @@ DECCHAR [0-9]
 "inout"			{ return INOUT; }
 "is"			{ return IS; }
 "loop"			{ return LOOP; }
-"mod"			{ return MOD; }
 "module"		{ return MODULE; }
-"not"			{ return NOT; }
 "null"			{ return NULL_TOK; }
 "of"			{ return OF; }
-"or"			{ return OR; }
 "others"		{ return OTHERS; }
 "out"			{ return OUT; }
 "pragma"		{ return PRAGMA; }
@@ -104,7 +100,6 @@ DECCHAR [0-9]
 "when"			{ return WHEN; }
 "while"			{ return WHILE; }
 "with"			{ return WITH; }
-"xor"			{ return XOR; }
 \"[^;\n\"]+\"		{
 			  yytext[yyleng - 1] = '\0';
 			  yylval.s = strdup(yytext + 1);
@@ -127,7 +122,10 @@ DECCHAR [0-9]
 ">>"			OPERATOR(RSH);
 ">="			OPERATOR(GREATER_EQUAL);
 "<="			OPERATOR(LESS_EQUAL);
-"/="			OPERATOR(NOT_EQUAL);
+"=="			OPERATOR(EQUAL);
+"!="			OPERATOR(NOT_EQUAL);
+"&&"			OPERATOR(LOGICAL_AND);
+"||"			OPERATOR(LOGICAL_OR);
 
 --[^\n]*		{ }
 [\n]			{ state.src->line_number++; }

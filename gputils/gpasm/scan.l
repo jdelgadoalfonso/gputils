@@ -207,6 +207,15 @@ list		     	 {
 			   yylval.s = strdup(yytext);
 			   return IDENTIFIER;
 			 }
+^#file			 {
+			   return DEBUG_FILE;
+			 }
+^#line			 {
+			   return DEBUG_LINE;
+			 }
+^#eof			 {
+			   coff_add_eofsym();
+			 }
 ^{IDENT}#v\(             {
                            yytext[strlen(yytext) - 3] = '\0';
                            yylval.s = strdup(yytext);
@@ -519,7 +528,11 @@ void open_src(char *name, int isinclude)
 
   new->type = file;
   new->line_number = 1;
-  new->file_symbol = coff_add_filesym(new->name, isinclude);
+  if (state.debug_info) {
+    new->file_symbol = NULL;
+  } else {
+    new->file_symbol = coff_add_filesym(new->name, isinclude);
+  }
   new->prev = state.src;
 
   state.src = new;
@@ -591,7 +604,9 @@ void close_file()
     if (old->lst.f != NULL)
       fclose(old->lst.f);
     free(old->name);
-    coff_add_eofsym();
+    if (!state.debug_info) {
+      coff_add_eofsym();
+    }
   } else if (old->type == macro) {
     state.stTop = pop_symbol_table(state.stTop);
     state.stTopDefines = pop_symbol_table(state.stTopDefines);

@@ -51,6 +51,7 @@ extern struct gpasm_state {
   int case_insensitive;
   int quiet;
   int error_level;		/* 0, 1, 2 */
+  int debug_info;		/* use debug directives for coff outputs */
   int path_num;                 /* number of paths in the list */
   char *paths[MAX_PATHS];       /* the list of include paths */
   struct {			/* Command line override flags */
@@ -159,6 +160,8 @@ extern struct gpasm_state {
     int new_sec_flags;		/*   new section name */
     int symbol_num;		/*   Current symbol number */
     int flags;			/*   Current section flags */
+    gp_symbol_type *debug_file; /*   Debug information for high level langs */
+    unsigned int debug_line;    
   } obj;
   struct source_context *src;	/* Top of the stack of source files */
   struct file_context *files;   /* Top of the stack of all files */

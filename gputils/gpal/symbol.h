@@ -61,12 +61,12 @@ struct type {
 
 enum sym_tag {
   sym_unknown,
-  sym_proc,				/* procedure */
-  sym_func,				/* function */
-  sym_udata,				/* uninitialized data */
-  sym_idata,				/* initialized data */
   sym_const,				/* constant */
-  sym_equ				/* equate */
+  sym_equ,				/* equate */
+  sym_func,				/* function */
+  sym_idata,				/* initialized data */
+  sym_proc,				/* procedure */
+  sym_udata				/* uninitialized data */
 };
 
 struct variable {
@@ -93,6 +93,8 @@ struct variable *add_global_symbol(char *name,
 struct variable *get_global(char *name);
 struct variable *add_constant(char *name, int value, tree *node, char *type);
 void add_equ(char *name, int value);
+struct variable *add_label(char *name, tree *node);
+
 void add_type_array(char *name, int start, int end, char *type);
 void add_type_enum(char *name);
 void add_type_alias(char *name, char *type);

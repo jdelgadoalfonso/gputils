@@ -68,11 +68,11 @@ static tree *case_ident;
 }
 
 /* keywords */
-%token <i> AND, ARRAY, CASE, CONSTANT_KEY, BEGIN_KEY, ELSE, ELSIF
+%token <i> ARRAY, CASE, CONSTANT_KEY, BEGIN_KEY, ELSE, ELSIF
 %token <i> END, FOR, FUNCTION_TOK, IF, IN, INOUT, IS, LOOP
-%token <i> MOD, MODULE, NOT, NULL_TOK, OF, OR, OTHERS, PRAGMA, PROCEDURE
+%token <i> MODULE, NULL_TOK, OF, OTHERS, PRAGMA, PROCEDURE
 %token <i> PUBLIC_STORAGE, RETURN, THEN, TO, TYPE, OUT, VARIABLE_KEY
-%token <i> WHEN, WHILE, WITH, XOR
+%token <i> WHEN, WHILE, WITH
 
 /* general */
 %token <s> ASM
@@ -93,8 +93,8 @@ static tree *case_ident;
 %type <t> element_list
 %type <t> element
 %type <i> '+', '-', '*', '/', '%', '!', '~'
-%type <t> expr, e0, e1, e2, e3, e4, e5, e6, e7,
-%type <o> e1op, e2op, e3op, e4op, e5op, e6op, e7op,
+%type <t> expr, e0, e1, e2, e3, e4, e5, e6, e7, e8,
+%type <o> e1op, e2op, e3op, e4op, e5op, e6op, e7op, e8op
 %type <t> type
 %type <t> head
 %type <t> arg_list
@@ -357,10 +357,10 @@ statement:
           tree *increment;
           
           /* IDENT = range.start; */
-          init = mk_binop(op_eq, mk_symbol($2, NULL), $4.start);
+          init = mk_binop(op_assign, mk_symbol($2, NULL), $4.start);
           
           /* IDENT = IDENT + 1; */
-          increment = mk_binop(op_eq, mk_symbol($2, NULL), 
+          increment = mk_binop(op_assign, mk_symbol($2, NULL), 
                                mk_binop(op_add, mk_symbol($2, NULL), mk_constant(1)));
           
           /* while (IDENT <= range.end) then loop */
@@ -450,7 +450,18 @@ parameter_list:
 	}
 	;
 
-expr:	e7;
+expr:	e8;
+
+e8:
+	e7
+	|
+	e8 e8op e7
+	{
+	  $$ = mk_binop($2, $1, $3);
+	}
+	;
+
+e8op:	'=' { $$ = op_assign; };
 
 e7:
 	e6
@@ -461,7 +472,8 @@ e7:
 	}
 	;
 
-e7op:	'=' { $$ = op_eq; };
+e7op:	  LOGICAL_AND { $$ = op_land; }
+	| LOGICAL_OR  { $$ = op_lor; };
 
 e6:
 	e5
@@ -472,9 +484,9 @@ e6:
 	}
 	;
 
-e6op:	  AND { $$ = op_and; }
-	| OR  { $$ = op_or; }
-	| XOR { $$ = op_xor; };
+e6op:	  '&' { $$ = op_and; }
+	| '|' { $$ = op_or; }
+	| '^' { $$ = op_xor; };
 
 e5:
 	e4
@@ -527,7 +539,7 @@ e2:
 
 e2op:     '*' { $$ = op_mult; }
 	| '/' { $$ = op_div; }
-	| MOD { $$ = op_mod; };
+	| '%' { $$ = op_mod; };
 
 e1:
 	e0
@@ -539,7 +551,8 @@ e1:
 	;
 
 e1op:	  '-' { $$ = op_neg; }
-	| NOT { $$ = op_not; }
+	| '!' { $$ = op_not; }
+	| '~' { $$ = op_com; }
 	| '+' { $$ = op_add; };
 
 e0:

@@ -29,12 +29,6 @@ Boston, MA 02111-1307, USA.  */
 /* prototypes */
 static tree *opt_expr(tree *expr);
 
-/* Update the debug data with the old node's file_id and line_number. */ 
-/* FIXME:  This may not be necessary any more.  The debug data is now 
-   written in the analyze phase. */
-#define UPDATE_DEBUG(x) file_id = x->file_id;\
-                        line_number = x->line_number;
-
 /* Determine the relative complexity of the nodes for tree shaping.  The
    numbers are arbitary, but are related to the number of temporary 
    registers required.  */
@@ -156,8 +150,6 @@ optimize_unop(tree *expr)
   /* optimize the arguent */
   UNOP_ARG(expr) = opt_expr(UNOP_ARG(expr));
 
-  UPDATE_DEBUG(expr);
-
   switch (UNOP_OP(expr)) {
   case op_add:
     /* remove the unop */
@@ -191,8 +183,6 @@ optimize_binop(tree *expr)
   /* optimize the left and right */
   BINOP_LEFT(expr) = opt_expr(BINOP_LEFT(expr));
   BINOP_RIGHT(expr) = opt_expr(BINOP_RIGHT(expr));
-
-  UPDATE_DEBUG(expr);
 
   left_constant = is_constant(BINOP_LEFT(expr));
   right_constant = is_constant(BINOP_RIGHT(expr));
@@ -458,8 +448,6 @@ static tree *
 opt_expr(tree *expr)
 {
   struct variable *var;
-
-  UPDATE_DEBUG(expr);
 
   switch(expr->tag) {
   case node_call:
