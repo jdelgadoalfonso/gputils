@@ -162,7 +162,7 @@ make_proc_public(struct variable *var, tree *prot)
    global symbol table */
 
 static void
-add_arg_symbols(tree *node, char *name)
+add_arg_symbols(tree *node, char *name, enum node_storage storage)
 {
   tree *head = NULL;
   tree *arg = NULL;
@@ -170,12 +170,8 @@ add_arg_symbols(tree *node, char *name)
 
   if (node->tag == node_proc) {
     head = PROC_HEAD(node);
-  } else if (node->tag == node_proc_prot) {
-    head = PROC_PROT_HEAD(node);
   } else if (node->tag == node_func) {
     head = FUNC_HEAD(node);
-  } else if (node->tag == node_func_prot) {
-    head = FUNC_PROT_HEAD(node);
   } else {
     print_node(node, 0);
     assert(0);
@@ -185,7 +181,7 @@ add_arg_symbols(tree *node, char *name)
 
   while (arg) {
     assert(arg->tag == node_decl);
-    var = add_global_symbol(DECL_NAME(arg), name, arg, DECL_STOR(arg));
+    var = add_global_symbol(DECL_NAME(arg), name, arg, storage);
     if ((var->class == storage_private) ||
         (var->class == storage_public)) {    
       add_link(var);
@@ -370,12 +366,8 @@ analyze_call(tree *call)
     def = var->node;
     if (def->tag == node_proc) {
       head = PROC_HEAD(var->node);
-    } else if (def->tag == node_proc_prot) {
-      head = PROC_PROT_HEAD(var->node);
     } else if (def->tag == node_func) {
       head = FUNC_HEAD(var->node);
-    } else if (def->tag == node_func_prot) {
-      head = FUNC_PROT_HEAD(var->node);
     } else {
       analyze_error(call, "name in call is not a function or procedure");
       return;
@@ -643,13 +635,131 @@ analyze_declarations(void)
 }
 
 static void
-analyze_module(tree *module)
+analyze_pragma(tree *expr, enum source_type type)
 {
-  tree *current = MODULE_BODY(module);
+  tree *lhs;
+  tree *rhs;
+
+  switch (expr->tag) {
+  case node_binop:
+    lhs = expr->value.binop.p0;
+    rhs = expr->value.binop.p1;
+    if ((expr->value.binop.op != op_eq) ||
+        (lhs->tag != node_symbol)) {
+      gp_error("unknown pragma");
+    } else {
+      if (strcasecmp(lhs->value.symbol, "processor") == 0) {
+        if (rhs->tag != node_symbol) {
+          gp_error("invalid processor name");        
+        } else {
+          if (state.processor_chosen == false) {
+            select_processor(rhs->value.symbol);
+          }        
+        }
+      } else if (strcasecmp(lhs->value.symbol, "code_section") == 0) {
+        if (rhs->tag != node_symbol) {
+          /* FIXME: change from symbol to string */
+          gp_error("invalid code section name");
+        } else {
+          if (type == source_with) {            
+            if ((state.section.code) && 
+                (strcmp(rhs->value.symbol, state.section.code) == 0)) {
+              state.section.code_default = storage_local;
+            } else {
+              state.section.code_default = storage_extern;
+            }
+          } else {
+            if (type == source_module) {
+              gp_warning("section pragma's should be in a public");
+            }
+            if (state.section.code) {
+              gp_error("duplicate code section name");
+            } else {
+              state.section.code = rhs->value.symbol;
+            }
+          }        
+        }
+      } else if (strcasecmp(lhs->value.symbol, "udata_section") == 0) {
+        if (rhs->tag != node_symbol) {
+          gp_error("invalid udata section name");
+        } else {
+          if (type == source_with) {            
+            if ((state.section.udata) &&
+                (strcmp(rhs->value.symbol, state.section.udata) == 0)) {
+              state.section.udata_default = storage_local;
+            } else {
+              state.section.udata_default = storage_extern;
+            }
+          } else {
+            if (type == source_module) {
+              gp_warning("section pragma's should be in a public");
+            }
+            if (state.section.code) {
+              gp_error("duplicate udata section name");
+            } else {
+              state.section.udata = rhs->value.symbol;
+            }
+          }        
+        }
+      } else if (strcasecmp(lhs->value.symbol, "code_address") == 0) {
+        if (rhs->tag != node_constant) {
+          gp_error("invalid code address");
+        } else if (type == source_module) {            
+          state.section.code_addr = rhs->value.constant;
+          state.section.code_addr_valid = true;
+        } else {
+          gp_error("udata section addresses can only be in modules");
+        }
+      } else if (strcasecmp(lhs->value.symbol, "udata_address") == 0) {
+        if (rhs->tag != node_constant) {
+          gp_error("invalid udata address");
+        } else if (type == source_module) {            
+          state.section.udata_addr = rhs->value.constant;
+          state.section.udata_addr_valid = true;
+        } else {
+          gp_error("udata section addresses can only be in modules");
+        }
+      } else {
+        gp_error("unknown pragma \"%s\"", lhs->value.symbol);
+      }
+    }
+    break;
+  default:
+    gp_error("unknown pragma");
+  }
+  
+  return;
+}
+
+/* FIXME: make sure public proc don't have bodies, but modules do */
+
+static void
+analyze_module(tree *file)
+{
+  tree *current;
   char *name;
 
+  current = FILE_BODY(file);
   while (current) {
     switch (current->tag) {
+    case node_pragma:
+      analyze_pragma(current->value.pragma, FILE_TYPE(file));
+      break;
+    case node_decl:
+    case node_proc:
+    case node_func:
+      break;
+    default:
+      assert(0);
+    }
+    current = current->next;
+  }
+
+  current = FILE_BODY(file);
+  while (current) {
+    switch (current->tag) {
+    case node_pragma:
+      break;
     case node_decl:
       name = find_node_name(current);
       add_link(add_global_symbol(name, NULL, current, storage_private));
@@ -658,7 +768,7 @@ analyze_module(tree *module)
     case node_func:
       name = find_node_name(current);
       add_global_symbol(name, NULL, current, storage_private);
-      add_arg_symbols(current, name);     
+      add_arg_symbols(current, name, storage_private);     
       break;
     default:
       assert(0);
@@ -670,24 +780,41 @@ analyze_module(tree *module)
 }
 
 static void
-analyze_public(tree *public)
+analyze_public(tree *file)
 {
-  tree *current = PUBLIC_BODY(public);
+  tree *current;
   char *name;
   struct variable *var;
-  enum node_storage class;
 
+  current = FILE_BODY(file);
   while (current) {
     switch (current->tag) {
-    case node_decl_prot:
-    case node_proc_prot:
-    case node_func_prot:
+    case node_pragma:
+      analyze_pragma(current->value.pragma,  FILE_TYPE(file));
+      break;
+    case node_decl:
+    case node_proc:
+    case node_func:
+      break;
+    default:
+      assert(0);
+    }
+    current = current->next;
+  }
+
+  current = FILE_BODY(file);
+  while (current) {
+    switch (current->tag) {
+    case node_pragma:
+      break;
+    case node_decl:
+    case node_proc:
+    case node_func:
       name = find_node_name(current);
-      class = determine_storage(current);
-      if (class == storage_public) {
+      if (FILE_TYPE(file) == source_public) {
         var = get_global(name);
         if (var) {
-          if (current->tag == node_decl_prot) {
+          if (current->tag == node_decl) {
             var->class = storage_public;       
           } else {
             make_proc_public(var, current);
@@ -695,25 +822,14 @@ analyze_public(tree *public)
         } else {
           analyze_error(current, "missing definition"); 
         }
-      } else if (class == storage_extern) {
-        add_global_symbol(name, NULL, current, storage_extern);
-        if (current->tag != node_decl_prot) {
-          add_arg_symbols(current, name);
-        }
-      } else if (class == storage_local) {
-        add_global_symbol(name, NULL, current, storage_local);
-        if (current->tag != node_decl_prot) {
-          add_arg_symbols(current, name);
+      } else if (FILE_TYPE(file) == source_with) {
+        add_global_symbol(name, NULL, current, state.section.code_default);
+        if (current->tag != node_decl) {
+          add_arg_symbols(current, name, state.section.udata_default);
         }
       } else {
         assert(0);
       }
-      /* remove the prototype */
-      if (current == PUBLIC_BODY(public)) {
-        PUBLIC_BODY(public) = current->next;
-      } else {
-        current->prev->next = current->next;      
-      }     
       break;
     default:
       assert(0);
@@ -725,12 +841,13 @@ analyze_public(tree *public)
 }
 
 static void
-analyze_module_contents(tree *module)
+analyze_module_contents(tree *file)
 {
-  tree *current = MODULE_BODY(module);
+  tree *current = FILE_BODY(file);
 
   while (current) {
     switch (current->tag) {
+    case node_pragma:
     case node_decl:
       /* do nothing */
       break;
@@ -758,13 +875,10 @@ analyze(void)
   /* FIXME: manage memory better or at least try */
   data_memory = NULL;
 
-  /* open the output file */
-  codegen_init_asm();
-
   /* add all procedures and data to the global symbol table */
   current = state.root;
   while (current) {
-    if (current->tag == node_module) {
+    if (FILE_TYPE(current) == source_module) {
       if (found_module) {
         gp_error("found multiple modules in one file");
       } else {
@@ -778,16 +892,20 @@ analyze(void)
   /* add all prototypes and externs to global symbol table */
   current = state.root;
   while (current) {
-    if (current->tag == node_public) {
+    if ((FILE_TYPE(current) == source_public) ||
+        (FILE_TYPE(current) == source_with)) {
       analyze_public(current);
     }
     current = current->next;
   }
 
+  /* open the output file */
+  codegen_init_asm();
+
   /* scan though each procedure and function */
   current = state.root;
   while (current) {
-    if (current->tag == node_module) {
+    if (FILE_TYPE(current) == source_module) {
       analyze_module_contents(current);
     }
     current = current->next;

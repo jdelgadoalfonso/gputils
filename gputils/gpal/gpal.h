@@ -87,11 +87,9 @@ extern struct gpal_state {
   } output;
 } state;
 
-enum src_types { source, source_with, with };
-
 struct source_context {
   char *name;
-  enum src_types type;
+  enum source_type type;
   FILE *f;
   struct yy_buffer_state *yybuf;
   unsigned int line_number;

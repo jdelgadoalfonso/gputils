@@ -158,14 +158,12 @@ mk_cond(tree *cond, tree *body, tree *next)
 tree *
 mk_decl(enum node_type type,
         enum node_size size,
-        enum node_storage storage,
         char *name,
         tree *init)
 {
   tree *new = mk_node(node_decl);
   new->value.decl.type = type;
   new->value.decl.size = size;
-  new->value.decl.storage = storage;
   new->value.decl.name = name;
   new->value.decl.init = init;
   
@@ -173,39 +171,22 @@ mk_decl(enum node_type type,
 }
 
 tree *
-mk_decl_prot(enum node_type type,
-             enum node_size size,
-             enum node_storage storage,
-             char *name)
+mk_file(tree *body, enum source_type type)
 {
-  tree *new = mk_node(node_decl_prot);
-  new->value.decl_prot.type = type;
-  new->value.decl_prot.size = size;
-  new->value.decl_prot.storage = storage;
-  new->value.decl_prot.name = name;
+  tree *new = mk_node(node_file);
+  new->value.file.body = body;
+  new->value.file.type = type;
   
   return new;
 }
 
 tree *
-mk_func(tree *head, enum node_storage storage, enum node_size ret, tree *body)
+mk_func(tree *head, enum node_size ret, tree *body)
 {
   tree *new = mk_node(node_func);
   new->value.func.head = head;
-  new->value.func.storage = storage;
   new->value.func.ret = ret;
   new->value.func.body = body;
- 
-  return new;
-}
-
-tree *
-mk_func_prot(tree *head, enum node_storage storage, enum node_size ret)
-{
-  tree *new = mk_node(node_func_prot);
-  new->value.func_prot.head = head;
-  new->value.func_prot.storage = storage;
-  new->value.func_prot.ret = ret;
  
   return new;
 }
@@ -232,40 +213,20 @@ mk_loop(tree *init, tree *exit, tree *incr, tree *body)
 }
 
 tree *
-mk_module(tree *body)
+mk_pragma(tree *pragma)
 {
-  tree *new = mk_node(node_module);
-  new->value.module.body = body;
+  tree *new = mk_node(node_pragma);
+  new->value.pragma = pragma;
   
   return new;
 }
 
 tree *
-mk_proc(tree *head, enum node_storage storage, tree *body)
+mk_proc(tree *head, tree *body)
 {
   tree *new = mk_node(node_proc);
   new->value.proc.head = head;
-  new->value.proc.storage = storage;
   new->value.proc.body = body;
-  
-  return new;
-}
-
-tree *
-mk_proc_prot(tree *head, enum node_storage storage)
-{
-  tree *new = mk_node(node_proc_prot);
-  new->value.proc_prot.head = head;
-  new->value.proc_prot.storage = storage;
-  
-  return new;
-}
-
-tree *
-mk_public(tree *body)
-{
-  tree *new = mk_node(node_public);
-  new->value.public.body = body;
   
   return new;
 }
@@ -305,37 +266,6 @@ node_list(tree *head, tree *tail)
   return head;
 }
 
-enum node_storage
-determine_storage(tree *node)
-{
-  enum node_storage storage = storage_unknown;
-
-  switch(node->tag) {
-  case node_decl:
-    storage = DECL_STOR(node);
-    break;
-  case node_decl_prot:
-    storage = DECL_PROT_STOR(node);
-    break;
-  case node_func:
-    storage = FUNC_STOR(node);
-    break;
-  case node_func_prot:
-    storage = FUNC_PROT_STOR(node);
-    break; 
-  case node_proc:
-    storage = PROC_STOR(node);
-    break;
-  case node_proc_prot:
-    storage = PROC_PROT_STOR(node);
-    break;
-  default:
-    assert(0);
-  }   
-
-  return storage;
-}
-
 char *
 find_node_name(tree *node)
 {
@@ -346,23 +276,12 @@ find_node_name(tree *node)
   case node_decl:
     name = DECL_NAME(node);
     break;
-  case node_decl_prot:
-    name = DECL_PROT_NAME(node);
-    break;
   case node_func:
     head = FUNC_HEAD(node);
     name = HEAD_NAME(head);
     break;
-  case node_func_prot:
-    head = FUNC_PROT_HEAD(node);
-    name = HEAD_NAME(head);
-    break; 
   case node_proc:
     head = PROC_HEAD(node);
-    name = HEAD_NAME(head);
-    break;
-  case node_proc_prot:
-    head = PROC_PROT_HEAD(node);
     name = HEAD_NAME(head);
     break;
   default:
@@ -408,8 +327,6 @@ print_node(tree *node, int level)
   /* indent this node */
   level += 2;
 
-  /* FIXME: use the macros in tree.h for access */
-
   switch(node->tag) {
   case node_unknown:
     print_space(level);
@@ -418,30 +335,30 @@ print_node(tree *node, int level)
   case node_body:
     print_space(level);
     printf("node_body\n");
-    if (node->value.body.decl != NULL) {
+    if (BODY_DECL(node) != NULL) {
       print_space(level);
       printf("declarations\n");
-      print_node(node->value.body.decl, level);
+      print_node(BODY_DECL(node), level);
     }
-    if (node->value.body.statements != NULL) {
+    if (BODY_STATEMENTS(node) != NULL) {
       print_space(level);
       printf("statements\n");
-      print_node(node->value.body.statements, level);
+      print_node(BODY_STATEMENTS(node), level);
     }
     break;
   case node_binop:
     print_space(level);
-    printf("node_binop %i \n", node->value.binop.op);
+    printf("node_binop %i \n", BINOP_OP(node));
     print_space(level);
     printf("arg 1\n");
-    print_node(node->value.binop.p0, level);
+    print_node(BINOP_LEFT(node), level);
     print_space(level);
     printf("arg 2\n");
-    print_node(node->value.binop.p1, level);
+    print_node(BINOP_RIGHT(node), level);
     break;
   case node_call:
     print_space(level);
-    printf("node_call %s\n", node->value.call.name);
+    printf("node_call %s\n", CALL_NAME(node));
     break;
   case node_constant:
     print_space(level);
@@ -450,113 +367,86 @@ print_node(tree *node, int level)
   case node_cond:
     print_space(level);
     printf("node_cond\n");
-    if (node->value.cond.cond != NULL) {
+    if (COND_TEST(node) != NULL) {
       print_space(level);
       printf("condition\n");
-      print_node(node->value.cond.cond, level);
+      print_node(COND_TEST(node), level);
     }
-    if (node->value.cond.body != NULL) {
+    if (COND_BODY(node) != NULL) {
       print_space(level);
       printf("body\n");
-      print_node(node->value.cond.body, level);
+      print_node(COND_BODY(node), level);
     }
-    if (node->value.cond.next != NULL) {
+    if (COND_NEXT(node) != NULL) {
       print_space(level);
       printf("next\n");
-      print_node(node->value.cond.next, level);
+      print_node(COND_NEXT(node), level);
     }
     break;
   case node_decl:
     print_space(level);
-    printf("node_decl type=%i, size=%i, storage=%i, name=%s\n",
-            node->value.decl.type,
-            node->value.decl.size,
-            node->value.decl.storage,
-            node->value.decl.name);
-    if (node->value.decl.init) {
-      print_node(node->value.decl.init, level);
+    printf("node_decl type=%i, size=%i, name=%s\n",
+            DECL_TYPE(node),
+            DECL_SIZE(node),
+            DECL_NAME(node));
+    if (DECL_INIT(node)) {
+      print_node(DECL_INIT(node), level);
     }
     break;
-  case node_decl_prot:
+  case node_file:
     print_space(level);
-    printf("node_decl_prot type=%i, size=%i, storage=%i, name=%s\n",
-            node->value.decl_prot.type,
-            node->value.decl_prot.size,
-            node->value.decl_prot.storage,
-            node->value.decl_prot.name);
+    printf("node_file\n");
+    if (FILE_BODY(node) != NULL)  
+      print_node(FILE_BODY(node), level);
     break;
   case node_func:
     print_space(level);
     printf("node_func that returns %i\n", node->value.func.ret);
-    if (node->value.proc.head != NULL)  
-      print_node(node->value.proc.head, level);
-    if (node->value.cond.body != NULL)
-      print_node(node->value.cond.body, level);
-    break;
-  case node_func_prot:
-    print_space(level);
-    printf("node_func_prot that returns %i\n", node->value.func_prot.ret);
-    if (node->value.func_prot.head != NULL)  
-      print_node(node->value.func_prot.head, level);
+    if (FUNC_HEAD(node) != NULL)  
+      print_node(FUNC_HEAD(node), level);
+    if (FUNC_BODY(node) != NULL)
+      print_node(FUNC_BODY(node), level);
     break;
   case node_head:
     print_space(level);
-    printf("node_head %s\n", node->value.head.name);
-    if (node->value.head.args != NULL) {
+    printf("node_head %s\n", HEAD_NAME(node));
+    if (HEAD_ARGS(node) != NULL) {
       print_space(level);
       printf("arguments\n");
-      print_node(node->value.proc.head, level);
+      print_node(HEAD_ARGS(node), level);
     }
     break;
   case node_loop:
     print_space(level);
     printf("node_loop\n");
-    if (node->value.loop.init != NULL) {
+    if (LOOP_INIT(node) != NULL) {
       print_space(level);
       printf("init\n");
-      print_node(node->value.loop.init, level);
+      print_node(LOOP_INIT(node), level);
     }
-    if (node->value.loop.exit != NULL) {
+    if (LOOP_EXIT(node) != NULL) {
       print_space(level);
       printf("exit\n");
-      print_node(node->value.loop.exit, level);
+      print_node(LOOP_EXIT(node), level);
     }
-    if (node->value.loop.incr != NULL) {
+    if (LOOP_INCR(node) != NULL) {
       print_space(level);
       printf("increment\n");
-      print_node(node->value.loop.incr, level);
+      print_node(LOOP_INCR(node), level);
     }
-    if (node->value.loop.body != NULL) {
+    if (LOOP_BODY(node) != NULL) {
       print_space(level);
       printf("body\n");
-      print_node(node->value.loop.body, level);
+      print_node(LOOP_BODY(node), level);
     }
-    break;
-  case node_module:
-    print_space(level);
-    printf("node_module\n");
-    if (node->value.module.body != NULL)  
-      print_node(node->value.module.body, level);
     break;
   case node_proc:
     print_space(level);
     printf("node_proc\n");
-    if (node->value.proc.head != NULL)  
-      print_node(node->value.proc.head, level);
-    if (node->value.proc.body != NULL)
-      print_node(node->value.proc.body, level);
-    break;
-  case node_proc_prot:
-    print_space(level);
-    printf("node_proc_prot\n");
-    if (node->value.proc_prot.head != NULL)  
-      print_node(node->value.proc_prot.head, level);
-    break;
-  case node_public:
-    print_space(level);
-    printf("node_public\n");
-    if (node->value.public.body != NULL)  
-      print_node(node->value.public.body, level);
+    if (PROC_HEAD(node) != NULL)  
+      print_node(PROC_HEAD(node), level);
+    if (PROC_BODY(node) != NULL)
+      print_node(PROC_BODY(node), level);
     break;
   case node_string:
     print_space(level);
@@ -568,10 +458,10 @@ print_node(tree *node, int level)
     break;
   case node_unop:
     print_space(level);
-    printf("unop %i \n", node->value.unop.op);
+    printf("unop %i \n", UNOP_OP(node));
     print_space(level);
     printf("arg\n");
-    print_node(node->value.unop.p0, level);
+    print_node(UNOP_ARG(node), level);
   default:
     assert(0);
   }
