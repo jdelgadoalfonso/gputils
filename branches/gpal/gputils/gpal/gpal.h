@@ -24,6 +24,10 @@ Boston, MA 02111-1307, USA.  */
 
 #define GPAL_VERSION_STRING ("gpal-" VERSION " pre-alpha")
 
+#ifdef STDC_HEADERS
+#include <stdarg.h>
+#endif
+
 #include "tree.h"
 
 extern struct gpal_state {
@@ -31,7 +35,6 @@ extern struct gpal_state {
   gp_boolean no_link;			/* compile and assemble, but don't link */
   gp_boolean archive;			/* compile and assemble, then link */
   gp_boolean delete_temps;		/* delete temporary files */
-  gp_boolean read_header;		/* auto read default header file */
   char *options;			/* extra link or lib options */
   struct {
     int level;
@@ -48,9 +51,7 @@ extern struct gpal_state {
   } optimize;
   gp_boolean verbose_asm;		/* write comments in assembly file */
   gp_linked_list *path;			/* list of include paths */
-  gp_linked_list *input;		/* list of input file names */
-  gp_linked_list *compile;		/* list of compiled files */
-  gp_linked_list *link;			/* list of files to link */
+  gp_linked_list *file;			/* list of compiled files */
   gp_boolean cmd_processor;		/* processor chose on command line */
   enum pic_processor processor;
   enum proc_class class;      		/* Processor class */
@@ -69,8 +70,10 @@ extern struct gpal_state {
   struct symbol_table
     *global,				/* Base of Global symbols */
     *top,				/* Top of Global symbols */
+    *memory,				/* All data memory */
     *type;				/* Symbol Types */
   tree *root;				/* start of tree */
+  tree *module;				/* current module being processed */
   struct source_context *src;		/* Top of the stack of source files */
   char *basefilename;			/* base filename */
   char *srcfilename;			/* source filename */
@@ -91,8 +94,18 @@ struct source_context {
   struct source_context *prev;
 };
 
+struct file_struct {
+  char *name;			/* full name including path, if used */
+  int file_id;			/* the number of the current file */
+  gp_boolean is_temp;		/* this is a temporary file */
+  gp_boolean is_link;		/* a file to add to the link list */
+};
+
 void add_entity(tree *node);
-int add_compile(char *compile);
-char *get_compile(int id);
+int add_file(char *name,
+             char *extension,
+             gp_boolean is_temp,
+             gp_boolean is_link);
+char *get_file_name(int id);
 
 #endif

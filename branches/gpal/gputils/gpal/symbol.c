@@ -21,44 +21,91 @@ Boston, MA 02111-1307, USA.  */
 
 #include "stdhdr.h"
 
-#ifdef STDC_HEADERS
-#include <stdarg.h>
-#endif
-
 #include "libgputils.h"
 #include "gpal.h"
 #include "symbol.h"
 #include "analyze.h"
 
-struct variable *
-add_global(char *name, char *alias, tree *node)
+/* add a symbol for each data memory */
+
+static void
+add_memory(char *name, struct variable *var)
 {
+  struct symbol *sym;
+
+  sym = get_symbol(state.memory, name);
+  if (sym == NULL) {
+    sym = add_symbol(state.memory, name);
+    annotate_symbol(sym, var);
+  }
+}
+
+/* add one symbol to the global table */
+
+struct variable *
+add_global_symbol(char *name,
+                  char *prefix,
+                  char *module,
+                  gp_boolean mangle_name,
+                  tree *symbol,
+                  enum sym_tag tag,
+                  enum node_storage storage,
+                  char *type)
+{
+  char *symbol_name;
+  char buffer[BUFSIZ];
   struct symbol *sym;
   struct variable *var;
 
-  sym = get_symbol(state.top, name);
+  if (prefix) {
+    sprintf(buffer, "%s.%s.%s", module, prefix, name);
+  } else if (module) {
+    sprintf(buffer, "%s.%s", module, name);
+  } else {
+    sprintf(buffer, "%s", name);
+  }
+
+  if (mangle_name) {
+    symbol_name = buffer;
+  } else {
+    symbol_name = name;
+  }
+
+  sym = get_symbol(state.top, symbol_name);
   if (sym == NULL) {
-    sym = add_symbol(state.top, name);
+    sym = add_symbol(state.top, symbol_name);
     var = malloc(sizeof(*var));
     annotate_symbol(sym, var);
-    var->alias = gp_lower_case(alias);
-    var->tag = sym_unknown;
-    var->class = storage_unknown;
-    var->type = NULL;
+    var->alias = gp_lower_case(buffer);
+    var->tag = tag;
+    var->storage = storage;
+    if (type) {
+      var->type = get_type(type);   
+      if (var->type == NULL) {
+        analyze_error(symbol, "unknown symbol type %s", type);
+      }
+    } else {
+      var->type = NULL;
+    }
     var->is_init = false;
     var->value = 0;
-    var->file_id = node->file_id;
-    var->line_number = node->line_number;
-    var->node = node;
+    var->file_id = symbol->file_id;
+    var->line_number = symbol->line_number;
+    var->node = symbol;
+    var->module = state.module;
+    /* add the symbol to the memory table */
+    if ((tag == sym_udata) || (tag == sym_idata)) {
+      add_memory(var->alias, var);
+    }
   } else {
     var = get_symbol_annotation(sym);
-    analyze_error(node,
+    analyze_error(symbol,
                   "redefinition of %s,\n\talso defined in %s:%i:",
                   name,
-                  get_compile(var->file_id),
+                  get_file_name(var->file_id),
                   var->line_number);
   }
-  
+
   return var;
 }
 
@@ -81,15 +128,15 @@ add_constant(char *name, int value, tree *node, char *type)
 {
   struct variable *var;
 
-  var = add_global(name, name, node);
+  var = add_global_symbol(name,
+                          NULL,
+                          NULL,
+                          false,
+                          node,
+                          sym_const,
+                          storage_unknown,
+                          type);
   if (var) {
-    if (type) {
-      var->type = get_type(type);   
-      if (var->type == NULL) {
-        analyze_error(node, "unknown symbol type %s", type);
-      }
-    }
-    var->tag = sym_const;
     var->value = value;
   }
 
@@ -119,7 +166,7 @@ add_equ(char *name, int value)
     annotate_symbol(sym, var);
     var->alias = strdup(name);
     var->tag = sym_equ;
-    var->class = storage_unknown;
+    var->storage = storage_unknown;
     var->type = prim_type;
     var->is_init = true;
     var->value = value;
@@ -137,44 +184,6 @@ add_equ(char *name, int value)
   }
 
   return;
-}
-
-/* add one symbol to the global table */
-
-struct variable *
-add_global_symbol(char *name,
-                  char *prefix,
-                  gp_boolean mangle_name,
-                  tree *symbol,
-                  enum sym_tag tag,
-                  enum node_storage class,
-                  char *type)
-{
-  char buffer[BUFSIZ];
-  struct variable *var;
-
-  if (prefix)
-    sprintf(buffer, "_%s_%s", prefix, name);
-  else
-    sprintf(buffer, "%s", name);
-
-  if (mangle_name) {
-    var = add_global(buffer, buffer, symbol);
-  } else {
-    var = add_global(name, buffer, symbol);
-  }
-  if (var) {
-    if (type) {
-      var->type = get_type(type);   
-      if (var->type == NULL) {
-        analyze_error(symbol, "unknown symbol type %s", type);
-      }
-    }
-    var->tag = tag;
-    var->class = class;
-  }
-
-  return var;
 }
 
 static void
@@ -436,4 +445,39 @@ add_type_prims(void)
   add_type_prim("float",  size_float);
 
   return;
+}
+
+/* return true if the symbol has a run-time address */
+
+gp_boolean
+has_address(struct variable *var)
+{
+  assert(var != NULL);
+
+  switch (var->tag) {
+  case sym_unknown:
+  case sym_const:
+  case sym_equ:
+    return false;
+  default:
+    return true;
+  }
+
+}
+
+/* return true if the symbol is external to current module */
+
+gp_boolean
+is_extern(struct variable *var)
+{
+  assert(var != NULL);
+
+  switch (var->storage) {
+  case storage_local:
+  case storage_extern:
+    return true;
+  default:
+    return false;
+  }
+
 }

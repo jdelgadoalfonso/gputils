@@ -72,26 +72,27 @@ enum sym_tag {
 struct variable {
   char *alias;
   enum sym_tag tag;			/* symbol tag */
-  enum node_storage class;		/* storage class */
+  enum node_storage storage;		/* storage class */
   struct type *type;			/* symbol type */
   gp_boolean is_init;			/* the symbol has been initialized */
   int value;				/* value if constant symbol */
   int file_id;				/* file symbol was defined in */
   int line_number;			/* line number symbol was defined on */
-  tree *node;
+  tree *node;				/* parse tree */
+  tree *module;				/* module the node was located in */
 };
 
-struct variable *add_global(char *name, char *alias, tree *node);
+struct variable *add_global_symbol(char *name,
+                                   char *prefix,
+                                   char *module,
+                                   gp_boolean mangle_name,
+                                   tree *symbol,
+                                   enum sym_tag tag,
+                                   enum node_storage storage,
+                                   char *type);
 struct variable *get_global(char *name);
 struct variable *add_constant(char *name, int value, tree *node, char *type);
 void add_equ(char *name, int value);
-struct variable * add_global_symbol(char *name,
-                                    char *prefix,
-                                    gp_boolean mangle_name,
-                                    tree *symbol,
-                                    enum sym_tag tag,
-                                    enum node_storage class,
-                                    char *type);
 void add_type_array(char *name, int start, int end, char *type);
 void add_type_enum(char *name);
 void add_type_alias(char *name, char *type);
@@ -100,6 +101,9 @@ enum size_tag prim_type(struct type *type);
 int prim_size(enum size_tag size);
 int type_size(struct type *type);
 void add_type_prims(void);
+
+gp_boolean has_address(struct variable *var);
+gp_boolean is_extern(struct variable *var);
 
 #define SYM_TYPE(x) (x->type->tag)
 
