@@ -53,7 +53,6 @@ extern struct gpal_state {
   char *file_name[MAX_FILE_NAMES];  	/* the list of file names */
   file_list *link_list;			/* list of files to link */
   gp_boolean cmd_processor;		/* processor chose on command line */
-  char *processor_name;			/* processor name */
   enum pic_processor processor;
   struct px *processor_info;    	/* Processor identifiers (e.g. name) */
   gp_boolean processor_chosen;		/* Nonzero after processor-specific init */
@@ -87,5 +86,6 @@ struct source_context {
 };
 
 void select_processor(char *name);
+void process_pragma(tree *expr);
 
 #endif
