@@ -22,6 +22,9 @@ Boston, MA 02111-1307, USA.  */
 #ifndef __CODEGEN14_H__
 #define __CODEGEN14_H__
 
+void gen_put_mem(char *name);
+void gen_put_reg(int reg);
+
 void write_test(tree *test, char *end_label);
 void gen_expr(tree *expr);
 

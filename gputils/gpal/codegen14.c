@@ -42,6 +42,12 @@ gen_put_mem(char *name)
 }
 
 void
+gen_put_reg(int reg)
+{
+  write_asm_line("movwf %#x", reg);
+}
+
+void
 gen_immed(int value)
 {
   write_asm_line("movlw %#x", value);
@@ -80,6 +86,7 @@ void
 write_test(tree *test, char *end_label)
 {
   gen_expr(test);
+  write_asm_line("addlw 0             ; FIXME update CCR is not always needed");
   write_asm_line("btfsc STATUS, Z");
   write_asm_line("goto %s", end_label);
 }
@@ -252,7 +259,11 @@ gen_binop_expr(tree *expr)
     struct variable *var;
 
     var = get_global(lhs->value.symbol);
-    gen_binop_symbol(expr->value.binop.op, var->alias);
+    if (var->is_constant) {
+      gen_binop_constant(expr->value.binop.op, var->value);
+    } else {
+      gen_binop_symbol(expr->value.binop.op, var->alias);
+    }
   } else {
     char temp_name[BUFSIZ];
  
@@ -276,7 +287,11 @@ gen_expr(tree *expr)
     break;
   case node_symbol:
     var = get_global(expr->value.symbol);
-    gen_get_mem(var->alias);
+    if (var->is_constant) {
+      write_asm_line("movlw %i", var->value);
+    } else {
+      gen_get_mem(var->alias);
+    }
     break;
   case node_unop:
     gen_unop_expr(expr);

@@ -63,7 +63,6 @@ init(void)
   state.num_files = 0;
   state.link_list = NULL;
   state.cmd_processor = false;
-  state.processor_name = NULL;
   state.processor = no_processor;
   state.processor_chosen = false;
   state.outfilename = NULL;
@@ -110,6 +109,40 @@ select_processor(char *name)
       state.processor_chosen = true;
     }
   }
+}
+
+void
+process_pragma(tree *expr)
+{
+  tree *lhs;
+  tree *rhs;
+
+  switch (expr->tag) {
+  case node_binop:
+    lhs = expr->value.binop.p0;
+    rhs = expr->value.binop.p1;
+    if ((expr->value.binop.op != '=') ||
+        (lhs->tag != node_symbol)) {
+      gp_error("unknown pragma");
+    } else {
+      if (strcasecmp(lhs->value.symbol, "processor") == 0) {
+        if (rhs->tag != node_symbol) {
+          gp_error("invalid processor name");        
+        } else {
+          if (state.processor_chosen == false) {
+            select_processor(rhs->value.symbol);
+          }        
+        }
+      } else {
+        gp_error("unknown pragma \"%s\"", lhs->value.symbol);
+      }
+    }
+    break;
+  default:
+    gp_error("unknown pragma");
+  }
+  
+  return;
 }
 
 static void
@@ -171,7 +204,6 @@ process_args( int argc, char *argv[])
     case 'p':
       select_processor(optarg);
       state.cmd_processor = true;
-      state.processor_name = optarg;
       break;
     case 'q':
       gp_quiet = 1;
@@ -220,7 +252,7 @@ compile(char *base_name)
   state.list = NULL;
 
   /* open input file */
-  open_src(state.srcfilename);
+  open_src(state.srcfilename, 0);
 
   /* open output filename */
   strcpy(state.asmfilename, base_name);
@@ -255,7 +287,7 @@ assemble(char *file_name, gp_boolean asm_source)
 {
   char command[BUFSIZ];
 
-  if (state.compile_only == true)
+  if ((gp_num_errors) || (state.compile_only == true))
     return;
 
   if (state.processor_chosen == false) {
@@ -268,12 +300,6 @@ assemble(char *file_name, gp_boolean asm_source)
   if (gp_quiet) {
     strcat(command, "-q ");
   }  
-
-  if (state.cmd_processor) {
-    strcat(command, "-p ");
-    strcat(command, state.processor_name);
-    strcat(command, " ");
-  }
 
   strcat(command, file_name);
   strcat(command, ".asm ");
@@ -321,7 +347,7 @@ link_list(char *file_name)
   return;
 }
 
-/* Either link or archieve the objects */
+/* Either link or archive the objects */
 
 static void
 combine_output(void)
