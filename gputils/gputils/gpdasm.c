@@ -1,6 +1,5 @@
 /* Disassembles ".HEX" files
-   Copyright (C) 2001, 2002, 2003, 2004, 2005
-   Craig Franklin
+   Copyright (C) 2001 Craig Franklin
 
 This file is part of gputils.
 
@@ -20,67 +19,13 @@ the Free Software Foundation, 59 Temple Place - Suite 330,
 Boston, MA 02111-1307, USA.  */
 
 #include "stdhdr.h"
-
-#include "libgputils.h"
 #include "gpdasm.h"
-
-char *processor_name = NULL;
+#include "gpdis.c"
 
 struct gpdasm_state state = {
-     generic,		   /* processor type */  
-     PROC_CLASS_GENERIC,   /* 12 bit device */
-     1			   /* output format */
+     pic14,		/* processor type */  
+     1			/* output format */
      };
-
-void
-select_processor(void)
-{
-  struct px *found = NULL;
-
-  if (processor_name == NULL) {
-    printf("error: must select processor\n");
-    exit(1);
-  }
-
-  found = gp_find_processor(processor_name);
-
-  if (found) {
-    state.processor = found->tag;
-  } else {
-    printf("Didn't find any processor named: %s\nHere are the supported processors:\n",
-            processor_name);
-    gp_dump_processor_list(true, 0);
-    exit(1);
-  }
-
-  state.class = gp_processor_class(state.processor);
-   
-  switch (state.class) {
-  case PROC_CLASS_EEPROM8:
-  case PROC_CLASS_GENERIC:
-    fprintf(stderr, "error: unsupported processor class\n");
-    exit(1);
-    break;
-  case PROC_CLASS_PIC12:
-  case PROC_CLASS_SX:
-  case PROC_CLASS_PIC14:
-  case PROC_CLASS_PIC16:
-  case PROC_CLASS_PIC16E:
-    break;
-  default:
-    assert(0);
-  }
-
-  return;
-}
-
-void writeheader()
-{
-  if (!state.format) {
-    printf("\n");
-    printf("        processor %s\n", processor_name);
-  }
-}
 
 void closeasm()
 {
@@ -93,7 +38,7 @@ void writeorg(int address)
 {
   if (!state.format) {
     printf("\n");
-    printf("        org\t%#x\n", address);
+    printf("        org     0x%04x\n", address);
   }
 }
 
@@ -101,16 +46,8 @@ void dasm(MemBlock *memory)
 {
   MemBlock *m = memory;
   int i, maximum;
-  int last_loc = 0;
-  int num_words;
+  int lastloc = 0;
   char buffer[80];
-  int byte_addr = 0;
-
-  if (state.class == PROC_CLASS_PIC16E) {
-    byte_addr = 1;
-  }
-
-  writeheader();
 
   while(m) {
     i = m->base << I_MEM_BITS;
@@ -119,35 +56,23 @@ void dasm(MemBlock *memory)
     
     while (i < maximum) {
       if (((i_memory_get(memory, i)) & MEM_USED_MASK) == 0) {
-        i++;
+        ++i;
       } else {
-        if (last_loc != i - 1){
-          writeorg(i << byte_addr);
-        }
-        last_loc = i;
-        if (state.format) {
-          printf("%06x:  %04x  ",
-                 i << byte_addr,
-                 (i_memory_get(memory, i) & 0xffff));
-        } else {
-          printf("        ");
-        }
-        num_words = gp_disassemble(memory, 
-                                   i,
-                                   state.class,
-                                   buffer,
-                                   sizeof(buffer));
-        printf("%s\n", buffer);
-        i++;
-        if (num_words != 1) {
-          /* some 18xx instructions use two words */
-	  if (state.format) {
-	    printf("%06x:  %04x\n",
-                   i << byte_addr,
-                   (i_memory_get(memory, i) & 0xffff));
-          }
-	  i++;
-        }        
+	 if (lastloc != i - 1){
+	   writeorg(i);
+	 }
+         if (state.processor == pic12) {
+           mem2asm12(i_memory_get(memory, i), buffer);
+	 } else if (state.processor == pic14) {
+           mem2asm14(i_memory_get(memory, i), buffer);
+         }
+         if (state.format) {
+	   printf("%06x:  %04x  %s\n", i, (i_memory_get(memory, i) & 0xffff), buffer);
+	 } else {
+	   printf("        %s\n", buffer);	 
+         }
+	 lastloc = i;
+         ++i;
       } 
     }
     
@@ -160,41 +85,52 @@ void dasm(MemBlock *memory)
 
 void show_usage(void)
 {
-  printf("Usage: gpdasm [options] file\n");
-  printf("Options: [defaults in brackets after descriptions]\n");
-  printf("  -c, --mnemonics                Decode special mnemonics.\n");
+  printf("Usage: gpdasm <options> <filename>\n");
+  printf("Where <options> are:\n");
+  #ifdef HAVE_GETOPT_LONG
   printf("  -h, --help                     Show this usage message.\n");
   printf("  -i, --hex-info                 Information on input hex file.\n");
-  printf("  -l, --list-chips               List supported processors.\n");
   printf("  -m, --dump                     Memory dump hex file.\n");
   printf("  -p PROC, --processor PROC      Select processor.\n");
   printf("  -s, --short                    Print short format.\n");
   printf("  -v, --version                  Show version.\n");
-  printf("  -y, --extended                 Enable 18xx extended mode.\n");
+  #else
+  printf("  -h       Show this usage message.\n");
+  printf("  -i       Information on input hex file.\n");
+  printf("  -m       Memory dump hex file.\n");
+  printf("  -p PROC  Select processor.\n");
+  printf("  -s       Print short format.\n");
+  printf("  -v       Show version.\n");
+  #endif
   printf("\n");
   printf("Report bugs to:\n");
-  printf("%s\n", PACKAGE_BUGREPORT);
+  printf("%s\n", BUG_REPORT_URL);
   exit(0);
 }
 
-#define GET_OPTIONS "?chilmp:svy"
+#define GET_OPTIONS "?himp:sv"
+
+#ifdef HAVE_GETOPT_LONG
 
   /* Used: himpsv */
   static struct option longopts[] =
   {
-    { "mnemonics",   0, 0, 'c' },
     { "help",        0, 0, 'h' },
     { "hex-info",    0, 0, 'i' },
-    { "list-chips",  0, 0, 'l' },
     { "dump",        0, 0, 'm' },
     { "processor",   1, 0, 'p' },
     { "short",       0, 0, 's' },
     { "version",     0, 0, 'v' },
-    { "extended",    0, 0, 'y' },
     { 0, 0, 0, 0 }
   };
 
-#define GETOPT_FUNC getopt_long(argc, argv, GET_OPTIONS, longopts, 0)
+  #define GETOPT_FUNC getopt_long(argc, argv, GET_OPTIONS, longopts, 0)
+
+#else
+
+  #define GETOPT_FUNC getopt(argc, argv, GET_OPTIONS)
+
+#endif
 
 int main(int argc, char *argv[])
 {
@@ -206,8 +142,6 @@ int main(int argc, char *argv[])
   int memory_dump = 0;
   char *filename = 0;
 
-  gp_init();
-
   state.i_memory = i_memory_create();
 
   while ((c = GETOPT_FUNC) != EOF) {
@@ -216,27 +150,26 @@ int main(int argc, char *argv[])
     case 'h':
       usage = 1;
       break;
-    case 'c':
-      gp_decode_mnemonics = true;
-      break;
     case 'i':
       print_hex_info = 1;
-      break;
-    case 'l':
-      gp_dump_processor_list(true, 0);
-      exit(0);
       break;
     case 'm':
       memory_dump = 1;
       break;
     case 'p':
-      processor_name = optarg;
+      if (strcasecmp(optarg, "pic12") == 0)
+	state.processor = pic12;
+      else if (strcasecmp(optarg, "pic14") == 0)
+	state.processor = pic14;
+      else {
+	fprintf(stderr,
+		"Error: unrecognised processor family \"%s\"\n",
+		optarg);
+        exit(1);
+      }
       break;
     case 's':
       state.format = 0;
-      break;
-    case 'y':
-      gp_decode_extended = true;
       break;
     case 'v':
       fprintf(stderr, "%s\n", GPDASM_VERSION_STRING);
@@ -246,7 +179,7 @@ int main(int argc, char *argv[])
       break;
   }
 
-  if ((optind + 1) == argc) {
+  if (optind < argc) {
     filename = argv[optind];
   } else {
     usage = 1;
@@ -256,33 +189,31 @@ int main(int argc, char *argv[])
     show_usage();
   }
 
-  select_processor();
-
   state.hex_info = readhex(filename, state.i_memory);
 
-  if (state.hex_info->error) {
+  if (state.hex_info.error) {
     state.num.errors++;
   }
 
   if (print_hex_info) {
     printf("hex file name:   %s\n", filename);
     printf("hex file format: ");
-    if (state.hex_info->hex_format == inhx8m) {
+    if (state.hex_info.hex_format == inhx8m) {
       printf("inhx8m\n");
-    } else if (state.hex_info->hex_format == inhx16) {
+    } else if (state.hex_info.hex_format == inhx16) {
       printf("inhx16\n");
-    } else if (state.hex_info->hex_format == inhx32) {
+    } else if (state.hex_info.hex_format == inhx32) {
       printf("inhx32\n");
     } else {
       printf("UNKNOWN\n");
     }
-    printf("number of bytes: %i\n", state.hex_info->size);
+    printf("number of bytes: %i\n", state.hex_info.size);
     printf("\n");
   }
   
   if (state.num.errors == 0) {
     if(memory_dump) {
-      print_i_memory(state.i_memory, state.class == PROC_CLASS_PIC16E ? 1 : 0);
+      print_i_memory(state.i_memory);
     } else {
       dasm(state.i_memory);
     }
@@ -291,8 +222,8 @@ int main(int argc, char *argv[])
   i_memory_free(state.i_memory);
 
   if (state.num.errors > 0)
-    return EXIT_FAILURE;
+    return 1;
   else
-    return EXIT_SUCCESS;
+    return 0;
 
 }

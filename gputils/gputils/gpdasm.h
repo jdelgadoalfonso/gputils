@@ -1,6 +1,5 @@
 /* Disassembles ".HEX" files
-   Copyright (C) 2001, 2002, 2003, 2004, 2005
-   Craig Franklin
+   Copyright (C) 2001 Craig Franklin
 
 This file is part of gputils.
 
@@ -22,18 +21,22 @@ Boston, MA 02111-1307, USA.  */
 #ifndef __GPDASM_H__
 #define __GPDASM_H__
 
+#include "stdhdr.h"
+#include "gpmemory.h"
+#include "gpwritehex.h"
+#include "gpreadhex.h"
+
 #define GPDASM_VERSION_STRING ("gpdasm-" VERSION " alpha")
 
 extern struct gpdasm_state {
-  enum pic_processor processor; /* selected processor */
-  enum proc_class class;        /* processor class */
+  enum { pic12, pic14 } processor;  /* processor family */
   int format;                   /* format of the output */
   int pass;                     /* 1 or 2 */
   MemBlock *i_memory;           /* Instruction memory linked list */
   char *srcfilename,            /* Source (.asm) file name */
     basefilename[BUFSIZ],       /* basename for generating hex,list,symbol filenames */
     hexfilename[BUFSIZ];        /* Hex (.hex) file name */
-  struct hex_data *hex_info;    /* information on input hex file */
+  struct hex_data hex_info;     /* information on input hex file */
   struct {			/* Totals for errors, warnings, messages */
     int errors;
     int warnings;

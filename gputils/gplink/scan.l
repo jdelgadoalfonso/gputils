@@ -2,8 +2,7 @@
 
 %{
 /* lexical analyser for gplink
-   Copyright (C) 2001, 2002, 2003, 2004, 2005
-   Craig Franklin
+   Copyright (C) 2001 Craig Franklin
 
 This file is part of gputils.
 
@@ -24,7 +23,6 @@ Boston, MA 02111-1307, USA.  */
 
 #include "stdhdr.h"
 
-#include "libgputils.h"
 #include "gplink.h"
 #include "parse.h"
 #include "scan.h"
@@ -42,8 +40,8 @@ SYM [a-z0-9_./\\:]*
 
 %%
 <<EOF>>		 	 {
-			   if (close_file())
-			     return LEXEOF;
+			   if (close_file)
+			     yyterminate();
 			 }
 libpath			 {
 			   return LIBPATH;
@@ -88,13 +86,13 @@ static void bad_char(char *character)
 {
   char complaint[80];
 			 
-  snprintf(complaint, sizeof(complaint),
+  sprintf(complaint, 
     isprint(*character) ?
       "Illegal character '%c' in numeric constant" :
       "Illegal character %#x in numeric constant",
     *character);
 
-  script_error(&complaint[0], NULL);
+  gplkrscr_error(&complaint[0], NULL);
 
   return;
 }
@@ -106,7 +104,15 @@ void open_src(char *name, int isinclude)
   if (state.src)
     state.src->yybuf = YY_CURRENT_BUFFER;
 
-  new->f = fopen(name, "rt");
+  #ifdef __MSDOS__
+    #define PATH_CHAR '\\'
+    #define COPY_CHAR "\\"
+  #else
+    #define PATH_CHAR '/'
+    #define COPY_CHAR "/"
+  #endif
+
+  new->f = fopen(name, "r");
   if(new->f)
     new->name = strdup(name);
   else if(isinclude && (strchr(name, PATH_CHAR) == 0)) { 
@@ -115,10 +121,10 @@ void open_src(char *name, int isinclude)
     int i;
 
     for(i = 0; i < state.numpaths; i++) {
-      strncpy(tryname, state.paths[i], sizeof(tryname));
-      strncat(tryname, COPY_CHAR, sizeof(tryname));
-      strncat(tryname, name, sizeof(tryname));
-      new->f = fopen(tryname, "rt");
+      strcpy(tryname, state.paths[i]);
+      strcat(tryname, COPY_CHAR);
+      strcat(tryname, name);
+      new->f = fopen(tryname, "r");
       if(new->f) {
         new->name = strdup(tryname);
         break;
@@ -126,13 +132,21 @@ void open_src(char *name, int isinclude)
     }
   }
 
+  #undef PATH_CHAR
+  #undef COPY_CHAR
+
   yyin = new->f;
 
   if (new->f == NULL) {
     if (state.src) {
-      gp_error("Unable to open file \"%s\" - %s",
-               name,
-               strerror(errno));    
+      char complaint[BUFSIZ];
+
+      sprintf(complaint,
+	      "Unable to open file \"%s\" - %s",
+	      name,
+	      strerror(errno)); 
+
+      gplink_error(&complaint[0]);    
     } else {
       perror(name);
     }

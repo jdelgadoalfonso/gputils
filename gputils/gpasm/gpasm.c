@@ -1,6 +1,5 @@
-/* top level functions for gpasm
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
-   James Bowman, Craig Franklin
+/* Main function for gpasm
+   Copyright (C) 1998,1999,2000,2001 James Bowman, Craig Franklin
 
 This file is part of gputils.
 
@@ -21,218 +20,172 @@ Boston, MA 02111-1307, USA.  */
 
 #include "stdhdr.h"
 
-#include "libgputils.h"
 #include "gpasm.h"
 #include "gperror.h"
 #include "scan.h"
+#include "gpsymbol.h"
 #include "directive.h"
 #include "lst.h"
 #include "cod.h"
-#include "processor.h"
-#include "coff.h"
 
-struct gpasm_state state;
-
-static gp_boolean cmd_processor = false;
-static char *processor_name = NULL;
-
-int yyparse(void);
-extern int yydebug;
-
-#define GET_OPTIONS "?D:I:La:cde:ghilmno:p:qr:uvw:y"
-
-/* Used: acdDehiIlmopqrwv */
-static struct option longopts[] =
-{
-  { "define",      1, 0, 'D' },
-  { "include",     1, 0, 'I' },
-  { "hex-format",  1, 0, 'a' },
-  { "object",      0, 0, 'c' },
-  { "debug",       0, 0, 'd' },
-  { "expand",      1, 0, 'e' },
-  { "debug-info",  0, 0, 'g' },
-  { "help",        0, 0, 'h' },
-  { "ignore-case", 0, 0, 'i' },
-  { "force-list",  0, 0, 'L' },
-  { "list-chips",  0, 0, 'l' },
-  { "dump",        0, 0, 'm' },
-  { "dos",         0, 0, 'n' },
-  { "output",      1, 0, 'o' },
-  { "processor",   1, 0, 'p' },
-  { "quiet",       0, 0, 'q' },
-  { "radix",       1, 0, 'r' },
-  { "absolute",    0, 0, 'u' },
-  { "version",     0, 0, 'v' },
-  { "warning",     1, 0, 'w' },
-  { "extended",    0, 0, 'y' },
-  { 0, 0, 0, 0 }
+struct gpasm_state state = {
+    16,			/* radix */
+    inhx8m,		/* hex_format */
+    0,			/* case_insensitive */
+    0,			/* quiet */
+    0,			/* show all messages, warnings, and errors */
+    {0, 0, 0, 0, 0}	/* Clear all of the cmd_line flags */
 };
 
-void
-init(void)
+char *include_paths[MAX_INCLUDE_PATHS];
+int n_include_paths = 0;
+
+int yyparse(void);
+
+void show_usage(void)
 {
-
-  gp_init();
-
-  /* restore gpasm to its initialized state */
-  state.mode = absolute;
-  state.extended_pic16e = false;
-
-  state.radix = 16;
-  state.hex_format = inhx32;
-  state.case_insensitive = false;
-  state.quiet = false;
-  state.use_absolute_path = false;
-  state.error_level = 0;
-  state.debug_info = false;
-  state.path_num = 0;
-
-  state.cmd_line.radix = false;
-  state.cmd_line.hex_format = false;
-  state.cmd_line.error_level = false;
-  state.cmd_line.macro_expand = false;
-  state.cmd_line.processor = false;
-  state.cmd_line.lst_force = false;
-
-  state.pass = 0;
-  state.org = 0;
-  state.dos_newlines = false;
-  state.memory_dump = false;
-  state.found_config = false;
-  state.found_devid = false;
-  state.found_idlocs = false;
-  state.register_block = false;
-  state.maxram = (MAX_RAM - 1);
-
-  state.codfile = normal;
-  state.hexfile = normal;
-  state.lstfile = normal;
-  state.objfile = suppress;
-
-  state.num.errors    = 0;
-  state.num.warnings  = 0;
-  state.num.messages  = 0;
-  state.num.warnings_suppressed = 0;
-  state.num.messages_suppressed = 0;
-  
-  state.processor = no_processor;
-  state.processor_chosen = 0;
-
-  state.obj.object = NULL;
-  state.obj.section = NULL;
-  state.obj.symbol_num = 0;
-  state.obj.section_num = 0;
-  state.obj.org_num = 0;
-  
-  state.astack = NULL;
-  
-  state.next_state = state_nochange;
-  
-  return;
-}
-
-void 
-add_path(char *path)
-{
-  if(state.path_num < MAX_PATHS) {
-    state.paths[state.path_num++] = strdup(path);
-  } else {
-    fprintf(stderr, "too many -I paths\n");
-    exit(1);
-  }
-}
-
-static void
-show_usage(void)
-{
-  printf("Usage: gpasm [options] file\n");
-  printf("Options: [defaults in brackets after descriptions]\n");
-  printf("  -a FMT, --hex-format FMT       Select hex file format. [inhx32]\n");
-  printf("  -c, --object                   Output relocatable object.\n");
-  printf("  -d, --debug                    Output debug messages.\n");
+  printf("Usage: gpasm <options> <filename>\n");
+  printf("Where <options> are:\n");
+  #ifdef HAVE_GETOPT_LONG
+  printf("  -a FMT, --hex-format FMT       Select hex file format.\n");
+  printf("  -c, --case                     Case insensitive.\n");
   printf("  -D SYM=VAL, --define SYM=VAL   Define SYM with value VAL.\n");
   printf("  -e [ON|OFF], --expand [ON|OFF] Macro expansion.\n");
-  printf("  -g, --debug-info               Use debug directives for COFF.\n");
   printf("  -h, --help                     Show this usage message.\n");
-  printf("  -i, --ignore-case              Case insensitive.\n");
   printf("  -I DIR, --include DIR          Specify include directory.\n");
   printf("  -l, --list-chips               List supported processors.\n");
-  printf("  -L, --force-list               Ignore nolist directives.\n");
   printf("  -m, --dump                     Memory dump.\n");
-#ifndef HAVE_DOS_BASED_FILE_SYSTEM
+  #ifndef __MSDOS__
   printf("  -n, --dos                      Use DOS newlines in hex file.\n");
-#endif
-  printf("  -o FILE, --output FILE         Alternate name of output file.\n");
+  #endif
+  printf("  -o FILE, --output FILE         Alternate name of hex file.\n");
   printf("  -p PROC, --processor PROC      Select processor.\n");
   printf("  -q, --quiet                    Quiet.\n");
-  printf("  -r RADIX, --radix RADIX        Select radix. [hex]\n");
-  printf("  -u, --absolute                 Use absolute pathes. \n");
+  printf("  -r RADIX, --radix RADIX        Select radix.\n");
+  printf("  -w [0|1|2], --warning [0|1|2]  Set message level.\n");
   printf("  -v, --version                  Show version.\n");
-  printf("  -w [0|1|2], --warning [0|1|2]  Set message level. [0]\n");
-  printf("  -y, --extended                 Enable 18xx extended mode.\n");
+  #else
+  printf("  -a FMT      Select hex file format.\n");
+  printf("  -c          Case insensitive.\n");
+  printf("  -D SYM=VAL  Define SYM with value VAL.\n");
+  printf("  -e [ON|OFF] Macro expansion.\n");
+  printf("  -h          Show this usage message.\n");
+  printf("  -I DIR      Specify include directory.\n");
+  printf("  -l          List supported processors.\n");
+  printf("  -m          Memory dump.\n");
+  #ifndef __MSDOS__
+  printf("  -n          Use DOS newlines in hex file.\n");
+  #endif
+  printf("  -o FILE     Alternate name of hex file.\n");
+  printf("  -p PROC     Select processor.\n");
+  printf("  -q          Quiet.\n");
+  printf("  -r RADIX    Select radix.\n");
+  printf("  -w [0|1|2]  Set message level.\n");
+  printf("  -v          Show version.\n");
+  #endif
   printf("\n");
-#ifdef USE_DEFAULT_PATHS
-  if (gp_header_path) {
-    printf("Default header file path %s\n", gp_header_path);
-  } else {
-    printf("Default header file path NOT SET\n");
-  }
-  printf("\n");
-#endif
+  #ifdef USE_GPASM_HEADER_PATH
+  printf("Reading header files from %s\n", include_paths[0]);
+  printf("\n");    
+  #endif
   printf("Report bugs to:\n");
-  printf("%s\n", PACKAGE_BUGREPORT);
+  printf("%s\n", BUG_REPORT_URL);
   exit(0);
 }
 
-void
-process_args( int argc, char *argv[])
+#define GET_OPTIONS "?D:I:a:cd:e:hlmno:p:qr:vw:"
+
+#ifdef HAVE_GETOPT_LONG
+
+  /* Used: acdDehIlmopqrwv */
+  static struct option longopts[] =
+  {
+    { "define",      1, 0, 'D' },
+    { "include",     1, 0, 'I' },
+    { "hex-format",  1, 0, 'a' },
+    { "case",        0, 0, 'c' },
+    { "define",      1, 0, 'd' },
+    { "expand",      1, 0, 'e' },
+    { "help",        0, 0, 'h' },
+    { "list-chips",  0, 0, 'l' },
+    { "dump",        0, 0, 'm' },
+    { "dos",         0, 0, 'n' },
+    { "output",      1, 0, 'o' },
+    { "processor",   1, 0, 'p' },
+    { "quiet",       0, 0, 'q' },
+    { "radix",       1, 0, 'r' },
+    { "version",     0, 0, 'v' },
+    { "warning",     1, 0, 'w' },
+    { 0, 0, 0, 0 }
+  };
+
+  #define GETOPT_FUNC getopt_long(argc, argv, GET_OPTIONS, longopts, 0)
+
+#else
+
+  #define GETOPT_FUNC getopt(argc, argv, GET_OPTIONS)
+
+#endif
+
+int main( int argc, char *argv[] )
 {
   extern char *optarg;
   extern int optind;
   int c;
-  gp_boolean usage = false;
+  int usage = 0;
+  int memory_dump = 0;
+  int dos_newlines = 0;
   char *pc;
+  int  cmd_processor = 0;
+  char *processor_name = NULL;
 
-  /* Scan through the options for the -i flag.  It must be set before the 
-     defines are read */
-  while ((c = getopt_long(argc, argv, GET_OPTIONS, longopts, 0)) != EOF) {
-    switch (c) {
-    case 'i':
-      state.case_insensitive = true;
-      break;
-    }
+  state.i_memory = i_memory_create();
+  
+  state.pass = 0;
+  state.quiet = 0;
+
+  #ifdef PARSE_DEBUG
+  {
+    extern int yydebug;
+    yydebug = 1; /* enable parse debug */
   }
+  #endif
 
-  /* reset the getopt_long index for the next call */
-  optind = 1;
+  #ifdef USE_GPASM_HEADER_PATH
+    /* add the header path to the include paths list */
+    #ifndef __MSDOS__
+      include_paths[n_include_paths++] = GPASM_HEADER_PATH;
+    #else
+      include_paths[n_include_paths++] = "c:\\gputils\\header";    
+    #endif
+  #endif
 
-  /* initalize the defines table for command line arguments */
-  state.stDefines = push_symbol_table(NULL, state.case_insensitive);
-
-  while ((c = getopt_long(argc, argv, GET_OPTIONS, longopts, 0)) != EOF) {
+  while ((c = GETOPT_FUNC) != EOF) {
     switch (c) {
     case '?':
     case 'h':
-      usage = true;
+      usage = 1;
       break;
     case 'a':
       select_hexformat(optarg);
-      state.cmd_line.hex_format = true;
+      state.cmd_line.hex_format = 1;
       break;
     case 'c':
-      state.mode    = relocatable;
-      state.codfile = suppress;
-      state.hexfile = suppress;
-      state.lstfile = normal;
-      state.objfile = normal;
-      break;
-    case 'd':
-      gp_debug_disable = false;
+      state.case_insensitive = 1;
+      if (state.stDefines != NULL) {
+        printf("Warning: The -c option must be called before the -d option.\n");
+      }
       break;
     case 'D':
+    case 'd':
       if ((optarg != NULL) && (strlen(optarg) > 0)) {
 	struct symbol *sym;
 	char *lhs, *rhs;
+
+        /* the Defines symbol table is not yet defined*/
+        if (state.stDefines == NULL) {
+          state.stDefines = push_symbol_table(NULL, state.case_insensitive);
+        }
 
 	lhs = strdup(optarg);
 	rhs = strchr(lhs, '=');
@@ -250,59 +203,50 @@ process_args( int argc, char *argv[])
       break;
     case 'e':
       select_expand(optarg);
-      state.cmd_line.macro_expand = true;
-      break;
-    case 'g':
-      state.debug_info = true;
+      state.cmd_line.macro_expand = 1;
       break;
     case 'I':
-      add_path(optarg);
-      break;    
-    case 'i':
-      state.case_insensitive = true;
-      break;
-    case 'L':
-      state.cmd_line.lst_force = true;
-      break;  
+       if(n_include_paths < MAX_INCLUDE_PATHS) {
+ 	 include_paths[n_include_paths++] = optarg;
+       } else {
+ 	 fprintf(stderr, "too many -I paths\n");
+ 	 exit(1);
+       }
+       break;    
+ 
     case 'l':
-      gp_dump_processor_list(true, 0);
+      dump_processor_list();
       exit(0);
       break;
     case 'm':
-      state.memory_dump = true;
+      memory_dump = 1;
       break;
     case 'n':
-      #ifndef HAVE_DOS_BASED_FILE_SYSTEM
-        state.dos_newlines = true;
+      #ifndef __MSDOS__
+        dos_newlines = 1;
       #endif
       break;
     case 'o':
-      strncpy(state.hexfilename, optarg, sizeof(state.hexfilename));
-      strncpy(state.basefilename, optarg, sizeof(state.basefilename));
-      pc = strrchr(state.basefilename, '.');
-      if (pc)
-        *pc = 0;
+	    strcpy(state.hexfilename, optarg);
+	    strcpy(state.basefilename, optarg);
+	    pc = strrchr(state.basefilename, '.');
+	    if (pc)
+		   *pc = 0;
       break;
     case 'p':
-      cmd_processor = true;
+      cmd_processor = 1;
       processor_name = optarg;
       break;
     case 'q':
-      state.quiet = true;
+      state.quiet = 1;
       break;
     case 'r':
       select_radix(optarg);
-      state.cmd_line.radix = true;
-      break;
-    case 'u':
-      state.use_absolute_path = true;
+      state.cmd_line.radix = 1;
       break;
     case 'w':
       select_errorlevel(atoi(optarg));
-      state.cmd_line.error_level = true;
-      break;
-    case 'y':
-      state.extended_pic16e = true;
+      state.cmd_line.error_level = 1;
       break;
     case 'v':
       fprintf(stderr, "%s\n", GPASM_VERSION_STRING);
@@ -313,99 +257,86 @@ process_args( int argc, char *argv[])
       break;
   }
   
-  if ((optind + 1) == argc)
+  if (optind < argc)
     state.srcfilename = argv[optind];
   else
-    usage = true;
+    usage = 1;
 
   if (usage) {
     show_usage();
   }
 
-  /* Add the header path to the include paths list last, so that the user
-     specified directories are searched first */
-  if (gp_header_path) {
-    add_path(gp_header_path);
-  }
-
-  if (state.use_absolute_path) {
-    state.srcfilename = gp_absolute_path(state.srcfilename);
-  }
-
-}
-
-int
-assemble(void)
-{
-  char *pc; 
-  struct symbol_table *cmd_defines;
-
-  /* store the command line defines to restore on second pass */
-  cmd_defines = state.stDefines;
-  state.c_memory = state.i_memory = i_memory_create();
-
   if(state.basefilename[0] == '\0') {
-    strncpy(state.basefilename, state.srcfilename, sizeof(state.basefilename));
-    pc = strrchr(state.basefilename, '.');
-    if (pc)
-      *pc = 0;
+	  strcpy(state.basefilename, state.srcfilename);
+	  pc = strrchr(state.basefilename, '.');
+	  if (pc)
+		  *pc = 0;
+  }
+
+  /* the Defines symbol table is not yet defined*/
+  if (state.stDefines == NULL) {
+    state.stDefines = push_symbol_table(NULL, state.case_insensitive);
   }
 
   /* Builtins are always case insensitive */
-  state.stBuiltin = push_symbol_table(NULL, true);
+  state.stBuiltin = push_symbol_table(NULL, 1);
   state.stDirective = state.stBuiltin;
   state.stMacros = push_symbol_table(NULL, state.case_insensitive);
   state.stTop = 
     state.stGlobal = push_symbol_table(NULL, state.case_insensitive);
-  state.stTopDefines = 
-    state.stDefines = push_symbol_table(cmd_defines, state.case_insensitive);
 
   opcode_init(0);
 
   /* the tables are built, select the processor if -p was used */
   if (cmd_processor) {
     select_processor(processor_name);
-    state.cmd_line.processor = true;
+    state.cmd_line.processor = 1;
   }
 
-  state.pass = 1;
+  state.maxram = (MAX_RAM - 1);
+
   open_src(state.srcfilename, 0);
+  state.pass = 1;
   yyparse();
  
+  open_src(state.srcfilename, 0);
   state.pass++;
   state.org = 0;
   state.cblock = 0;
-  /* clean out defines for second pass */
-  state.stTopDefines = 
-    state.stDefines = push_symbol_table(cmd_defines, state.case_insensitive);
-  if (!state.cmd_line.radix)
+  if (state.cmd_line.radix != 1)
     state.radix = 16;
-  state.obj.symbol_num = 0;
-  state.obj.section_num = 0;
-  state.obj.org_num = 0;
-  state.found_config = false;
-  state.found_devid = false;
-  state.found_idlocs = false;
-  coff_init();
   cod_init();
   lst_init();
-  open_src(state.srcfilename, 0);
-  if (!gp_debug_disable) {
-    yydebug = 1;
-  } else {
-    yydebug = 0;
-  }
   yyparse();
 
   assert(state.pass == 2);
   
   pop_symbol_table(state.stBuiltin);
   
-  hex_init();
+  if (check_writehex(state.i_memory, state.hex_format)) {
+    gperror(GPE_IHEX,NULL); 
+  } else {
+    int byte_words;
+    
+    if (state.device.core_size > 0xff) {
+      byte_words = 0;
+    } else {
+      byte_words = 1;
+      if (state.hex_format != inhx8m) {
+        gpwarning(GPW_UNKNOWN,"Must use inhx8m format for EEPROM8");
+        state.hex_format = inhx8m;
+      }
+    }
+    
+    if (writehex(state.basefilename, state.i_memory, 
+                 state.hex_format, state.num.errors,
+                 byte_words, dos_newlines)) {
+      gperror(GPE_UNKNOWN,"Error generating hex file");
+    }
+  }
 
-  if(state.memory_dump)
-    print_i_memory(state.i_memory, 
-                   state.device.class == PROC_CLASS_PIC16E ? 1 : 0);
+  if(memory_dump)
+    print_i_memory(state.i_memory);
 
   /* Maybe produce a symbol table */
   if (state.lst.symboltable) {
@@ -415,20 +346,18 @@ assemble(void)
   }
 
   /* Maybe produce a memory map */
-  if ((state.mode == absolute) && (state.lst.memorymap)) {
+  if (state.lst.memorymap) {
     lst_memory_map(state.i_memory);
   }
   
-  /* Finish off the object, listing, and symbol files*/
-  coff_close_file();
+  /* Finish off the listing and symbol files*/
   lst_close();
   if (state.processor_info)
     cod_close_file();
   free_files();
 
-  if ((state.num.errors > 0) ||
-      (gp_num_errors > 0))
-    return EXIT_FAILURE;
+  if (state.num.errors > 0)
+    return 1;
   else
-    return EXIT_SUCCESS;
+    return 0;
 }

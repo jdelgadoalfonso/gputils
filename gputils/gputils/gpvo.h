@@ -1,6 +1,5 @@
 /* gpvo - GNU PIC view object
-   Copyright (C) 2001, 2002, 2003, 2004, 2005
-   Craig Franklin
+   Copyright (C) 2001 Craig Franklin
  
 This file is part of gputils.
  
@@ -22,20 +21,23 @@ Boston, MA 02111-1307, USA.  */
 #ifndef GPVO_H
 #define GPVO_H
 
-#define GPVO_VERSION_STRING ("gpvo-" VERSION " alpha")
+#define GPVO_VERSION_STRING ("gpvo-" VERSION " pre-alpha")
 
 /* Dump Flags */
-#define PRINT_HEADER   1 << 1
-#define PRINT_SECTIONS 1 << 2
-#define PRINT_SYMTBL   1 << 3
-#define PRINT_BINARY   1 << 4
+#define PRINT_FILE_HEADER 1 << 1
+#define PRINT_OPT_HEADER  1 << 2
+#define PRINT_SECTIONS    1 << 3
+#define PRINT_SYMTBL      1 << 4
+#define PRINT_BINARY      1 << 5
+#define PRINT_AUXREC      1 << 6
 
 extern struct gpvo_state {
+  enum { pic12, pic14 } processor;  /* processor family */
+  int quiet;			/* suppress outputs when 1 */ 
   int dump_flags; 		/* when bit set then print that section */	
-  gp_boolean suppress_names;	/* suppress filenames when 1 */ 
   char *filename;		/* object file name */
-  gp_object_type *object;	/* formatted object file */
-  gp_binary_type *file;		/* binary object file */
+  struct objectfile *object;    /* formatted object file */
+  struct binaryfile *file;      /* binary object file */
 } state;
 
 #endif

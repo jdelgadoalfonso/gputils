@@ -1,6 +1,5 @@
-/* ".COD" file output for gpasm
-   Copyright (C) 2001, 2002, 2003, 2004, 2005
-   Craig Franklin
+/* .cod file output
+   Copyright (C) 2001 Craig Franklin
 
 This file is part of gputils.
 
@@ -31,5 +30,6 @@ void cod_init(void);
 void cod_close_file(void);
 void cod_lst_line(int line_type);
 void cod_write_symbols(struct symbol **,int);
+void cod_emit_opcode(int, int);
 
 #endif

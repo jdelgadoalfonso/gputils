@@ -1,6 +1,5 @@
 /* Implements directives, pseudo-ops and processor opcodes
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
-   James Bowman, Craig Franklin
+   Copyright (C) 1998,1999,2000,2001 James Bowman, Craig Franklin
 
 This file is part of gputils.
 
@@ -21,20 +20,64 @@ Boston, MA 02111-1307, USA.  */
 
 #include "stdhdr.h"
 
-#include "libgputils.h"
 #include "gpasm.h"
+#include "gpsymbol.h"
 #include "directive.h"
-#include "evaluate.h"
 #include "parse.h"
-#include "processor.h"
 #include "lst.h"
-#include "macro.h"
-#include "coff.h"
 #include "gperror.h"
+#include "gpmemory.h"
 #include "special.h"
 
 /* Forward declarations */
+void execute_macro(struct macro_head *h, int arity, struct pnode *parms);
 void execute_body(struct macro_head *h);
+static gpasmVal evaluate(struct pnode *p);
+static gpasmVal maybe_evaluate(struct pnode *p);
+
+/* XXXPRO: new class of processor may require new instruction classes */
+enum insn_class {
+  INSN_CLASS_LIT1,	/* bit 0 contains a 1 bit literal		*/
+  INSN_CLASS_LIT4S,     /* Bits 7:4 contain a 4 bit literal, bits 3:0 are unused   */
+  INSN_CLASS_LIT8,	/* bits 7:0 contain an 8 bit literal		*/
+  INSN_CLASS_LIT9,	/* bits 8:0 contain a 9 bit literal		*/
+  INSN_CLASS_LIT11,	/* bits 10:0 contain an 11 bit literal		*/
+  INSN_CLASS_LIT13,	/* bits 12:0 contain an 11 bit literal		*/
+  INSN_CLASS_IMPLICIT,	/* instruction has no variable bits at all	*/
+  INSN_CLASS_OPF5,	/* bits 4:0 contain a register address		*/
+  INSN_CLASS_OPWF5,	/* as above, but bit 5 has a destination flag	*/
+  INSN_CLASS_B5,	/* as for OPF5, but bits 7:5 have bit number	*/
+  INSN_CLASS_OPF7,	/* bits 6:0 contain a register address		*/
+  INSN_CLASS_OPWF7,	/* as above, but bit 7 has destination flag	*/
+  INSN_CLASS_B7,	/* as for OPF7, but bits 9:7 have bit number	*/
+
+  INSN_CLASS_OPF8,	/* bits 7:0 contain a register address 	*/
+  INSN_CLASS_OPFA8,	/* bits 7:0 contain a register address & bit has access flag  */
+  INSN_CLASS_OPWF8,	/* as above, but bit 8 has dest flag	*/
+  INSN_CLASS_OPWFA8,	/* as above, but bit 9 has dest flag & bit 8 has access flag		*/
+  INSN_CLASS_B8,	/* like OPF7, but bits 9:11 have bit number	*/
+  INSN_CLASS_BA8,	/* like OPF7, but bits 9:11 have bit number & bit 8 has access flag	*/
+  INSN_CLASS_LIT20,	/* 20bit lit, bits 7:0 in first word bits 19:8 in second		*/
+  INSN_CLASS_CALL20,	/* Like LIT20, but bit 8 has fast push flag			 	*/
+  INSN_CLASS_RBRA8,	/* Bits 7:0 contain a relative branch address			 	*/
+  INSN_CLASS_RBRA11,	/* Bits 10:0 contain a relative branch address			 	*/
+  INSN_CLASS_FLIT12,	/* LFSR, 12bit lit loaded into 1 of 4 FSRs				*/
+  INSN_CLASS_FF,	/* two 12bit file addresses						*/
+  INSN_CLASS_FP,        /* Bits 7:0 contain a register address, bits 12:8 contains a peripheral address    */
+  INSN_CLASS_PF,        /* Bits 7:0 contain a register address, bits 12:8 contains a peripheral address    */
+  INSN_CLASS_TBL,	/* a table read or write instruction	      	*/
+  INSN_CLASS_TBL2,	/* a table read or write instruction. 
+			   Bits 7:0 contains a register address; Bit 8 is unused;
+			   Bit 9, table byte select. (0:lower ; 1:upper) */
+  INSN_CLASS_TBL3,	/* a table read or write instruction. 
+			   Bits 7:0 contains a register address; 
+			   Bit 8, 1 if increment pointer, 0 otherwise;
+			   Bit 9, table byte select. (0:lower ; 1:upper) */
+  INSN_CLASS_FUNC,	/* instruction is an assembler function		*/
+  INSN_CLASS_LIT3_BANK, /* SX: bits 3:0 contain a 3 bit literal, shifted 5 bits */
+  INSN_CLASS_LIT3_PAGE, /* SX: bits 3:0 contain a 3 bit literal, shifted 9 bits */
+  INSN_CLASS_LIT4       /* SX: bits 3:0 contain a 4 bit literal         */
+};
 
 #define ATTRIB_COND 1
 
@@ -45,10 +88,17 @@ void execute_body(struct macro_head *h);
 #define DEFAULT_LIT_MASK 0xffff
 #define ENDIAN_SWAP      (1<<31)
 #define PACKING_BYTES    (1<<30)
-#define SPLIT_PACK       (1<<29)
 
+struct insn {
+  char *name;
+  long int mask;
+  enum insn_class class;
+  int attribs;
+};
+
+/* We really should really think about using glib for this: */
 struct sllist {
-  struct pnode *p;
+  int value;
   struct sllist *next;
 };
 
@@ -68,10 +118,6 @@ static void emit(unsigned int value)
 
   /* only write the program data to memory on the second pass */
   if (state.pass == 2) {
-
-    if ((state.mode == relocatable) && (state.obj.section == NULL)) {
-      gperror(GPE_WRONG_SECTION, NULL);
-    }
 
     if (_17cxx_core && (state.org > 0xffff)) {  
       gperror(GPE_ADDROVF, NULL);
@@ -110,8 +156,8 @@ int endian_swap_word(int x)
  * packed. When two bytes are packed, then the word is emitted.
  */
 
-int packed_hi_lo = 0;
-static int packed_byte = 0;
+static int packed_hi_lo = 0;
+static int packed_byte  = 0;
 
 static void emit_packed(unsigned int value, unsigned int mode)
 {
@@ -136,6 +182,296 @@ static void emit_packed(unsigned int value, unsigned int mode)
 
 }
 
+static int list_length(struct pnode *L)
+{
+  if (L == NULL) {
+    return 0;
+  } else {
+    return 1 + list_length(TAIL(L));
+  }
+}
+
+static int can_evaluate_concatenation(struct pnode *p)
+{
+  char buf[BUFSIZ];
+
+  switch (p->tag) {
+  case constant:
+    return 1;
+  case symbol:
+    return 1;
+  case unop:
+    return can_evaluate_concatenation(p->value.unop.p0);
+  case binop:
+    return can_evaluate_concatenation(p->value.binop.p0) 
+           && can_evaluate_concatenation(p->value.binop.p1);
+  case string:
+    sprintf(buf, "Illegal argument (%s).", p->value.string);
+    gperror(GPE_ILLEGAL_ARGU, buf);
+    return 0;
+  default:
+    assert(0);
+  }
+
+  return 0;
+}
+
+static int can_evaluate(struct pnode *p)
+{
+  char buf[BUFSIZ];
+
+  if ((p->tag == binop) && (p->value.binop.op == CONCAT)) {
+    return can_evaluate_concatenation(p);
+  }
+  switch (p->tag) {
+  case constant:
+    return 1;
+  case symbol:
+    {
+      struct symbol *s;
+
+      /* '$' means current org, which we can always evaluate */
+      if (strcmp(p->value.symbol, "$") == 0) {
+	return 1;
+      } else {
+        struct variable *var = NULL;
+
+	/* Otherwise look it up */
+	s = get_symbol(state.stTop, p->value.symbol);
+
+        if (s == NULL) {
+          sprintf(buf, "Symbol not previously defined (%s).", p->value.symbol);
+          gperror(GPE_NOSYM, buf);    
+	} else {
+          var = get_symbol_annotation(s);
+
+          if (var == NULL) {
+            sprintf(buf, "Symbol not assigned a value (%s).", p->value.symbol);
+            gpwarning(GPW_UNKNOWN, buf);    
+          }
+        }  
+ 
+	return ((s != NULL) && (var != NULL));
+      }
+    }
+  case unop:
+    return can_evaluate(p->value.unop.p0);
+  case binop:
+    return can_evaluate(p->value.binop.p0) && can_evaluate(p->value.binop.p1);
+  case string:
+    sprintf(buf, "Illegal argument (%s).", p->value.string);
+    gperror(GPE_ILLEGAL_ARGU, buf);
+    return 0;
+  default:
+    assert(0);
+  }
+
+  return 0;
+}
+
+char *evaluate_concatenation(struct pnode *p)
+{
+  switch (p->tag) {
+  case symbol:
+    return p->value.symbol;
+  case binop:
+    assert(p->value.binop.op == CONCAT);
+    {
+      char *s[2], *new;
+
+      s[0] = evaluate_concatenation(p->value.binop.p0);
+      s[1] = evaluate_concatenation(p->value.binop.p1);
+      new = malloc(strlen(s[0]) + 1 + strlen(s[1]) + 1);
+      strcpy(new, s[0]);
+      strcat(new, s[1]);
+      return new;
+    }
+  case unop:
+    assert(p->value.unop.op == VAR);
+    {
+      char buf[80];
+      sprintf(buf, "%d", maybe_evaluate(p->value.unop.p0));
+      return (strdup(buf));
+    }
+  default:
+    assert(0);
+  }
+
+  return NULL;
+}
+
+static gpasmVal evaluate(struct pnode *p)
+{
+  struct variable *var;
+  gpasmVal p0, p1;
+
+  if (((p->tag == binop) && (p->value.binop.op == CONCAT)) ||
+      ((p->tag == unop) && (p->value.unop.op == VAR))) {
+    char *string = evaluate_concatenation(p);
+    struct symbol *s;
+
+    s = get_symbol(state.stTop, string);
+    if (s == NULL) {
+      char buf[BUFSIZ];
+      sprintf(buf, "Symbol not previously defined (%s).", string);
+      gperror(GPE_NOSYM, buf); 
+      return 0;
+    } else {
+      var = get_symbol_annotation(s);
+      assert(var != NULL);
+      return var->value;
+    }
+  }
+  
+  switch (p->tag) {
+  case constant:
+    return p->value.constant;
+  case symbol:
+    {
+      struct symbol *s;
+
+      if (strcmp(p->value.symbol, "$") == 0) {
+	return state.org << _16bit_core;
+      } else {
+	s = get_symbol(state.stTop, p->value.symbol);
+	var = get_symbol_annotation(s);
+	assert(var != NULL);
+	return var->value;
+      }
+    }
+  case unop:
+    switch (p->value.unop.op) {
+    case '!':
+      return !evaluate(p->value.unop.p0);
+    case '+':
+      return  evaluate(p->value.unop.p0);
+    case '-':
+      return -evaluate(p->value.unop.p0);
+    case '~':
+      return ~evaluate(p->value.unop.p0);
+    case HIGH:
+      return (evaluate(p->value.unop.p0) >> 8) & 0xff;
+    case LOW:
+      return evaluate(p->value.unop.p0) & 0xff;
+    case INCREMENT:  
+      return evaluate(p->value.unop.p0) + 1;
+    case DECREMENT:          
+      return evaluate(p->value.unop.p0) - 1;
+    default:
+      assert(0);
+    }
+  case binop:
+    p0 = evaluate(p->value.binop.p0);
+    p1 = evaluate(p->value.binop.p1);
+    switch (p->value.binop.op) {
+    case '+':      return p0 + p1;
+    case '-':      return p0 - p1;
+    case '*':      return p0 * p1;
+    case '/':
+      if (p1 == 0){
+        gperror(GPE_DIVBY0, NULL);
+        return 0;
+      } else {
+        return p0 / p1;
+      }
+    case '%':      return p0 % p1;
+    case '&':      return p0 & p1;
+    case '|':      return p0 | p1;
+    case '^':      return p0 ^ p1;
+    case LSH:      return p0 << p1;
+    case RSH:      return p0 >> p1;
+    case EQUAL:    return p0 == p1;
+    case '<':      return p0 < p1;
+    case '>':      return p0 > p1;
+    case NOT_EQUAL:          return p0 != p1;
+    case GREATER_EQUAL:      return p0 >= p1;
+    case LESS_EQUAL:         return p0 <= p1;
+    case LOGICAL_AND:        return p0 && p1;
+    case LOGICAL_OR:         return p0 || p1;
+    case '=': 
+      gperror(GPE_BADCHAR, "Illegal character (=)");     
+      return 0;
+    default:
+      printf("Unhanded operator (%c) on line %i of %s\n", 
+             p->value.binop.op,
+             state.src->line_number,
+             state.src->name);
+      assert(0); /* Unhandled binary operator */
+    }
+  default:
+    assert(0); /* Unhandled parse node tag */
+  }
+  return (0); /* Should never reach here */
+}
+
+/* Attempt to evaluate expression 'p'.  Return its value if
+ * successful, otherwise generate an error message and return 0.  */
+
+static gpasmVal maybe_evaluate(struct pnode *p)
+{
+  gpasmVal r;
+
+  if (p && can_evaluate(p)) {
+    r = evaluate(p);
+  } else {
+    r = 0;
+  }
+
+  return r;
+}
+
+/* evaluate the number of passes for the "fill" directive*/
+int eval_fill_number(struct pnode *p)
+{
+  int number;
+
+  number = maybe_evaluate(p);
+  if(_16bit_core) {
+    /* For 16 bit core devices number is bytes not words */ 
+    if ((number & 0x1) == 1){
+      /* The number is divided by two, so it can't be odd */
+      gperror(GPE_FILL_ODD, NULL);
+    } else {
+      number = number / 2;
+    }	
+  }
+
+  return number;
+}
+
+/* determine which page of program memory the address is located */
+int check_page(struct pnode *p)
+{
+  int number, page;
+
+  number = maybe_evaluate(HEAD(p));
+
+  if (state.device.core_size == CORE_12BIT_MASK) {
+    if (number < 0x200) {
+      page = 0;
+    } else if (number < 0x400) {
+      page = 1;
+    } else if (number < 0x600) {
+      page = 2;
+    } else {
+      page = 3;
+    } 
+  } else {
+    if (number < 0x800) {
+      page = 0;
+    } else if (number < 0x1000) {
+      page = 1;
+    } else if (number < 0x1800) {
+      page = 2;
+    } else {
+      page = 3;
+    }   
+  }
+  
+  return page;
+}
+
+
 static int off_or_on(struct pnode *p)
 {
   int had_error = 0, ret = 0;
@@ -155,39 +491,79 @@ static int off_or_on(struct pnode *p)
   return ret;
 }
 
+#if 0     /* deprecated data( ) */
+static void data(struct pnode *L, int flavor, int lit_mask)
+{
+  static int  k = 0;
+  int packing_bytes;
+
+
+  if (L) {
+
+    struct pnode *p;
+
+    packing_bytes = (lit_mask & PACKING_BYTES) ? 1 : 0;
+
+    p = HEAD(L);
+    if (p->tag == string) {
+      char *pc = p->value.string;
+      
+      while (*pc) {
+
+	if(packing_bytes) 
+	  emit_packed(*pc | flavor, lit_mask);
+	else 
+	  emit((*pc & lit_mask) | flavor);
+
+	pc++;
+
+      }
+
+    } else {
+      k  = maybe_evaluate(p);
+
+      if(packing_bytes) 
+	emit_packed(k | flavor, lit_mask);
+      else 
+	emit((k&lit_mask) | flavor);
+
+    }
+    data(TAIL(L), flavor, lit_mask);
+
+    if(packed_hi_lo) 
+      emit_packed(flavor, lit_mask);
+
+  }
+
+}
+
+#endif
+
 static void data(struct sllist *L, int flavor, int lit_mask)
 {
 
 
   if (L) {
 
-    struct sllist *list,*previous;
-    int value;
+    struct sllist *p,*q;
 
-    list = L->next;
+    p = L->next;
     
-    while(list) {
-
-      value = reloc_evaluate(list->p, RELOCT_ALL);
+    while(p) {
 
       if(lit_mask & PACKING_BYTES)
-	emit_packed(value | flavor, lit_mask);
+	emit_packed(p->value | flavor, lit_mask);
       else {
-	if((value > lit_mask) || (value < 0)) {
+	if((p->value > lit_mask) || (p->value < 0)) {
           gpwarning(GPW_RANGE,NULL);
 	}
-      
-        if(lit_mask & SPLIT_PACK) {
-	  emit(value & 0xff);
-	  emit((value >> 8) & 0xff);
-        } else {
-	  emit((value & lit_mask) | flavor);
-        }
+
+	emit((p->value & lit_mask) | flavor);
       }
 
-      previous = list;
-      list = list->next;
-      free(previous);
+      q = p;
+      p = p->next;
+      free(q);
 
     }
 
@@ -202,12 +578,12 @@ static void data(struct sllist *L, int flavor, int lit_mask)
 /* If we convert to glib, we can use the built in library call g_slist_append */
 
 struct sllist *sllist_append(struct sllist   *list,
-			     struct pnode *p)
+			     int value)
 {
   struct sllist *new;
 
   new = malloc(sizeof(*new));
-  new->p = p;
+  new->value = value;
   new->next  = NULL;
   list->next = new;
 
@@ -235,7 +611,6 @@ static void simplify_data(struct pnode *L, struct sllist *list, int packing_stri
     struct pnode *p;
     unsigned int v = 0;
     unsigned int shift;
-    int value;
 
     p = HEAD(L);
 
@@ -249,21 +624,19 @@ static void simplify_data(struct pnode *L, struct sllist *list, int packing_stri
       }
       
       while (*pc) {
-	pc = convert_escape_chars(pc, &value);
-
 	if(packing_strings) {
 	  if(v>= (1<<31) ) {
-	    v = (v<<shift) |  value;
+	    v = (v<<shift) |  *pc++;
             if(_16bit_core) {
               v = endian_swap_word(v);
             }   	    
-	    list = sllist_append(list, mk_constant(v));
+	    list = sllist_append(list, v);
 	    v = 0;
 	  } else
-	    v = (1<<31) | value;
+	    v = (1<<31) | *pc++;
 	  
 	} else {
-	  list = sllist_append(list, mk_constant(value));
+	  list = sllist_append(list, *pc++);
 	}
       }
 
@@ -272,17 +645,41 @@ static void simplify_data(struct pnode *L, struct sllist *list, int packing_stri
         if(_16bit_core) {
           v = endian_swap_word(v);
         }        
-	list = sllist_append(list, mk_constant(v));
+	list = sllist_append(list, v);
       }
 
     } else {
-      list = sllist_append(list, p);
+      list = sllist_append(list,maybe_evaluate(p));
 
     }
     simplify_data(TAIL(L), list, packing_strings);
 
   }
 
+}
+
+static int enforce_arity(int arity, int must_be)
+{
+  if (arity == must_be)
+    return 1;
+  else {
+    if (arity < must_be) {
+      gperror(GPE_MISSING_ARGU, NULL);
+    } else {
+      gperror(GPE_TOO_MANY_ARGU, NULL);
+    }
+    return 0;
+  }
+}
+
+static int enforce_simple(struct pnode *p)
+{
+  if (p->tag == symbol) {
+    return 1;
+  } else {
+    gperror(GPE_ILLEGAL_ARGU, NULL);
+    return 0;
+  }
 }
 
 /* Do the work for beginning a conditional assembly block.  Leave it
@@ -323,10 +720,7 @@ static int list_symbol_member(struct pnode *M, struct pnode *L)
     return 0;
   } else if (STRCMP(M->value.symbol, HEAD(L)->value.symbol) == 0) {
     char buf[BUFSIZ];
-    snprintf(buf,
-             sizeof(buf), 
-             "Duplicate macro parameter (%s).", 
-             HEAD(L)->value.symbol);
+    sprintf(buf, "Duplicate macro parameter (%s).", HEAD(L)->value.symbol);
     gperror(GPE_UNKNOWN, buf);
     return 1;
   } else {
@@ -389,9 +783,9 @@ static gpasmVal do_badram(gpasmVal r,
 
 	loc = evaluate(p);
 	if ((loc < 0) ||
-	    (MAX_RAM <= loc)) {
+	    (MAX_RAM <= loc))
 	  gpwarning(GPW_INVALID_RAM, NULL);
-	 } else
+	else
 	  state.badram[loc] = 1;
       }
     }
@@ -400,152 +794,56 @@ static gpasmVal do_badram(gpasmVal r,
   return r;
 }
 
-static void
-set_bankisel(int address)
+/*-------------------------------------------------------------------------
+ *
+ * configuration memory
+ * 
+ * In addition to memory for storing instructions, each pic has memory for
+ * storing configuration data (e.g. code protection, wdt enable, etc.). Each
+ * family of the pic microcontrollers treats this memory slightly different.
+ * gpasm handles these differences with the following functions:
+ *
+ * cfg_evaluate_address(struct pnode *p) - Given a pointer to a node that
+ *       presumably contains the configuration address, this function will
+ *       ensure that the address is valid.
+ * cfg_write(int address, int value) - Store the contents of 'value' at the
+ *       configuration address 'address'
+ * do_config( ) - Called by the parser when a __CONFIG assembler directive
+ *       is encountered.
+ *
+ */
+
+static int cfg_evaluate_address(struct pnode *p)
 {
-  if (state.device.class == PROC_CLASS_PIC14) {
-    if (address < 0x100) {
-      /* bcf 0x3, 0x7 */
-      emit(0x1383);
-    } else {
-      /* bsf 0x3, 0x7 */
-      emit(0x1783);
-    }
-  } else {
-    /* movlb bank */
-    emit(0xb800 | gp_processor_check_bank(state.device.class, address));
-  }
-
-}
-
-static gpasmVal do_bankisel(gpasmVal r,
-		            char *name,
-		            int arity,
-		            struct pnode *parms)
-{
-  struct pnode *p;
-  int num_reloc;
-
-  if ((state.device.class != PROC_CLASS_PIC14) &&
-      (state.device.class != PROC_CLASS_PIC16)) {
-    gpmessage(GPM_EXTPAGE, NULL);
-    return r;
-  }
-
-  if (enforce_arity(arity, 1)) {
-    p = HEAD(parms);
-    if (state.mode == absolute) {
-      set_bankisel(maybe_evaluate(p));
-    } else {
-      num_reloc = count_reloc(p);
- 
-      if (num_reloc == 0) {
-        /* it is an absolute address, generate the bankisel but no relocation */
-        set_bankisel(maybe_evaluate(p));
-      } else if (num_reloc != 1) {
-        gperror(GPE_UNRESOLVABLE, NULL);
-      } else {
-        reloc_evaluate(p, RELOCT_IBANKSEL);
-        emit(0);
-      }
-    }
-  }
-
-  return r;
-}
-
-static gpasmVal do_banksel(gpasmVal r,
-		           char *name,
-		           int arity,
-		           struct pnode *parms)
-{
-  struct pnode *p;
   int address;
-  int bank;
-  int num_reloc;
 
-  if (enforce_arity(arity, 1)) {
-    p = HEAD(parms);
-    if (state.mode == absolute) {
-      address = maybe_evaluate(p);
-      bank = gp_processor_check_bank(state.device.class, address);
-      state.org += gp_processor_set_bank(state.device.class, 
-                                         state.processor_info->num_banks,
-                                         bank, 
-                                         state.i_memory, 
-                                         state.org);
-    } else {
-      num_reloc = count_reloc(p);
+  if(can_evaluate(p)) {
+    address = evaluate(p);
 
-      if (num_reloc == 0) {
-        /* it is an absolute address, generate the banksel but no relocation */
-        address = maybe_evaluate(p);
-        bank = gp_processor_check_bank(state.device.class, address);
-        state.org += gp_processor_set_bank(state.device.class, 
-                                           state.processor_info->num_banks,
-                                           bank, 
-                                           state.i_memory, 
-                                           state.org);
-      } else if (num_reloc != 1) {
-        gperror(GPE_UNRESOLVABLE, NULL);
-      } else if (state.device.class == PROC_CLASS_PIC16) {
-        reloc_evaluate(p, RELOCT_BANKSEL);
-        emit(0);
-      } else if (state.device.class == PROC_CLASS_PIC16E) {
-        reloc_evaluate(p, RELOCT_BANKSEL);
-        emit(0);
-      } else {
-        switch (state.processor_info->num_banks) {
-        case 2:
-          reloc_evaluate(p, RELOCT_BANKSEL);
-          emit(0);
-          break;      
-        case 4:
-          reloc_evaluate(p, RELOCT_BANKSEL);
-          emit(0);
-          emit(0);
-          break;
-        }
+    if(_16bit_core) {
+      switch(address) {
+      case CONFIG1L:
+      case CONFIG1H:
+      case CONFIG2L:
+      case CONFIG2H:
+      case CONFIG3H:
+      case CONFIG4L:
+      case DEVID1:
+      case DEVID2:
+	return address;
+      default:
+	gperror(GPE_RANGE,NULL);
+	return CONFIG1L;
       }
     }
-  }
-
-  return r;
-}
-
-static gpasmVal do_code(gpasmVal r,
-		        char *name,
-		        int arity,
-		        struct pnode *parms)
-{
-  struct pnode *p;
-
-  state.lst.line.linetype = sec;
-  state.next_state = state_section;
-  
-  if (state.mode == absolute) {
-    gperror(GPE_OBJECT_ONLY, NULL);
-  } else {
-    switch (arity) {
-    case 0:
-      /* new relocatable section */
-      strncpy(state.obj.new_sec_name, ".code", sizeof(state.obj.new_sec_name));
-      state.obj.new_sec_addr = 0;
-      state.obj.new_sec_flags = STYP_TEXT;
-      break;
-    case 1:
-      /* new absolute section */
-      p = HEAD(parms);
-      strncpy(state.obj.new_sec_name, ".code", sizeof(state.obj.new_sec_name));
-      state.obj.new_sec_addr = maybe_evaluate(p) >> _16bit_core;
-      state.obj.new_sec_flags = STYP_TEXT | STYP_ABS;
-      break;
-    default:
-      enforce_arity(arity, 1);
+    else {
+      if(address != state.device.config_address)
+	gperror(GPE_RANGE,NULL);
+      return state.device.config_address;
     }
   }
 
-  return r;
+  return state.device.config_address;
 }
 
 static gpasmVal do_constant(gpasmVal r,
@@ -580,97 +878,68 @@ static gpasmVal do_constant(gpasmVal r,
   return r;
 }
 
-/*-------------------------------------------------------------------------
- *
- * configuration memory
- * 
- * In addition to memory for storing instructions, each pic has memory for
- * storing configuration data (e.g. code protection, wdt enable, etc.). Each
- * family of the pic microcontrollers treats this memory slightly different.
- *
- * do_config( ) - Called by the parser when a __CONFIG assembler directive
- *       is encountered.
- *
- */
-
 static gpasmVal do_config(gpasmVal r,
 			  char *name,
 			  int arity,
 			  struct pnode *parms)
 {
   struct pnode *p;
-  int ca;
-  int value;
+  int ca = state.device.config_address;
+  int org;
+  
+  /* save the current org to restore to later */
+  org = state.org;
 
   state.lst.line.linetype = config;
+
+  p = HEAD(parms);
 
   switch(arity) {
   case 1:
     if(_16bit_core) {
       gpwarning(GPW_EXPECTED,"18cxxx devices should specify __CONFIG address");
-      ca = CONFIG1L;
-    } else {
-      ca = state.device.config_address;
+      ca =  CONFIG1L;
     }
-    p = HEAD(parms);
     break;
 
   case 2:
-    ca = maybe_evaluate(HEAD(parms));
+    ca = cfg_evaluate_address(p);
     p = HEAD(TAIL(parms));
+
     break;
 
   default:
     enforce_arity(arity,2);
     return r;
   }
-
   state.lst.config_address = ca;
-
-  if (state.mode == relocatable) {
-    if ((!state.found_devid) && ((ca == DEVID1) || (ca == DEVID2))) {
-      coff_new_section(".devid", ca >> _16bit_core, STYP_ABS | STYP_TEXT);
-      state.found_devid = true;
-    } else if (!state.found_config) {
-      coff_new_section(".config", ca >> _16bit_core, STYP_ABS | STYP_TEXT);
-      state.found_config = true;
-    }
-  }
-
-  if ((can_evaluate(p)) && (state.pass == 2)) { 
-    value = evaluate(p);
+  state.org = ca;
+  if (can_evaluate(p)) { 
 
     if(_16bit_core) {
-      int curval = i_memory_get(state.c_memory, ca>>1);
+      int val = evaluate(p);
+      int curval = i_memory_get(state.i_memory, ca>>1);
       int mask = 0xff <<((ca&1) ? 0 : 8);
 
-      if(value > 0xff) {
+      if(val > 0xff)
 	gpwarning(GPW_RANGE,0);
-      }
+	
       /* If the config address is even, then this byte goes in LSB position */
-      value = (value & 0xff) << ((ca&1) ? 8 : 0)  | MEM_USED_MASK; 
+      val = (val & 0xff) << ((ca&1) ? 8 : 0)  | MEM_USED_MASK; 
 
       if(curval & MEM_USED_MASK)
 	curval &= mask;
       else
 	curval |= mask;
 
-      i_memory_put(state.c_memory, ca>>1,  curval | value);
+      i_memory_put(state.i_memory, ca>>1,  curval | val);
 
     } else {
-      if(value > state.device.core_size) {
-        gpmessage(GPM_RANGE,NULL);
-        value &= state.device.core_size;
-      }
-
-      if (i_memory_get(state.c_memory, ca) & MEM_USED_MASK) {
-        gperror(GPE_ADDROVR, NULL);
-      }
-
-      i_memory_put(state.c_memory, ca, MEM_USED_MASK | value);
-      /* FIXME: need line_number? this one will be wrong coff_linenum(1) */
+      emit(evaluate(p));
     }
   }
+  /* return to the org before the config was called */
+  state.org = org;
         
   return r;
 }
@@ -718,17 +987,7 @@ static gpasmVal do_data(gpasmVal r,
 
   list.next = NULL;
   simplify_data(parms, &list, 1);
-
-  if ((state.mode == relocatable) &&
-      !(SECTION_FLAGS & STYP_TEXT)) {
-    /* This is a data memory not program */
-    state.lst.line.linetype = res;
-
-    /* data memory is byte sized so split the data */  
-    data(&list, 0, SPLIT_PACK);
-  } else {
-    data(&list, 0, DEFAULT_LIT_MASK);
-  } 
+  data(&list, 0, DEFAULT_LIT_MASK);
 
   return r;
 }
@@ -752,23 +1011,11 @@ static gpasmVal do_db(gpasmVal r,
   list.next = NULL;
   simplify_data(parms, &list,0);
 
-  if ((state.mode == relocatable) &&
-      !(SECTION_FLAGS & STYP_TEXT)) {
-    /* This is a data memory not program */
-    state.lst.line.linetype = res;
- 
-    /* only valid in initialized data sections */
-    if (SECTION_FLAGS & STYP_BSS)
-      gperror(GPE_WRONG_SECTION, NULL);
-
-    data(&list, 0, 0xff);
+  if(_16bit_core) {
+    data(&list, 0, PACKING_BYTES);
   } else {
-    if(_16bit_core) {
-      data(&list, 0, PACKING_BYTES);
-    } else {
-      data(&list, 0, ENDIAN_SWAP | PACKING_BYTES);
-    }    
-  } 
+    data(&list, 0, ENDIAN_SWAP | PACKING_BYTES);
+  }  
 
   return r;
 }
@@ -783,267 +1030,8 @@ static gpasmVal do_de(gpasmVal r,
 
   list.next = NULL;
   simplify_data(parms, &list,0);
-  if(_16bit_core) {
-    data(&list, 0, PACKING_BYTES);
-  } else {
-    data(&list, 0, 0xff);
-  }  
+  data(&list, 0, 0xff);
 
-
-  return r;
-}
-
-static gpasmVal do_def(gpasmVal r,
-                       char *name,
-                       int arity,
-                       struct pnode *parms)
-{
-  struct pnode *p;
-  char *symbol_name = NULL;
-  gp_symbol_type *coff_symbol = NULL;
-  int shift = 0;
-  int eval;
-  int value = 0;
-  gp_boolean new_class = false;
-  int coff_class = C_NULL;
-  gp_boolean new_type = false;
-  int coff_type = T_NULL;
-  enum gpasmValTypes type = gvt_debug;
-
-  state.lst.line.linetype = dir;
-
-  if (state.mode == absolute) {
-    gperror(GPE_OBJECT_ONLY, NULL);
-  } else {
-    if (arity < 2) { 
-      enforce_arity(arity, 2);
-      return r;
-    }
-
-    /* the first argument is the symbol name */
-    p = HEAD(parms);
-    if (enforce_simple(p)) {
-      symbol_name = p->value.symbol;
-    } else {
-      return r;
-    }
-    parms = TAIL(parms);
-
-    if ((SECTION_FLAGS & STYP_TEXT) && _16bit_core) {
-      shift = 1;
-    }
-
-    /* update the properties */
-    for (; parms; parms = TAIL(parms)) {
-      p = HEAD(parms);
-      if ((p->tag == binop) &&
-	  (p->value.binop.op == '=')) {
-        if (enforce_simple(p->value.binop.p0)) {
-	  char *lhs;
-
-	  lhs = p->value.binop.p0->value.symbol;
-          if (strcasecmp(lhs, "value") == 0) {
-            value = maybe_evaluate(p->value.binop.p1);   
-    	  } else if (strcasecmp(lhs, "size") == 0) {
-            state.org += (maybe_evaluate(p->value.binop.p1) >> shift);   
-    	  } else if (strcasecmp(lhs, "type") == 0) {
-            eval = maybe_evaluate(p->value.binop.p1);   
-            if ((eval < 0) || (eval > 0xffff)) {
-              gperror(GPE_RANGE, NULL);
-            } else {
-              new_type = true;
-              coff_type = eval;   
-            }
-    	  } else if (strcasecmp(lhs, "class") == 0) {
-            eval = maybe_evaluate(p->value.binop.p1);   
-            if ((eval < -128) || (eval > 127)) {
-              gperror(GPE_RANGE, NULL);
-            } else {
-              new_class = true;
-              coff_class = eval;   
-            }
-          } else {
-            gperror(GPE_ILLEGAL_ARGU, NULL);
-          }
-        }
-      } else {
-        if (enforce_simple(p)) {
-	  if (strcasecmp(p->value.symbol, "absolute") == 0) {
-            type = gvt_absolute;
-            value = 0;   
-  	  } else if (strcasecmp(p->value.symbol, "debug") == 0) {
-            type = gvt_debug;
-            value = 0;   
-	  } else if (strcasecmp(p->value.symbol, "extern") == 0) {
-            type = gvt_extern;
-            value = 0;   
-  	  } else if (strcasecmp(p->value.symbol, "global") == 0) {
-            type = gvt_global;
-            value = state.org << shift;
-  	  } else if (strcasecmp(p->value.symbol, "static") == 0) {
-            type = gvt_static;
-            value = state.org << shift;
-  	  } else {
-            gperror(GPE_ILLEGAL_ARGU, NULL);
-          }
-        }
-      }
-    }
-  }
-
-  set_global(symbol_name, value, PERMANENT, type);
-
-  /* update the symbol with the values */
-  if ((state.pass == 2) && (new_class || new_type)) {
-    coff_symbol = gp_coffgen_findsymbol(state.obj.object, symbol_name);
-    assert(coff_symbol != NULL);
-    if (new_class)
-      coff_symbol->class = coff_class;
-      
-    if (new_type)
-      coff_symbol->type = coff_type;
-  }
-
-  return r;
-}
-
-static gpasmVal do_dim(gpasmVal r,
-                       char *name,
-                       int arity,
-                       struct pnode *parms)
-{
-  struct pnode *p;
-  char *symbol_name = NULL;
-  gp_symbol_type *coff_symbol = NULL;
-  int number_symbols;
-  gp_aux_type *aux_list;
-  struct sllist first_list;
-  struct sllist *list = &first_list;
-  struct sllist *previous;
-  int i;
-  int value;
-
-  state.lst.line.linetype = dir;
-
-  if (state.mode == absolute) {
-    gperror(GPE_OBJECT_ONLY, NULL);
-  } else {
-    if (arity < 3) { 
-      enforce_arity(arity, 1);
-      return r;
-    }
-    
-    /* the first argument is the symbol name */
-    p = HEAD(parms);
-    if (enforce_simple(p)) {
-      /* lookup the symbol */
-      symbol_name = p->value.symbol;
-      coff_symbol = gp_coffgen_findsymbol(state.obj.object, symbol_name);
-      if (coff_symbol == NULL) {
-        gperror(GPE_NOSYM, NULL);
-        return r;
-      }
-    } else {
-      return r;
-    }
-    parms = TAIL(parms);
-
-    /* the second argument must be the number of aux symbols */
-    p = HEAD(parms);
-    number_symbols = maybe_evaluate(p);
-    if ((number_symbols < 0) || (number_symbols > 127)) {
-      gperror(GPE_UNKNOWN, "number of auxiliary symbols must be less then 128 and positive"); 
-      return r;
-    }
-    state.obj.symbol_num += number_symbols;
-    parms = TAIL(parms);
-
-    /* create the symbols */
-    aux_list = gp_coffgen_blockaux(number_symbols);
-    coff_symbol->num_auxsym = number_symbols;
-    coff_symbol->aux_list = aux_list;
-
-    /* convert the arguments into a list of values */
-    list->next = NULL;
-    simplify_data(parms, list, 0);
-
-    /* write the data to the auxiliary symbols */
-    list = list->next;
-    i = 0;
-    while(list) {
-      value = maybe_evaluate(list->p);
-      if (value & (~0xff)) {
-        gperror(GPE_RANGE, NULL); 
-        return r;
-      }
-      
-      if (aux_list == NULL) {
-        gperror(GPE_UNKNOWN, "insufficent number of auxiliary symbols"); 
-        return r;
-      }
-      
-      if (i == SYMBOL_SIZE) {
-        i = 0;
-        aux_list = aux_list->next;      
-      } else {
-        aux_list->_aux_symbol.data[i++] = value;
-      }
-
-      previous = list;
-      list = list->next;
-      free(previous);
-    }
-  }
-
-  return r;
-}
-
-static gpasmVal do_direct(gpasmVal r,
-		          char *name,
-		          int arity,
-		          struct pnode *parms)
-{
-
-  struct pnode *p;
-  int value;
-  unsigned char direct_command = 0;
-  char *direct_string = NULL;
-
-  state.lst.line.linetype = dir;
-
-  if (state.mode == absolute) {
-    gperror(GPE_OBJECT_ONLY, NULL);
-  } else if (enforce_arity(arity, 2)) {
-    p = HEAD(parms);
-    value = maybe_evaluate(p);
-    if ((value < 0) || (value > 255)) {
-      gperror(GPE_RANGE, NULL);
-    } else {
-      direct_command = value;   
-    }
-
-    p= HEAD(TAIL(parms));
-    if (p->tag == string) {
-      if (strlen(p->value.string) < 255) {
-        direct_string = p->value.string;
-      } else {
-        gperror(GPE_UNKNOWN, "string must be less than 255 bytes long");
-      }
-    } else {
-      gperror(GPE_ILLEGAL_ARGU, NULL);
-    }  
-
-    if (direct_string == NULL) {
-      return r;
-    }
-
-    if (SECTION_FLAGS & STYP_TEXT) {
-      coff_add_directsym(direct_command, direct_string);
-    } else {
-      gperror(GPE_WRONG_SECTION, NULL);
-    }
-  
-  }
 
   return r;
 }
@@ -1065,7 +1053,7 @@ static gpasmVal do_dt(gpasmVal r,
 
   list.next = NULL;
   simplify_data(parms, &list, 0);
-  data(&list, i->opcode, 0xff);
+  data(&list, i->mask, 0xff);
 
   return r;
 }
@@ -1086,22 +1074,7 @@ static gpasmVal do_dw(gpasmVal r,
 
   list.next = NULL;
   simplify_data(parms, &list, 1);
-
-  if ((state.mode == relocatable) &&
-      !(SECTION_FLAGS & STYP_TEXT)) {
-    /* This is a data memory not program */
-    state.lst.line.linetype = res;
-
-    /* only valid in initialized data sections */
-    if (SECTION_FLAGS & STYP_BSS)
-      gperror(GPE_WRONG_SECTION, NULL);
-
-    /* data memory is byte sized so split the data */  
-    data(&list, 0, SPLIT_PACK);
-  } else {
-    data(&list, 0, DEFAULT_LIT_MASK);
-  }
-  
+  data(&list, 0, DEFAULT_LIT_MASK);
 
   return r;
 }
@@ -1166,39 +1139,36 @@ static gpasmVal do_endw(gpasmVal r,
 			int arity,
 			struct pnode *parms)
 {
-  state.lst.line.linetype = dir;
+  int temp_expand;
+  int count = 1; 
 
   assert(!state.mac_head);
-  if (state.mac_prev == NULL) {
+  if (state.mac_prev == NULL)
     gperror(GPE_ILLEGAL_COND, "Illegal condition (ENDW).");
-  } else if (maybe_evaluate(state.while_head->parms)) {
-    state.next_state = state_while;  
-    state.next_buffer.macro = state.while_head;
-  }
+  else {
+    state.mac_prev = NULL;
 
-  state.mac_body = NULL;
-  state.mac_prev = NULL;
-  state.while_head = NULL;
-
-  return r;
-}
-
-static gpasmVal do_eof(gpasmVal r,
-		       char *name,
-		       int arity,
-		       struct pnode *parms)
-{
-  state.lst.line.linetype = dir;
-
-  if (state.mode == absolute) {
-    gperror(GPE_OBJECT_ONLY, NULL);
-  } else if (enforce_arity(arity, 0)) {
-    if (state.debug_info) { 
-      coff_add_eofsym();
-    } else {
-      gpwarning(GPW_UNKNOWN, "directive ignored when debug info is disabled");
+    temp_expand = state.lst.expand;
+    if (state.stGlobal != state.stTop) {
+      state.lst.expand = 0;      /* don't expand while loops within macros */
     }
+
+    /* Now actually do the WHILE body */
+    while (maybe_evaluate(state.while_head->parms)) {
+      execute_body(state.while_head);
+      if (count > 255) {
+        gperror(GPE_BAD_WHILE_LOOP, NULL);
+        break;
+      }
+      count++;
+    }
+    
+    state.lst.expand = temp_expand;
   }
+
+  state.lst.line.linetype = dir;
+  state.mac_body = NULL;
+  state.while_head = NULL;
 
   return r;
 }
@@ -1281,23 +1251,10 @@ static gpasmVal do_errlvl(gpasmVal r,
         gperror(GPE_ILLEGAL_ARGU, "Expected 0, 1, 2, +|-<message number>");
       }
     }
-  }
 
-  return r;
-}
-
-static gpasmVal do_exitm(gpasmVal r,
-			 char *name,
-			 int arity,
-			 struct pnode *parms)
-{
-  state.lst.line.linetype = dir;
-  if (enforce_arity(arity, 0)) {
-    if (state.stGlobal == state.stTop) {
-      gperror(GPE_UNKNOWN, "Attempt to use \"exitm\" outside of macro");
-    } else {
-      state.next_state = state_exitmacro;
-    }
+    #ifdef __DEBUG__
+      print_errorcodes();  
+    #endif
   }
 
   return r;
@@ -1309,63 +1266,13 @@ static gpasmVal do_expand(gpasmVal r,
 		       struct pnode *parms)
 {
   state.lst.line.linetype = dir;
-  if (state.cmd_line.macro_expand) {
+  if (state.cmd_line.macro_expand == 1){
     gpmessage(GPM_SUPLIN, NULL);
   } else {
     if (enforce_arity(arity, 0)) {
-      state.lst.expand = true;
+      state.lst.expand = 1;
     }
   }
-  return r;
-}
-
-static gpasmVal do_extern(gpasmVal r,
-		          char *name,
-		          int arity,
-		          struct pnode *parms)
-{
-  struct pnode *p;
-  state.lst.line.linetype = dir;
-  
-  if (state.mode == absolute) {
-    gperror(GPE_OBJECT_ONLY, NULL);
-  } else {
-    for (; parms; parms = TAIL(parms)) {
-      p = HEAD(parms);
-      if (p->tag == symbol) {
-        set_global(p->value.symbol, 0, PERMANENT, gvt_extern);
-      } else {
-        gperror(GPE_ILLEGAL_ARGU, NULL);
-      }
-    }
-  }
-
-  return r;
-}
-
-static gpasmVal do_file(gpasmVal r,
-		       char *name,
-		       int arity,
-		       struct pnode *parms)
-{
-  struct pnode *p;
-  state.lst.line.linetype = dir;
-  
-  if (state.mode == absolute) {
-    gperror(GPE_OBJECT_ONLY, NULL);
-  } else if (enforce_arity(arity, 1)) {
-    if (state.debug_info) {
-      p = HEAD(parms);
-      if (p->tag == string) {
-        state.obj.debug_file = coff_add_filesym(p->value.string, 0);
-      } else {
-        gperror(GPE_ILLEGAL_ARGU, NULL);
-      }
-    } else {
-      gpwarning(GPW_UNKNOWN, "directive ignored when debug info is disabled");
-    }
-  }
-
   return r;
 }
 
@@ -1393,176 +1300,48 @@ static gpasmVal do_fill(gpasmVal r,
   return r;
 }
 
-static gpasmVal do_global(gpasmVal r,
-		          char *name,
-		          int arity,
-		          struct pnode *parms)
-{
-  struct pnode *p;
-  char buf[BUFSIZ];
-  struct symbol *s;
-  struct variable *var;
-
-  state.lst.line.linetype = dir;
-  
-  if (state.mode == absolute) {
-    gperror(GPE_OBJECT_ONLY, NULL);
-  } else {
-    for (; parms; parms = TAIL(parms)) {
-      p = HEAD(parms);
-      if (p->tag == symbol) {
-        s = get_symbol(state.stTop, p->value.symbol);
-        if (s == NULL) {
-          snprintf(buf,
-                   sizeof(buf),
-                   "Symbol not previously defined (%s).",
-                   p->value.symbol);
-          gperror(GPE_NOSYM, buf);    
-	} else {
-          var = get_symbol_annotation(s);
-          if (var == NULL) {
-            snprintf(buf,
-                     sizeof(buf),
-                     "Symbol not assigned a value (%s).",
-                     p->value.symbol);
-            gpwarning(GPW_UNKNOWN, buf);    
-          } else {
-            if ((var->previous_type == gvt_address) || 
-                (var->previous_type == gvt_global)  ||
-                (var->previous_type == gvt_static)) {
-              /* make the symbol global */
-              var->type = gvt_global;
-            } else if (var->previous_type == gvt_extern) { 
-              gperror(GPE_DUPLAB, NULL);    
-            } else {
-              snprintf(buf,
-                       sizeof(buf),
-                       "Operand must be an address label (%s).", 
-                       p->value.symbol);
-              gperror(GPE_MUST_BE_LABEL, buf);    
-            } 
-          }         
-        }  
-      } else {
-        gperror(GPE_ILLEGAL_ARGU, NULL);
-      }
-    }  
-  }
-
-  return r;
-}
-
-static gpasmVal do_idata(gpasmVal r,
-		         char *name,
-		         int arity,
-		         struct pnode *parms)
-{
-  struct pnode *p;
-
-  state.lst.line.linetype = sec;
-  state.next_state = state_section;
-  
-  if (state.mode == absolute) {
-    gperror(GPE_OBJECT_ONLY, NULL);
-  } else {
-    switch (arity) {
-    case 0:
-      /* new relocatable section */
-      strncpy(state.obj.new_sec_name, ".idata", sizeof(state.obj.new_sec_name));
-      state.obj.new_sec_addr = 0;
-      state.obj.new_sec_flags = STYP_DATA;
-      break;
-    case 1:
-      /* new absolute section */
-      p = HEAD(parms);
-      strncpy(state.obj.new_sec_name, ".idata", sizeof(state.obj.new_sec_name));
-      state.obj.new_sec_addr = maybe_evaluate(p) >> _16bit_core;
-      state.obj.new_sec_flags = STYP_DATA | STYP_ABS;
-      break;
-    default:
-      enforce_arity(arity, 1);
-    }  
-  }
-
-  return r;
-}
-
-static gpasmVal do_ident(gpasmVal r,
-		         char *name,
-		         int arity,
-		         struct pnode *parms)
-{
-  struct pnode *p;
-  state.lst.line.linetype = dir;
-  
-  if (state.mode == absolute) {
-    gperror(GPE_OBJECT_ONLY, NULL);
-  } else if (enforce_arity(arity, 1)) {
-    p = HEAD(parms);
-    if (p->tag == string) {
-      coff_add_identsym(p->value.string);
-    } else {
-      gperror(GPE_ILLEGAL_ARGU, NULL);
-    }
-  }
-
-  return r;
-}
-
 static gpasmVal do_idlocs(gpasmVal r,
 		          char *name,
 		          int arity,
 		          struct pnode *parms)
 {
+
+  int org;
   int value;
   int idreg;
   int curvalue;
   int mask;
 
+  /* save the current org to restore to later */
+  org = state.org;
+
   if (_17cxx_core) {
     gperror(GPE_ILLEGAL_DIR, NULL);
-    return r;
-  }
 
-  if (_16bit_core) {
-    if (enforce_arity(arity,2)) {
+  } else if (_16bit_core) {
+    state.lst.line.linetype = config;
+
+    if (enforce_arity(arity, 2)) {
+
       idreg = maybe_evaluate(HEAD(parms));
-      value = maybe_evaluate(HEAD(TAIL(parms)));
-    } else {
-      gperror(GPW_EXPECTED,"18cxxx devices should specify __IDLOC address");
-      return r;
-    }
-  } else {
-    if (enforce_arity(arity,1)) {
-      idreg = state.device.id_location;
-      value = maybe_evaluate(HEAD(parms));
-    } else {
-      return r;
-    }
-  }
 
-  if ((state.mode == relocatable) && (!state.found_idlocs)) {
-    coff_new_section(".idlocs", idreg >> _16bit_core, STYP_ABS | STYP_TEXT);
-    state.found_idlocs = true;
-  }
-
-  state.lst.config_address = idreg;
-  state.device.id_location = idreg;
-
-  if (state.pass == 2) {
-    if (_16bit_core) {
-      state.lst.line.linetype = config;
-
-      if (idreg > IDLOC7 || idreg < IDLOC0) {
+      if (idreg > 0x200007 || idreg < 0x200000) {
         gperror(GPE_RANGE,NULL);
       } else {
-        if(value > 0xff) {
+
+        state.device.id_location = idreg;
+        state.lst.config_address = idreg;
+        state.org = idreg;
+      
+        value = maybe_evaluate(HEAD(TAIL(parms)));
+        
+        if(value > 0xff)
           gpwarning(GPW_RANGE, NULL);
-        }
-        curvalue = i_memory_get(state.c_memory, idreg>>1);
+	
+        curvalue = i_memory_get(state.i_memory, idreg>>1);
         mask = 0xff <<((idreg&1) ? 0 : 8);
 	
-        /* If the address is even, then this byte goes in LSB position */
+        /* If the config address is even, then this byte goes in LSB position */
         value = (value & 0xff) << ((idreg&1) ? 8 : 0)  | MEM_USED_MASK; 
 
         if(curvalue & MEM_USED_MASK)
@@ -1570,33 +1349,33 @@ static gpasmVal do_idlocs(gpasmVal r,
         else
           curvalue |= mask;
 
-        i_memory_put(state.c_memory, idreg>>1,  curvalue | value);
+        i_memory_put(state.i_memory, idreg>>1,  curvalue | value);
+
       }
-
-    } else {
-      state.lst.line.linetype = idlocs;
-
-      if (value > 0xffff) {
-        gpmessage(GPM_IDLOC, NULL);
-        value &= 0xffff;
-      }     
-      
-      if (i_memory_get(state.c_memory, idreg) & MEM_USED_MASK) {
-        gperror(GPE_ADDROVR, NULL);
-      }
-
-      i_memory_put(state.c_memory, idreg,     
-                   ((value & 0xf000) >> 12) | MEM_USED_MASK);
-      i_memory_put(state.c_memory, idreg + 1,
-                   ((value & 0x0f00) >> 8) | MEM_USED_MASK);
-      i_memory_put(state.c_memory, idreg + 2,
-                   ((value & 0x00f0) >> 4) | MEM_USED_MASK);
-      i_memory_put(state.c_memory, idreg + 3,
-                   (value & 0x000f) | MEM_USED_MASK);
 
     }
+
+  } else {
+
+    if (enforce_arity(arity, 1)) {
+      state.org = state.device.id_location;
+      state.lst.line.linetype = idlocs;
+      value = maybe_evaluate(HEAD(parms));
+      if (value > 0xffff) {
+        gpmessage(GPM_IDLOC, NULL);
+	value &= 0xffff;
+      }     
+      emit((value & 0xf000) >> 12);
+      emit((value & 0x0f00) >> 8);
+      emit((value & 0x00f0) >> 4);
+      emit((value & 0x000f));
+    }
+
   }
-  
+
+  /* return to the org before the __idlocs was called */
+  state.org = org;
+ 
   return r;
 }
 
@@ -1671,52 +1450,6 @@ static gpasmVal do_ifndef(gpasmVal r,
 
   return r;
 }
-
-static gpasmVal do_include(gpasmVal r,
-		           char *name,
-		           int arity,
-		           struct pnode *parms)
-{
-  struct pnode *p;
-
-  state.lst.line.linetype = dir;
-
-  if (enforce_arity(arity, 1)) {
-    p = HEAD(parms);
-    if (p->tag == string) {
-      state.next_state = state_include;  
-      state.next_buffer.file = strdup(p->value.string);
-    } else {
-      gperror(GPE_ILLEGAL_ARGU, NULL);
-    }
-  }
-
-  return r;
-}
-
-static gpasmVal do_line(gpasmVal r,
-		       char *name,
-		       int arity,
-		       struct pnode *parms)
-{
-  struct pnode *p;
-
-  state.lst.line.linetype = dir;
-
-  if (state.mode == absolute) {
-    gperror(GPE_OBJECT_ONLY, NULL);
-  } else if (enforce_arity(arity, 1)) {
-    if (state.debug_info) {
-      p = HEAD(parms);
-      state.obj.debug_line = maybe_evaluate(p);
-    } else {
-      gpwarning(GPW_UNKNOWN, "directive ignored when debug info is disabled");
-    }
-  }
-
-  return r;
-}
-
 /************************************************************************
  * do_list - parse the LIST directive
  *
@@ -1741,7 +1474,7 @@ static gpasmVal do_list(gpasmVal r,
 {
   struct pnode *p;
 
-  state.lst.enabled = true;
+  state.lst.enabled = 1;
   state.lst.line.linetype = dir;
 
   for (; parms; parms = TAIL(parms)) {
@@ -1780,10 +1513,6 @@ static gpasmVal do_list(gpasmVal r,
 	} else if (strcasecmp(lhs, "p") == 0) {
 	  if (enforce_simple(p->value.binop.p1))
 	    select_processor(p->value.binop.p1->value.symbol);
-	} else if (strcasecmp(lhs, "pe") == 0) {
-          state.extended_pic16e = true;
-	  if (enforce_simple(p->value.binop.p1))
-	    select_processor(p->value.binop.p1->value.symbol);
 	} else if (strcasecmp(lhs, "r") == 0) {
 	  if (enforce_simple(p->value.binop.p1))
 	    select_radix(p->value.binop.p1->value.symbol);
@@ -1792,7 +1521,7 @@ static gpasmVal do_list(gpasmVal r,
 	} else if (strcasecmp(lhs, "t") == 0) {
 	  ; /* Ignore this for now: always wrap long list lines */
 	} else if (strcasecmp(lhs, "w") == 0) {
-          select_errorlevel(maybe_evaluate(p->value.binop.p1));
+          select_errorlevel(p->value.binop.p1->value.constant);
 	} else if (strcasecmp(lhs, "x") == 0) {
 	  if (enforce_simple(p->value.binop.p1))
             select_expand(p->value.binop.p1->value.symbol);
@@ -1816,11 +1545,6 @@ static gpasmVal do_list(gpasmVal r,
       }
     }
   }
-
-  /* The .list symbol is only added to the COFF file if its only action is to turn on
-     the listing */
-  if (arity == 0)
-    coff_add_listsym();
 
   return r;
 }
@@ -1854,7 +1578,7 @@ static gpasmVal do_local(gpasmVal r,
           set_global(lhs, value, TEMPORARY, gvt_constant);
         }
       } else if (p->tag == symbol) {
-        /* put the symbol in the Top table */
+        /* put the symbol in the Top table*/
         add_symbol(state.stTop, p->value.symbol);
       } else {
         gperror(GPE_ILLEGAL_ARGU, NULL);
@@ -1871,11 +1595,11 @@ static gpasmVal do_noexpand(gpasmVal r,
 		       struct pnode *parms)
 {
   state.lst.line.linetype = dir;
-  if (state.cmd_line.macro_expand) {
+  if (state.cmd_line.macro_expand == 1){
     gpmessage(GPM_SUPLIN, NULL);
   } else {
     if (enforce_arity(arity, 0)) {
-      state.lst.expand = false;
+      state.lst.expand = 0;
     }
   }
   return r;
@@ -1887,12 +1611,7 @@ static gpasmVal do_nolist(gpasmVal r,
 		       struct pnode *parms)
 {
   state.lst.line.linetype = dir;
-  
-  if (!state.lst.force)
-    state.lst.enabled = false;
-    
-  coff_add_nolistsym();
-  
+  state.lst.enabled = 0;
   return r;
 }
 
@@ -1922,11 +1641,8 @@ static gpasmVal do_macro(gpasmVal r,
 
   head->parms = parms;
   head->body = NULL;
-  head->defined = 0;
-  /* Record data for the list, cod, and coff files */
+  /* Record data for the list and cod files */
   head->line_number = state.src->line_number;
-  head->file_symbol = state.src->file_symbol;
-
   head->src_name = strdup(state.src->name);
   
   state.lst.line.linetype = dir;
@@ -1964,25 +1680,11 @@ static gpasmVal do_org(gpasmVal r,
 		       struct pnode *parms)
 {
   struct pnode *p;
-
   state.lst.line.linetype = org;
-
   if (enforce_arity(arity, 1)) {
     p = HEAD(parms);
-    if (can_evaluate(p)) {
-      r = evaluate(p) >> _16bit_core;
-      if (state.mode == absolute) {
-        state.org = r;
-      }	else {
-        /* Default section name, this will be overwritten if a label is 
-           present. */
-        snprintf(state.obj.new_sec_name, sizeof(state.obj.new_sec_name), ".org_%d", state.obj.org_num++);
-        state.obj.new_sec_addr = r;
-        state.obj.new_sec_flags = STYP_TEXT | STYP_ABS;
-        state.lst.line.linetype = sec;
-        state.next_state = state_section;
-      }
-    }
+    if (can_evaluate(p))
+      r = state.org = evaluate(p) >> _16bit_core;
   }
 
   return r;
@@ -1996,73 +1698,6 @@ static gpasmVal do_page(gpasmVal r,
   state.lst.line.linetype = dir;
   if (enforce_arity(arity, 0))
     lst_throw();
-
-  return r;
-}
-
-static gpasmVal do_pagesel(gpasmVal r,
-		           char *name,
-		           int arity,
-		           struct pnode *parms)
-{
-  struct pnode *p;
-  int address;
-  int page;
-  int num_reloc;
-  
-  if ((state.device.class == PROC_CLASS_EEPROM8) ||
-      (state.device.class == PROC_CLASS_PIC16E)) {
-    /* do nothing */
-    return r;
-  } else if (state.device.class == PROC_CLASS_PIC16) {
-    gpmessage(GPM_W_MODIFIED, NULL);
-  }
-
-  if (enforce_arity(arity, 1)) {
-    p = HEAD(parms);
-    if (state.mode == absolute) {
-      address = maybe_evaluate(p);
-      page = gp_processor_check_page(state.device.class, address);
-      state.org += gp_processor_set_page(state.device.class, 
-                                         state.processor_info->num_pages,
-                                         page, 
-                                         state.i_memory, 
-                                         state.org);
-    } else {
-      num_reloc = count_reloc(p);
-      
-      if (num_reloc == 0) {
-        /* it is an absolute address, generate the pagesel but no relocation */
-        address = maybe_evaluate(p);
-        page = gp_processor_check_page(state.device.class, address);
-
-        state.org += gp_processor_set_page(state.device.class, 
-                                           state.processor_info->num_pages,
-                                           page, 
-                                           state.i_memory, 
-                                           state.org);
-      } else if (num_reloc != 1) {
-        gperror(GPE_ILLEGAL_LABEL, NULL);
-      } else if (state.device.class == PROC_CLASS_PIC16) {
-        reloc_evaluate(p, RELOCT_PAGESEL_WREG);
-        emit(0);
-        emit(0);
-      } else {
-        switch (state.processor_info->num_pages) {
-        case 2:
-          reloc_evaluate(p, RELOCT_PAGESEL_BITS);
-          emit(0);
-          break;      
-        case 4:
-          reloc_evaluate(p, RELOCT_PAGESEL_BITS);
-          emit(0);
-          emit(0);
-          break;
-        }
-      }
-    }
-
-  }
 
   return r;
 }
@@ -2107,33 +1742,13 @@ static gpasmVal do_res(gpasmVal r,
 		       struct pnode *parms)
 {
   struct pnode *p;
-  int count;
-  int i;
 
+  state.lst.line.linetype = equ;
   if (enforce_arity(arity, 1)) {
     p = HEAD(parms);
     if (can_evaluate(p)) {
-      count = evaluate(p);
       r = state.org;
-
-      if (state.mode == absolute) {
-        state.lst.line.linetype = equ;
-        state.org += (count >> _16bit_core);
-      } else {
-        state.lst.line.linetype = res;
-        if (SECTION_FLAGS & STYP_TEXT)
-          count >>= _16bit_core;
-
-        for (i = 0; i < count; i++) {
-          if (SECTION_FLAGS & STYP_TEXT) {
-            /* For some reason program memory is filled with a different 
-               value. */
-            emit(state.device.core_size);     
-          } else {
-            emit(0);     
-          }
-        }
-      }
+      state.org += (evaluate(p) >> _16bit_core);
     }
   }
 
@@ -2182,195 +1797,6 @@ static gpasmVal do_space(gpasmVal r,
         break;
       default:
         enforce_arity(arity, 1);
-    }
-  }
-
-  return r;
-}
-
-static gpasmVal do_type(gpasmVal r,
-		        char *name,
-		        int arity,
-		        struct pnode *parms)
-{
-  struct pnode *p;
-  char *symbol_name = NULL;
-  gp_symbol_type *coff_symbol = NULL;
-  int value;
-
-  state.lst.line.linetype = dir;
-  
-  if (state.mode == absolute) {
-    gperror(GPE_OBJECT_ONLY, NULL);
-  } else if (enforce_arity(arity, 2)) {
-    /* the first argument is the symbol name */
-    p = HEAD(parms);
-    if (enforce_simple(p)) {
-      symbol_name = p->value.symbol;
-      coff_symbol = gp_coffgen_findsymbol(state.obj.object, symbol_name);
-      if (coff_symbol == NULL) {
-        gperror(GPE_NOSYM, NULL);
-      } else {
-        p = HEAD(TAIL(parms));
-        value = maybe_evaluate(p);   
-        if ((value < 0) || (value > 0xffff)) {
-          gperror(GPE_RANGE, NULL);
-        } else {
-          coff_symbol->type = value;   
-        }
-      }
-    }
-  }
-
-  return r;
-}
-
-static gpasmVal do_udata(gpasmVal r,
-		         char *name,
-		         int arity,
-		         struct pnode *parms)
-{
-  struct pnode *p;
-
-  state.lst.line.linetype = sec;
-  state.next_state = state_section;
-  
-  if (state.mode == absolute) {
-    gperror(GPE_OBJECT_ONLY, NULL);
-  } else {
-    switch (arity) {
-    case 0:
-      /* new relocatable section */
-      strncpy(state.obj.new_sec_name, ".udata", sizeof(state.obj.new_sec_name));
-      state.obj.new_sec_addr = 0;
-      state.obj.new_sec_flags = STYP_BSS;
-      break;
-    case 1:
-      /* new absolute section */
-      p = HEAD(parms);
-      strncpy(state.obj.new_sec_name, ".udata", sizeof(state.obj.new_sec_name));
-      state.obj.new_sec_addr = maybe_evaluate(p);
-      state.obj.new_sec_flags = STYP_BSS | STYP_ABS;
-      break;
-    default:
-      enforce_arity(arity, 1);
-    }
-  }
-
-  return r;
-}
-
-static gpasmVal do_udata_acs(gpasmVal r,
-		             char *name,
-		             int arity,
-		             struct pnode *parms)
-{
-  struct pnode *p;
-
-  state.lst.line.linetype = sec;
-  state.next_state = state_section;
-  
-  if (state.mode == absolute) {
-    gperror(GPE_OBJECT_ONLY, NULL);
-  } else {
-    switch (arity) {
-    case 0:
-      /* new relocatable section */
-      strncpy(state.obj.new_sec_name,
-              ".udata_acs",
-              sizeof(state.obj.new_sec_name));
-      state.obj.new_sec_addr = 0;
-      state.obj.new_sec_flags = STYP_BSS | STYP_ACCESS;
-      break;
-    case 1:
-      /* new absolute section */
-      p = HEAD(parms);
-      strncpy(state.obj.new_sec_name,
-              ".udata_acs",
-              sizeof(state.obj.new_sec_name));
-      state.obj.new_sec_addr = maybe_evaluate(p);
-      state.obj.new_sec_flags = STYP_BSS | STYP_ABS | STYP_ACCESS;
-      break;
-    default:
-      enforce_arity(arity, 1);
-    }
-  }
-
-  return r;
-}
-
-static gpasmVal do_udata_ovr(gpasmVal r,
-		             char *name,
-		             int arity,
-		             struct pnode *parms)
-{
-  struct pnode *p;
-
-  state.lst.line.linetype = sec;
-  state.next_state = state_section;
-  
-  if (state.mode == absolute) {
-    gperror(GPE_OBJECT_ONLY, NULL);
-  } else {
-    switch (arity) {
-    case 0:
-      /* new relocatable section */
-      strncpy(state.obj.new_sec_name,
-              ".udata_ovr",
-              sizeof(state.obj.new_sec_name));
-      state.obj.new_sec_addr = 0;
-      state.obj.new_sec_flags = STYP_BSS | STYP_OVERLAY;
-      break;
-    case 1:
-      /* new absolute section */
-      p = HEAD(parms);
-      strncpy(state.obj.new_sec_name,
-              ".udata_ovr",
-              sizeof(state.obj.new_sec_name));
-      state.obj.new_sec_addr = maybe_evaluate(p);
-      state.obj.new_sec_flags = STYP_BSS | STYP_ABS | STYP_OVERLAY;
-      break;
-    default:
-      enforce_arity(arity, 1);
-    }
-  }
-
-  return r;
-}
-
-static gpasmVal do_udata_shr(gpasmVal r,
-		             char *name,
-		             int arity,
-		             struct pnode *parms)
-{
-  struct pnode *p;
-
-  state.lst.line.linetype = sec;
-  state.next_state = state_section;
-  
-  if (state.mode == absolute) {
-    gperror(GPE_OBJECT_ONLY, NULL);
-  } else {
-    switch (arity) {
-    case 0:
-      /* new relocatable section */
-      strncpy(state.obj.new_sec_name,
-              ".udata_shr",
-              sizeof(state.obj.new_sec_name));
-      state.obj.new_sec_addr = 0;
-      state.obj.new_sec_flags = STYP_BSS | STYP_SHARED;
-      break;
-    case 1:
-      /* new absolute section */
-      p = HEAD(parms);
-      strncpy(state.obj.new_sec_name,
-              ".udata_shr",
-              sizeof(state.obj.new_sec_name));
-      state.obj.new_sec_addr = maybe_evaluate(p);
-      state.obj.new_sec_flags = STYP_BSS | STYP_ABS | STYP_SHARED;
-      break;
-    default:
-      enforce_arity(arity, 1);
     }
   }
 
@@ -2440,7 +1866,7 @@ static gpasmVal do_while(gpasmVal r,
   struct macro_head *head = malloc(sizeof(*head));
   struct pnode *p;
 
-  if (state.src->type == src_while) {
+  if (state.while_head != NULL) {
     state.pass = 2; /* Ensure error actually gets displayed */
     gperror(GPE_UNKNOWN, "gpasm does not yet support nested while loops");
     exit (1);
@@ -2455,10 +1881,8 @@ static gpasmVal do_while(gpasmVal r,
   }
 
   head->body = NULL;
-  /* Record data for the list, cod, and coff files */
+  /* Record data for the list and cod files */
   head->line_number = state.src->line_number;
-  head->file_symbol = state.src->file_symbol;
-
   head->src_name = strdup(state.src->name);
 
   /* DON'T set up state.mac_head; this isn't a macro head. */
@@ -2480,89 +1904,11 @@ int asm_enabled(void)
 /* Check that a register file address is ok */
 void file_ok(unsigned int file)
 {
-  /* don't check address, the linker takes care of it */   
-  if (state.mode == relocatable)
-    return;
-
   if ((0 > file) || (file > state.maxram) || (state.badram[file])) {
     gpwarning(GPW_INVALID_RAM, NULL);
   }
-
-  /* Issue bank message if necessary */
-  switch (state.device.class) {
-  case PROC_CLASS_EEPROM8:
-    /* do nothing */
-    break;
-  case PROC_CLASS_GENERIC:
-  case PROC_CLASS_PIC12:
-  case PROC_CLASS_SX:
-    if (file & (~0x1f))
-      gpmessage(GPM_BANK, NULL);   
-    break;
-  case PROC_CLASS_PIC14:
-    if (file & (~0x7f))
-      gpmessage(GPM_BANK, NULL);  
-    break;
-  case PROC_CLASS_PIC16:
-    if (file & (~0xff))
-      gpmessage(GPM_BANK, NULL);  
-    break;
-  case PROC_CLASS_PIC16E:
-    /* do nothing */
-    break;
-  default:
-    assert(0);
-  }
-
+  /* Issue bank bit warning if necessary*/
   return;
-}
-
-static void emit_check(int insn, int argument, int mask)
-{
-  int test = argument;
-
-  if (test < 0)
-    test = -test;
-
-  /* If there are bits that shouldn't be set then issue a warning */
-  if (test & (~mask)) {
-    gpwarning(GPW_RANGE, NULL);
-  }
-  emit(insn | (argument & mask));
-  
-  return;
-} 
-
-/* 
-   For relative branches, issue a warning if the absolute value of
-   argument is greater than range
-*/
-static void emit_check_relative(int insn, int argument, int mask, int range)
-{
-  char full_message[BUFSIZ];
-
-  /* If the branch is too far then issue an error */
-  if ((argument > range) || (argument < -(range+1))) {
-    snprintf(full_message,
-             sizeof(full_message),
-             "Argument out of range (%d not between %d and %d)\n",
-             argument,
-             -(range+1),
-             range);
-    gperror(GPE_RANGE, full_message);
-  }
-
-  emit(insn | (argument & mask));
-  
-  return;
-} 
-
-static int check_flag(int flag)
-{
-  if ((flag != 0) && (flag != 1))
-    gpwarning(GPW_RANGE, NULL);
-
-  return flag & 0x1;
 }
 
 gpasmVal do_insn(char *name, struct pnode *parms)
@@ -2591,13 +1937,15 @@ gpasmVal do_insn(char *name, struct pnode *parms)
       case INSN_CLASS_LIT3_BANK:
 	if (enforce_arity(arity, 1)) {
 	  p = HEAD(parms);
-	  emit_check(i->opcode, (reloc_evaluate(p, RELOCT_F) >> 5), 0x07);
+	  emit(i->mask | ((maybe_evaluate(p) >> 5) & 0x07));
+	  /* should issue warning if out of range */
 	}
 	break;
       case INSN_CLASS_LIT3_PAGE:
 	if (enforce_arity(arity, 1)) {
 	  p = HEAD(parms);
-	  emit_check(i->opcode, (reloc_evaluate(p, RELOCT_F) >> 9), 0x07);
+	  emit(i->mask | ((maybe_evaluate(p) >> 9) & 0x07));
+	  /* should issue warning if out of range */
 	}
 	break;
       case INSN_CLASS_LIT1:
@@ -2605,9 +1953,9 @@ gpasmVal do_insn(char *name, struct pnode *parms)
 	  int s = 0;
 	  switch (arity) {
 	  case 1:
-	    s = check_flag(reloc_evaluate(HEAD(parms), RELOCT_F));
+	    s = maybe_evaluate(HEAD(parms)) & 1;
 	  case 0:
-	    emit(i->opcode | s);
+	    emit(i->mask | s);
 	    break;
 	  default:
 	    enforce_arity(arity, 1);
@@ -2617,188 +1965,69 @@ gpasmVal do_insn(char *name, struct pnode *parms)
       case INSN_CLASS_LIT4:
 	if (enforce_arity(arity, 1)) {
 	  p = HEAD(parms);
-	  emit_check(i->opcode, reloc_evaluate(p, RELOCT_F), 0x0f);
+	  emit(i->mask | (maybe_evaluate(p) & 0x0f));
+	  /* should issue warning if out of range */
 	}
 	break;
       case INSN_CLASS_LIT4S:
 	if (enforce_arity(arity, 1)) {
 	  p = HEAD(parms);
-	  emit_check(i->opcode, (reloc_evaluate(p, RELOCT_MOVLR) << 4), 0xf0);
-	}
-	break;
-      case INSN_CLASS_LIT6:
-	if (enforce_arity(arity, 1)) {
-	  p = HEAD(parms);
-	  /* The literal cannot be a relocatable address */
-          emit_check(i->opcode, maybe_evaluate(p), 0x3f);
+	  emit(i->mask | ( (maybe_evaluate(p) & 0x0f) << 4) );
+	  /* should issue warning if out of range */
 	}
 	break;
       case INSN_CLASS_LIT8:
 	if (enforce_arity(arity, 1)) {
 	  p = HEAD(parms);
-	  if (strcasecmp(i->name, "movlb") == 0) {
-	    emit_check(i->opcode, reloc_evaluate(p, RELOCT_MOVLB), 0xff);
-	  } else {
-	    emit_check(i->opcode, reloc_evaluate(p, RELOCT_LOW), 0xff);
-	  }
-	}
-	break;
-      case INSN_CLASS_LIT8C12:
-	if (enforce_arity(arity, 1)) {
-	  int value;
-
-	  p = HEAD(parms);
-	  value = reloc_evaluate(p, RELOCT_CALL);	  
-
-	  /* PC is 11 bits.  mpasm checks the maximum device address. */
-	  if (value & (~0x7ff))
-	    gperror(GPE_RANGE, NULL);
-
-	  if ((value & 0x600) != (state.org & 0x600))
-	    gpmessage(GPM_PAGE, NULL);	  
-
-	  if (value & 0x100)
-	    gperror(GPE_BAD_CALL_ADDR, NULL);
-	  	  
-	  emit(i->opcode | (value & 0xff));	      
-	}
-	break;
-      case INSN_CLASS_LIT8C16:
-	if (enforce_arity(arity, 1)) {
-	  int value;
-
-	  p = HEAD(parms);
-	  value = reloc_evaluate(p, RELOCT_LOW);	  
-
-	  /* PC is 16 bits.  mpasm checks the maximum device address. */
-	  if (value & (~0xffff))
-	    gperror(GPE_RANGE, NULL); 	  
-	  	  
-	  emit(i->opcode | (value & 0xff));	      
+	  emit(i->mask | (maybe_evaluate(p) & 0xff));
 	}
 	break;
       case INSN_CLASS_LIT9:
 	if (enforce_arity(arity, 1)) {
-	  int value;
-
 	  p = HEAD(parms);
-	  value = reloc_evaluate(p, RELOCT_GOTO);
-
-	  /* PC is 11 bits.  mpasm checks the maximum device address. */
-	  if (value & (~0x7ff))
-	    gperror(GPE_RANGE, NULL); 	  
-	  
-	  if ((value & 0x600) != (state.org & 0x600))
-	    gpmessage(GPM_PAGE, NULL);	  
-	  	  
-	  emit(i->opcode | (value & 0x1ff));
+	  emit(i->mask | (maybe_evaluate(p) & 0x1ff));
 	}
 	break;
       case INSN_CLASS_LIT11:
 	if (enforce_arity(arity, 1)) {
-	  int value;
-	  
 	  p = HEAD(parms);
-          if (strcasecmp(i->name, "goto") == 0) {
-	    value = reloc_evaluate(p, RELOCT_GOTO);
-          } else {
-	    value = reloc_evaluate(p, RELOCT_CALL);
-          }
-	  
-	  /* PC is 13 bits.  mpasm checks the maximum device address. */
-	  if (value & (~0x1fff))
-	    gperror(GPE_RANGE, NULL); 	  
-	  
-	  if ((value & 0x1800) != (state.org & 0x1800))
-	    gpmessage(GPM_PAGE, NULL);
-	  
-	  emit(i->opcode | (value & 0x7ff));
+	  emit(i->mask | (maybe_evaluate(p) & 0x7ff));
 	}
 	break;
       case INSN_CLASS_LIT13:
 	if (enforce_arity(arity, 1)) {
-	  int value;
-
 	  p = HEAD(parms);
-          if (strcasecmp(i->name, "goto") == 0) {
-	    value = reloc_evaluate(p, RELOCT_GOTO);
-          } else {
-	    value = reloc_evaluate(p, RELOCT_CALL);
-          }
-
-	  /* PC is 16 bits.  mpasm checks the maximum device address. */
-	  if (value & (~0xffff))
-	    gperror(GPE_RANGE, NULL); 	  
-
-	  if ((value & 0xe000) != (state.org & 0xe000))
-	    gpmessage(GPM_PAGE, NULL);
-
-	  emit(i->opcode | (value & 0x1fff));
-	}
-	break;
-      case INSN_CLASS_LITFSR:
-	if (enforce_arity(arity, 2)) {
-	  int value;
-          int fsr;
-
-	  p = HEAD(parms);
-          fsr = maybe_evaluate(p);
-	  if ((fsr < 0) || (fsr > 2))
-            gperror(GPE_RANGE, NULL); 	  
-
-          p = HEAD(TAIL(parms));
-	  /* the offset cannot be a relocatable address */
-          value = maybe_evaluate(p);
-	  if (value & (~0x3f))
-            gperror(GPE_RANGE, NULL); 	  
-
-	  emit(i->opcode | ((fsr & 0x3) << 6) | (value & 0x3f));
+	  emit(i->mask | (maybe_evaluate(p) & 0x1fff));
 	}
 	break;
       case INSN_CLASS_RBRA8:
 	if (enforce_arity(arity, 1)) {
-	  int offset;
-
-	  p = HEAD(parms);
-	  if (count_reloc(p) == 0) {
-	    offset = maybe_evaluate(p) - ((state.org + 1)<<_16bit_core);
-	    offset >>= _16bit_core;
-	  } else {
-	    offset = reloc_evaluate(p, RELOCT_CONDBRA);
-	  }
-
-	  /* The offset for the relative branch must be 
-	     between -127 <= offset <= 127. */
-	  emit_check_relative(i->opcode, offset, 0xff, 127);
+	  emit(i->mask | 
+	       ((((maybe_evaluate( HEAD(parms)) ) - 
+		 ((state.org + 1)<<_16bit_core)) >> _16bit_core)  & 0xff));
 	}
 	break;
       case INSN_CLASS_RBRA11:
 	if (enforce_arity(arity, 1)) {
-	  int offset;
-
-	  p = HEAD(parms);
-	  if (count_reloc(p) == 0) {
-	    offset = maybe_evaluate(p) - ((state.org + 1)<<_16bit_core);
-	    offset >>= _16bit_core;
-	  } else {
-	    offset = reloc_evaluate(p, RELOCT_BRA);
-	  }	  
-         
-	  emit_check_relative(i->opcode, offset, 0x7ff, 0x3ff);
+	  emit(i->mask | 
+	       ((((maybe_evaluate( HEAD(parms)) ) - 
+		 ((state.org + 1)<<_16bit_core)) >> _16bit_core)  & 0x7ff));
 	}
 	break;
       case INSN_CLASS_LIT20:
+
 	if (enforce_arity(arity, 1)) {
 	  int dest;
 	  p = HEAD(parms);
-	  dest = reloc_evaluate(p, RELOCT_GOTO) >> _16bit_core;
-	  emit(i->opcode | (dest & 0xff));
-	  reloc_evaluate(p, RELOCT_GOTO2);     /* add the second relocation */
-	  emit_check(0xf000, dest>>8, 0xfff);
+	  dest = maybe_evaluate(p) >> _16bit_core;
+	  emit(i->mask | (dest & 0xff));
+	  emit(0xf000 |  ( (dest>>8) & 0xfff));
 	}
 	break;
       case INSN_CLASS_CALL20:
 	{
+
+
 	  int dest;
 	  int s = 0; /* By default, fast push is not used */
 	  struct pnode *p2; /* second parameter */
@@ -2812,7 +2041,7 @@ gpasmVal do_insn(char *name, struct pnode *parms)
 		(strcasecmp(p2->value.symbol, "s") == 0))
 	      s = 1;
 	    else
-	      s = check_flag(maybe_evaluate(p2));
+	      s = maybe_evaluate(p2);
 	    break;
 	  case 1:
 	    s = 0;
@@ -2820,10 +2049,10 @@ gpasmVal do_insn(char *name, struct pnode *parms)
 	  default:
 	    enforce_arity(arity, 2);
 	  }
-	  dest = reloc_evaluate(p, RELOCT_CALL) >> _16bit_core;
-	  emit(i->opcode | (s<<8) | (dest & 0xff));
-	  reloc_evaluate(p, RELOCT_CALL2);     /* add the second relocation */
-	  emit_check(0xf000, (dest>>8), 0xfff);
+	  dest = maybe_evaluate(p) >> _16bit_core;
+	  emit(i->mask | (s<<8) |(dest & 0xff));
+	  emit(0xf000 |  ( (dest>>8) & 0xfff));
+
 	}
 	break;
       case INSN_CLASS_FLIT12:
@@ -2837,111 +2066,51 @@ gpasmVal do_insn(char *name, struct pnode *parms)
 	      gperror(GPE_UNKNOWN, "FSR is out of range");
 
 	    p = HEAD(TAIL(parms));
-	    k = reloc_evaluate(p, RELOCT_LFSR1);
-	    emit_check(i->opcode | ((file & 3) << 4), (k>>8), 0xf);
-	    reloc_evaluate(p, RELOCT_LFSR2); /* add the second relocation */
-	    emit(0xf000 | (k & 0xff));
+	    k =  maybe_evaluate(p);
+
+	    emit(i->mask | ( ((file & 3) <<4) | ((k>>8) & 0xf) ) );
+	    emit(0xf000 |  (k & 0xff));
+
 	  }
 	}
 	break;
 
       case INSN_CLASS_FF:
 	if (enforce_arity(arity, 2)) {
-          int dest = maybe_evaluate(HEAD(TAIL(parms)));
 
-          /* destination can't be PCL, TOSU, TOSH, TOSL */
-          if ((dest == 0xff9) ||
-              (dest == 0xfff) ||
-              (dest == 0xffe) ||
-              (dest == 0xffd)) {
-            gperror(GPE_UNKNOWN, "Invalid destination");
-          }
-          
-	  emit_check(i->opcode, reloc_evaluate(HEAD(parms), RELOCT_FF1), 0xfff);
-	  emit_check(0xf000, reloc_evaluate(HEAD(TAIL(parms)), RELOCT_FF2), 0xfff);
+	  emit(i->mask | (maybe_evaluate( HEAD(parms)) & 0xfff));
+	  emit(0xf000  | (maybe_evaluate( HEAD(TAIL(parms))) & 0xfff));
 
 	}
 	break;
       case INSN_CLASS_FP:
         if (enforce_arity(arity, 2)) {
           int reg=0;
-          file=reloc_evaluate(HEAD(parms), RELOCT_F);
-          reg=reloc_evaluate(HEAD(TAIL(parms)), RELOCT_P);
+          file=maybe_evaluate(HEAD(parms));
+          reg=maybe_evaluate(HEAD(TAIL(parms)));
           file_ok(file);
-          if (reg & ~0xf1f) {
-            gpwarning(GPW_RANGE, NULL);
-          }
-          emit(i->opcode | ( (reg  & 0x1f) << 8) |
+          file_ok(reg);
+          emit(i->mask | ( (reg  & 0x1f) << 8) |
               (file & 0xff) );
         }
         break;
       case INSN_CLASS_PF:
         if (enforce_arity(arity, 2)) {
           int reg=0;
-          file=reloc_evaluate(HEAD(TAIL(parms)), RELOCT_F);
-          reg=reloc_evaluate(HEAD(parms), RELOCT_P);
+          reg=maybe_evaluate(HEAD(parms));
+          file=maybe_evaluate(HEAD(TAIL(parms)));
           file_ok(file);
-          if (reg & ~0xf1f) {
-            gpwarning(GPW_RANGE, NULL);
-          }
-          emit(i->opcode | ( (reg & 0x1f) << 8) |
+          file_ok(reg);
+          emit(i->mask | ( (reg & 0x1f) << 8) |
               (file & 0xff) );
-        }
-        break;
-      case INSN_CLASS_SF:
-        if (enforce_arity(arity, 2)) {
-          int source;
-	  int dest;
-
-	  p = HEAD(parms);
-          if (p->tag != offset)
-	    gperror(GPE_MISSING_BRACKET, NULL);
-          source = maybe_evaluate(p);
-
-          p = HEAD(TAIL(parms));
-          dest = maybe_evaluate(p);
-
-          /* destination can't be PCL, TOSU, TOSH, TOSL */
-          if ((dest == 0xff9) ||
-              (dest == 0xfff) ||
-              (dest == 0xffe) ||
-              (dest == 0xffd)) {
-            gperror(GPE_UNKNOWN, "Invalid destination");
-          }
-          
-	  emit_check(i->opcode, source, 0x7f);
-	  emit_check(0xf000, reloc_evaluate(HEAD(TAIL(parms)), RELOCT_FF2), 0xfff);
-        }
-        break;
-      case INSN_CLASS_SS:
-        if (enforce_arity(arity, 2)) {
-          int source;
-	  int dest;
-
-	  p = HEAD(parms);
-          if (p->tag != offset)
-	    gperror(GPE_MISSING_BRACKET, NULL);
-          source = maybe_evaluate(p);
-
-          p = HEAD(TAIL(parms));
-          if (p->tag != offset)
-	    gperror(GPE_MISSING_BRACKET, NULL);
-          dest = maybe_evaluate(p);
-
-	  emit_check(i->opcode, source, 0x7f);
-	  emit_check(0xf000, dest, 0x7f);
         }
         break;
       case INSN_CLASS_OPF5:
 	if (enforce_arity(arity, 1)) {
 	  p = HEAD(parms);
-	  if (strcasecmp(i->name, "tris") == 0) {
-	    file = reloc_evaluate(p, RELOCT_TRIS);
-	  } else {
-	    file = reloc_evaluate(p, RELOCT_F);
-	  }
+	  file = maybe_evaluate(p);
 	  file_ok(file);
-	  emit(i->opcode | (file & 0x1f));
+	  emit(i->mask | (file & 0x1f));
 	}
 	break;
       case INSN_CLASS_OPWF5:
@@ -2953,6 +2122,7 @@ gpasmVal do_insn(char *name, struct pnode *parms)
 	    enforce_arity(arity, 2);
 	    break;
 	  }
+
 
 	  p = HEAD(parms);
 	  switch (arity) {
@@ -2966,7 +2136,7 @@ gpasmVal do_insn(char *name, struct pnode *parms)
 		     (strcasecmp(p2->value.symbol, "w") == 0))
 	      d = 0;
 	    else
-	      d = check_flag(maybe_evaluate(p2));
+	      d = maybe_evaluate(p2);
 	    break;
 	  case 1:
             d = 1;
@@ -2975,9 +2145,9 @@ gpasmVal do_insn(char *name, struct pnode *parms)
 	  default:
 	    enforce_arity(arity, 2);
 	  }
-	  file = reloc_evaluate(p, RELOCT_F);
+	  file = maybe_evaluate(p);
 	  file_ok(file);
-	  emit(i->opcode | (d << 5) | (file & 0x1f));
+	  emit(i->mask | (d << 5) | (file & 0x1f));
 	}
 	break;
       case INSN_CLASS_B5:
@@ -2988,12 +2158,12 @@ gpasmVal do_insn(char *name, struct pnode *parms)
 	  if (enforce_arity(arity, 2)) {
 	    f = HEAD(parms);
 	    b = HEAD(TAIL(parms));
-	    file = reloc_evaluate(f, RELOCT_F);
+	    file = maybe_evaluate(f);
 	    bit = maybe_evaluate(b);
 	    if (!((0 <= bit) && (bit <= 7)))
               gpwarning(GPW_RANGE, NULL);
 	    file_ok(file);
-	    emit(i->opcode | ((bit & 7) << 5) |(file & 0x1f));
+	    emit(i->mask | ((bit & 7) << 5) |(file & 0x1f));
 	  }
 	}
 	break;
@@ -3006,36 +2176,34 @@ gpasmVal do_insn(char *name, struct pnode *parms)
 	  if (enforce_arity(arity, 2)) {
 	    f = HEAD(parms);
 	    b = HEAD(TAIL(parms));
-	    file = reloc_evaluate(f, RELOCT_F);
+	    file = maybe_evaluate(f);
 	    bit = maybe_evaluate(b);
 	    if (!((0 <= bit) && (bit <= 7)))
               gpwarning(GPW_RANGE, NULL);
 	    file_ok(file);
-	    emit(i->opcode | ((bit & 7) << 8) | (file & 0xff));
+	    emit(i->mask | ((bit & 7) << 8) | (file & 0xff));
 	  }
 	}
 	break;
 
       case INSN_CLASS_OPF7:
 	if (enforce_arity(arity, 1)) {
+          if (i->name == "TRIS"){
+            gpwarning(GPW_NOT_RECOMMENDED, NULL);
+          }
 	  p = HEAD(parms);
-	  if (strcasecmp(i->name, "tris") == 0) {
-	    gpwarning(GPW_NOT_RECOMMENDED, NULL);
-	    file = reloc_evaluate(p, RELOCT_TRIS);
-	  } else {
-	    file = reloc_evaluate(p, RELOCT_F);
-	  }
+	  file = maybe_evaluate(p);
 	  file_ok(file);
-	  emit(i->opcode | (file & 0x7f));
+	  emit(i->mask | (file & 0x7f));
 	}
 	break;
 
       case INSN_CLASS_OPF8:
 	if (enforce_arity(arity, 1)) {
 	  p = HEAD(parms);
-	  file = reloc_evaluate(p, RELOCT_F);
+	  file = maybe_evaluate(p);
 	  file_ok(file);
-	  emit(i->opcode | (file & 0xff));
+	  emit(i->mask | (file & 0xff));
 	}
 	break;
 
@@ -3061,7 +2229,7 @@ gpasmVal do_insn(char *name, struct pnode *parms)
 		     (strcasecmp(p2->value.symbol, "w") == 0))
 	      d = 0;
 	    else
-	      d = check_flag(maybe_evaluate(p2));
+	      d = maybe_evaluate(p2);
 	    break;
 	  case 1:
             d = 1;
@@ -3070,9 +2238,9 @@ gpasmVal do_insn(char *name, struct pnode *parms)
 	  default:
 	    enforce_arity(arity, 2);
 	  }
-	  file = reloc_evaluate(p, RELOCT_F);
+	  file = maybe_evaluate(p);
 	  file_ok(file);
-	  emit(i->opcode | (d << 7) | (file & 0x7f));
+	  emit(i->mask | (d << 7) | (file & 0x7f));
 	}
 	break;
 
@@ -3098,7 +2266,7 @@ gpasmVal do_insn(char *name, struct pnode *parms)
 		     (strcasecmp(p2->value.symbol, "w") == 0))
 	      d = 0;
 	    else
-	      d = check_flag(maybe_evaluate(p2));
+	      d = maybe_evaluate(p2);
 	    break;
 	  case 1:
             d = 1;
@@ -3107,9 +2275,9 @@ gpasmVal do_insn(char *name, struct pnode *parms)
 	  default:
 	    enforce_arity(arity, 2);
 	  }
-	  file = reloc_evaluate(p, RELOCT_F);
+	  file = maybe_evaluate(p);
 	  file_ok(file);
-	  emit(i->opcode | (d << 8) | (file & 0xff));
+	  emit(i->mask | (d << 8) | (file & 0xff));
 	}
 	break;
       case INSN_CLASS_B7:
@@ -3120,19 +2288,19 @@ gpasmVal do_insn(char *name, struct pnode *parms)
 	  if (enforce_arity(arity, 2)) {
 	    f = HEAD(parms);
 	    b = HEAD(TAIL(parms));
-	    file = reloc_evaluate(f, RELOCT_F);
+	    file = maybe_evaluate(f);
 	    bit = maybe_evaluate(b);
 	    if (!((0 <= bit) && (bit <= 7)))
               gpwarning(GPW_RANGE, NULL);
 	    file_ok(file);
-	    emit(i->opcode | ((bit & 7) << 7) | (file & 0x7f));
+	    emit(i->mask | ((bit & 7) << 7) | (file & 0x7f));
 	  }
 	}
 	break;
 
       case INSN_CLASS_OPFA8:
 	{
-	  int a = 0;
+	  int a = 0; /* Default access (don't use the BSR) */
 	  struct pnode *p2; /* second parameter */
 
 	  if(arity == 0) {
@@ -3140,21 +2308,8 @@ gpasmVal do_insn(char *name, struct pnode *parms)
 	    break;
 	  }
 
+
 	  p = HEAD(parms);
-	  file = reloc_evaluate(p, RELOCT_F);
-	  file_ok(file);
-
-	  /* add relocation for the access bit, if necessary */          
-	  reloc_evaluate(p, RELOCT_ACCESS);
-
-	  /* Default access (use the BSR unless access is to special registers) */
-	  if ((file < state.device.bsr_boundary) || 
-              (file >= (0xf00 + state.device.bsr_boundary))) {
-            a = 0;
-	  } else {
-	    a = 1;
-	  }
-
 	  switch (arity) {
 	  case 2:
 	    p2 = HEAD(TAIL(parms));
@@ -3163,7 +2318,7 @@ gpasmVal do_insn(char *name, struct pnode *parms)
 		(strcasecmp(p2->value.symbol, "b") == 0))
 	      a = 1;
 	    else
-	      a = check_flag(maybe_evaluate(p2));
+	      a = maybe_evaluate(p2);
 	    break;
 	  case 1:
 	    /* use default a */
@@ -3171,7 +2326,9 @@ gpasmVal do_insn(char *name, struct pnode *parms)
 	  default:
 	    enforce_arity(arity, 2);
 	  }
-	  emit(i->opcode | (a << 8) | (file & 0xff));
+	  file = maybe_evaluate(p);
+	  file_ok(file);
+	  emit(i->mask | (a << 8) | (file & 0xff));
 	}
 	break;
 
@@ -3179,72 +2336,7 @@ gpasmVal do_insn(char *name, struct pnode *parms)
 	{
 	  struct pnode *f, *b,*par;
 	  int bit,a=0;
-
-	  if ((arity != 2) && (arity != 3)) {
-	    enforce_arity(arity, 3);
-	    break;
-	  }
-
-	  f = HEAD(parms);
-	  file = reloc_evaluate(f, RELOCT_F);
-
-	  if (arity == 3) {
-	    par = HEAD(TAIL(TAIL(parms)));
-
-	    if ((par->tag == symbol) &&
-		(strcasecmp(par->value.symbol, "b") == 0))
-	      a = 1;
-	    else
-	      a = check_flag(maybe_evaluate(par));
-	  } else {
-	    /* Default access (use the BSR unless access is to special 
-               registers) */
-	    if ((file < state.device.bsr_boundary) || 
-		(file >= (0xf00 + state.device.bsr_boundary))) {
-	      a = 0;
-	    } else {
-	      a = 1;
-	    }          
-	  }
 	    
-	  /* add relocation for the access bit, if necessary */          
-	  reloc_evaluate(f, RELOCT_ACCESS);
-
-	  b = HEAD(TAIL(parms));
-	  bit = maybe_evaluate(b);
-	  if (!((0 <= bit) && (bit <= 7)))
-	    gpwarning(GPW_RANGE, NULL);
-	  file_ok(file);
-	  emit(i->opcode | ( a << 8) | ((bit & 7) << 9) | (file & 0xff));
-	}
-	break;
-
-      case INSN_CLASS_OPWFA8:
-	{
-	  int d = 1; /* Default destination of 1 (file) */
-	  int a = 0;
-	  struct pnode *par; /* second parameter */
-	    
-	  if(arity == 0) {
-	    enforce_arity(arity, 2);
-	    break;
-	  }
-
-	  p = HEAD(parms);
-	  file = reloc_evaluate(p, RELOCT_F);
-	  file_ok(file);
-
-	  /* add relocation for the access bit, if necessary */          
-	  reloc_evaluate(p, RELOCT_ACCESS);
-
-	  /* Default access (use the BSR unless access is to special registers) */
-	  if ((file < state.device.bsr_boundary) || 
-              (file >= (0xf00 + state.device.bsr_boundary))) {
-            a = 0;
-	  } else {
-	    a = 1;
-	  }
-
 	  switch (arity) {
 	  case 3:
 	    par = HEAD(TAIL(TAIL(parms)));
@@ -3253,7 +2345,47 @@ gpasmVal do_insn(char *name, struct pnode *parms)
 		(strcasecmp(par->value.symbol, "b") == 0))
 	      a = 1;
 	    else
-	      a = check_flag(maybe_evaluate(par));
+	      a = maybe_evaluate(par);
+	    /* fall through */
+	  case 2:
+	    
+	    f = HEAD(parms);
+	    b = HEAD(TAIL(parms));
+	    file = maybe_evaluate(f);
+	    bit = maybe_evaluate(b);
+	    if (!((0 <= bit) && (bit <= 7)))
+              gpwarning(GPW_RANGE, NULL);
+	    file_ok(file);
+	    emit(i->mask | ( a << 8) | ((bit & 7) << 9) | (file & 0xff));
+	    break;
+	  default:
+	    enforce_arity(arity, 3);
+	  }
+	}
+	break;
+
+      case INSN_CLASS_OPWFA8:
+	{
+	  int d = 1; /* Default destination of 1 (file) */
+	  int a = 0; /* Default access bank (don't use BSR) */
+	  struct pnode *par; /* second parameter */
+	    
+	  if(arity == 0) {
+	    enforce_arity(arity, 2);
+	    break;
+	  }
+
+
+	  p = HEAD(parms);
+	  switch (arity) {
+	  case 3:
+	    par = HEAD(TAIL(TAIL(parms)));
+
+	    if ((par->tag == symbol) &&
+		(strcasecmp(par->value.symbol, "b") == 0))
+	      a = 1;
+	    else
+	      a = maybe_evaluate(par);
 	    /* fall through */
 	  case 2:
 	    par = HEAD(TAIL(parms));
@@ -3265,7 +2397,7 @@ gpasmVal do_insn(char *name, struct pnode *parms)
 		     (strcasecmp(par->value.symbol, "w") == 0))
 	      d = 0;
 	    else
-	      d = check_flag(maybe_evaluate(par));
+	      d = maybe_evaluate(par);
 	    break;
 	  case 1:
             /* use default a and d */
@@ -3274,7 +2406,9 @@ gpasmVal do_insn(char *name, struct pnode *parms)
 	  default:
             enforce_arity(arity, 3);
 	  }
-	  emit(i->opcode | (d << 9) | (a << 8) | (file & 0xff));
+	  file = maybe_evaluate(p);
+	  file_ok(file);
+	  emit(i->mask | (d << 9) | (a << 8) | (file & 0xff));
 	}
 	break;
 
@@ -3282,11 +2416,11 @@ gpasmVal do_insn(char *name, struct pnode *parms)
 	if (arity != 0) {
           gpwarning(GPW_EXTRANEOUS, NULL);
 	}
-	if ((strcasecmp(i->name, "option") == 0) &&
+        if ((i->name == "OPTION") && 
             (state.device.core_size != CORE_12BIT_MASK)){
           gpwarning(GPW_NOT_RECOMMENDED, NULL);
         }
-	emit(i->opcode);
+	emit(i->mask);
 	break;
       case INSN_CLASS_TBL:
 	if (enforce_arity(arity, 1)) {
@@ -3294,19 +2428,19 @@ gpasmVal do_insn(char *name, struct pnode *parms)
 	  switch(maybe_evaluate(p))
 	    {
 	    case TBL_NO_CHANGE:
-	      emit(i->opcode);
+	      emit(i->mask);
 	      break;
 	    case TBL_POST_INC:
-	      emit(i->opcode | 1);
+	      emit(i->mask | 1);
 	      break;
 	    case TBL_POST_DEC:
-	      emit(i->opcode | 2);
+	      emit(i->mask | 2);
 	      break;
 	    case TBL_PRE_INC:
-	      emit(i->opcode | 3);
+	      emit(i->mask | 3);
 	      break;
 	    default:
-	      gperror(GPE_ILLEGAL_ARGU, NULL);
+	      printf("tbl: %x\n",maybe_evaluate(p));
 	    }
 	}
 	break;
@@ -3318,13 +2452,13 @@ gpasmVal do_insn(char *name, struct pnode *parms)
 
 	  /* "0" (lower byte) and "1" (upper byte) */
 	  p = HEAD(parms);
-	  t = check_flag(maybe_evaluate(p));
+	  t = maybe_evaluate(p);
 
 	  p2 = HEAD(TAIL(parms));
-	  file = reloc_evaluate(p2, RELOCT_F);
+	  file = maybe_evaluate(p2);
 
 	  file_ok(file);
-          emit(i->opcode | (t << 9) | (file & 0xff));
+          emit(i->mask | (t << 9) | (file & 0xff));
 	}
 	break;
 
@@ -3336,38 +2470,31 @@ gpasmVal do_insn(char *name, struct pnode *parms)
 
 	  /* "0" (lower byte) and "1" (upper byte) */
 	  p = HEAD(parms);
-	  t = check_flag(maybe_evaluate(p));
+	  t = maybe_evaluate(p);
 
 	  /* "0" (no change) and "1" (postincrement) */
 	  p2 = HEAD(TAIL(parms));
-	  inc = check_flag(maybe_evaluate(p2));
+	  inc = maybe_evaluate(p2);
 
 	  p3 = HEAD(TAIL(TAIL(parms)));
-	  file = reloc_evaluate(p3, RELOCT_F);
+	  file = maybe_evaluate(p3);
 
 	  file_ok(file);          
-          emit(i->opcode | (t << 9) | (inc << 8) | (file & 0xff));
+          emit(i->mask | (t << 9) | (inc << 8) | (file & 0xff));
 	}
 	break;
 
       case INSN_CLASS_FUNC:
-	r = (*(opfunc*)i->opcode)(r, name, arity, parms);
+	r = (*(opfunc*)i->mask)(r, name, arity, parms);
 	break;
       }
     }
   } else {
     s = get_symbol(state.stMacros, name);
     if (s) {
-      struct macro_head *h = get_symbol_annotation(s);
-
       /* Found the macro: execute it */
-      if (asm_enabled()) {
-	if ((h->defined != 1) && (state.pass == 2)) {
-	  gperror(GPE_UNKNOWN, "Forward references to macros are not allowed.");	
-	} else {
-	  setup_macro(h, arity, parms);
-	}
-      }
+      if (asm_enabled())
+	execute_macro(get_symbol_annotation(s), arity, parms);
     } else {
 
       if (asm_enabled()) {
@@ -3375,7 +2502,7 @@ gpasmVal do_insn(char *name, struct pnode *parms)
           gperror(GPE_UNDEF_PROC, NULL);
         } else {
           char mesg[80];
-          snprintf(mesg, sizeof(mesg), "Unknown opcode \"%.40s\"", name);
+          sprintf(mesg, "Unknown opcode \"%.40s\"", name);
           gperror(GPE_UNKNOWN, mesg);
         }
       }
@@ -3386,6 +2513,155 @@ gpasmVal do_insn(char *name, struct pnode *parms)
   return r;
 }
 
+void execute_body(struct macro_head *h)
+{	
+  struct source_context *new, *old; 
+  struct macro_body *b = h->body;
+  int expand;
+
+  /* determine if the macro listing is to be expanded */
+  if (state.pass == 2 && state.lst.enabled == 1) {
+    if (state.stGlobal == state.stTop) {
+      expand = 1;      /* always expand while loops */
+    } else if (state.lst.expand == 1) {
+      expand = 1;      /* only expand macros when commanded */
+    } else {
+      expand = 0;
+    }
+  } else {
+    expand = 0;
+  }
+
+  if (expand) {
+    /* setup a new source context for the macro */
+    new = (struct source_context *)malloc(sizeof(*new));
+    new->name = strdup(h->src_name);  
+    new->line_number = h->line_number;
+    new->prev = state.src;
+    state.src = new;
+    state.src->fc = add_file(ft_src, new->name); /* scan list for fc */
+  }
+
+  /* Execute the body of the macro, line by line */
+  for (; b; b = b->next) {
+    gpasmVal r;
+
+    if (expand) {    
+      state.src->line_number++;
+      state.lst.line.linetype = none; /* default lst line type */
+      state.lst.line.was_org = state.org;
+    }    
+
+    if (b->op) {
+      /* Easy place to catch 'EXITM' */
+      if (strcasecmp(b->op, "EXITM") == 0)
+	break;
+      else {
+        r = do_or_append_insn(b->op, b->parms);
+      }
+    } else {
+      r = state.org;
+    }
+    if (asm_enabled() && b->label) {
+      if (state.mac_prev) {
+	state.mac_body->label = b->label;
+      } else {
+        if ((b->op != NULL) && strcasecmp(b->op, "SET") == 0) {
+	  set_global(b->label, r, TEMPORARY, gvt_constant);
+	} else {
+          set_global(b->label, r << _16bit_core, PERMANENT, gvt_constant);
+	}
+      }
+    }
+    if (expand && (b->src_line != NULL)) {
+      lst_format_line(b->src_line, r);
+    } 
+  }
+
+  if (expand) {
+    /* restore conditions before the macro call */
+    state.lst.line.was_org = state.org;
+    old = state.src;
+    state.src = state.src->prev;
+    free(old);
+  
+    state.lst.line.linetype = none;
+  } else {
+    state.lst.line.linetype = insn;
+  }
+
+}
+
+void execute_macro(struct macro_head *h, int arity, struct pnode *parms)
+{
+  if (enforce_arity(arity, list_length(h->parms))) {
+    state.stTop = push_symbol_table(state.stTop, state.case_insensitive);
+
+    /* Now add the macro's declared parameter list to the new local
+       symbol table.  Set the value of each expression to the
+       corresponding value in the macro call. */
+    if (arity > 0) {
+      gpasmVal *values, *pvalue;
+      struct pnode *pFrom, *pFromH;
+      struct pnode *pTo, *pToH;
+
+      /* First stage, evaluate macro parameters.  Do this BEFORE
+         creating the macro's local symbol table so that the
+         invokation does the right thing with names that appear in
+         both the caller and the callee. */
+      pvalue = values = malloc(arity * sizeof(gpasmVal));
+
+      for (pFrom = parms; pFrom; pFrom = TAIL(pFrom)) {
+	pFromH = HEAD(pFrom);
+	*pvalue++ = maybe_evaluate(pFromH);
+      }
+      assert((pvalue - values) == arity);
+
+      pvalue = values;
+      /* 'values' now holds our parameters.  Create the local symbol
+	 table and add the parameters to it. */
+      for (pTo = h->parms; pTo; pTo = TAIL(pTo)) {
+	struct symbol *sym;
+	struct variable *var;
+
+	pToH = HEAD(pTo);
+	assert(pToH->tag == symbol);
+	
+	sym = add_symbol(state.stTop, pToH->value.symbol);
+
+	/* This assert will fail if the declared parameter list
+	   contains non-unique entries.  do_macro should have already caught
+	   this problem, and prevented the declaration. */
+	assert(get_symbol_annotation(sym) == NULL);
+	var = malloc(sizeof(*var));
+	annotate_symbol(sym, var);
+	var->value = *pvalue++;
+      }
+      assert((pvalue - values) == arity);
+
+      free(values);
+    }
+
+    if (state.pass == 1) {
+      execute_body(h);
+    } else {
+      unsigned int org_copy;
+
+      org_copy = state.org;
+      state.pass = 1;
+      execute_body(h);
+
+      state.org = org_copy;
+      state.pass = 2;
+      execute_body(h);
+    }
+
+    state.stTop = pop_symbol_table(state.stTop);
+  }
+}
+
+/************************************************************************/
+
 /************************************************************************/
 
 /* There are several groups of operations that we handle here.  First
@@ -3395,82 +2671,403 @@ gpasmVal do_insn(char *name, struct pnode *parms)
 
 /* Note that instructions within each group are sorted alphabetically */
 
-struct insn op_0[] = {
-  { "code",       0, (long int)do_code,      INSN_CLASS_FUNC,   0 },
-  { "constant",   0, (long int)do_constant,  INSN_CLASS_FUNC,   0 },
-  { "else",       0, (long int)do_else,      INSN_CLASS_FUNC,   ATTRIB_COND },
-  { "endif",      0, (long int)do_endif,     INSN_CLASS_FUNC,   ATTRIB_COND },
-  { "endm",       0, (long int)do_endm,	     INSN_CLASS_FUNC,   0 },
-  { "endw",       0, (long int)do_endw,	     INSN_CLASS_FUNC,   0 },
-  { "equ",        0, (long int)do_equ,       INSN_CLASS_FUNC,   0 },
-  { "error",      0, (long int)do_error,     INSN_CLASS_FUNC,   0 },
-  { "exitm",      0, (long int)do_exitm,     INSN_CLASS_FUNC,   0 },
-  { "expand",     0, (long int)do_expand,    INSN_CLASS_FUNC,   0 },
-  { "extern",     0, (long int)do_extern,    INSN_CLASS_FUNC,   0 },
-  { "errorlevel", 0, (long int)do_errlvl,    INSN_CLASS_FUNC,   0 },
-  { "global",     0, (long int)do_global,    INSN_CLASS_FUNC,   0 },
-  { "idata",      0, (long int)do_idata,     INSN_CLASS_FUNC,   0 },
-  { "if",         0, (long int)do_if,        INSN_CLASS_FUNC,   ATTRIB_COND },
-  { "ifdef",      0, (long int)do_ifdef,     INSN_CLASS_FUNC,   ATTRIB_COND },
-  { "ifndef",     0, (long int)do_ifndef,    INSN_CLASS_FUNC,   ATTRIB_COND },
-  { "include",    0, (long int)do_include,   INSN_CLASS_FUNC,   0 },
-  { "list",       0, (long int)do_list,	     INSN_CLASS_FUNC,   0 },
-  { "local",      0, (long int)do_local,     INSN_CLASS_FUNC,   0 },
-  { "macro",      0, (long int)do_macro,     INSN_CLASS_FUNC,	0 },
-  { "messg",      0, (long int)do_messg,     INSN_CLASS_FUNC,   0 },
-  { "noexpand",   0, (long int)do_noexpand,  INSN_CLASS_FUNC,   0 },
-  { "nolist",     0, (long int)do_nolist,    INSN_CLASS_FUNC,   0 },
-  { "page",       0, (long int)do_page,      INSN_CLASS_FUNC,   0 },
-  { "processor",  0, (long int)do_processor, INSN_CLASS_FUNC,   0 },
-  { "radix",      0, (long int)do_radix,     INSN_CLASS_FUNC,   0 },
-  { "set",        0, (long int)do_set, 	     INSN_CLASS_FUNC,   0 },
-  { "space",      0, (long int)do_space,     INSN_CLASS_FUNC,   0 },
-  { "udata",      0, (long int)do_udata,     INSN_CLASS_FUNC,   0 },
-  { "udata_acs",  0, (long int)do_udata_acs, INSN_CLASS_FUNC,   0 },
-  { "udata_ovr",  0, (long int)do_udata_ovr, INSN_CLASS_FUNC,   0 },
-  { "udata_shr",  0, (long int)do_udata_shr, INSN_CLASS_FUNC,   0 },
-  { "variable",   0, (long int)do_variable,  INSN_CLASS_FUNC,   0 },
-  { "while",      0, (long int)do_while,     INSN_CLASS_FUNC,   0 },
-  { ".def",       0, (long int)do_def, 	     INSN_CLASS_FUNC,   0 },
-  { ".dim",       0, (long int)do_dim, 	     INSN_CLASS_FUNC,   0 },
-  { ".direct",    0, (long int)do_direct,    INSN_CLASS_FUNC,   0 },
-  { ".eof",       0, (long int)do_eof,	     INSN_CLASS_FUNC,   0 },
-  { ".file",      0, (long int)do_file,	     INSN_CLASS_FUNC,   0 },
-  { ".ident",     0, (long int)do_ident,     INSN_CLASS_FUNC,   0 },
-  { ".line",      0, (long int)do_line,	     INSN_CLASS_FUNC,   0 },
-  { ".set",       0, (long int)do_set, 	     INSN_CLASS_FUNC,   0 },
-  { ".type",      0, (long int)do_type,	     INSN_CLASS_FUNC,   0 },
-  { "#if",        0, (long int)do_if,        INSN_CLASS_FUNC,   ATTRIB_COND },
-  { "#else",      0, (long int)do_else,	     INSN_CLASS_FUNC,   ATTRIB_COND },
-  { "#endif",     0, (long int)do_endif,     INSN_CLASS_FUNC,   ATTRIB_COND },
-  { "#ifdef",     0, (long int)do_ifdef,     INSN_CLASS_FUNC,   ATTRIB_COND },
-  { "#ifndef",    0, (long int)do_ifndef,    INSN_CLASS_FUNC,   ATTRIB_COND },
-  { "#undefine",  0, (long int)do_undefine,  INSN_CLASS_FUNC,   0 }
+static struct insn  op_0[] = {
+  { "constant", (long int)do_constant,  INSN_CLASS_FUNC,	0 },
+  { "else",	(long int)do_else, 	INSN_CLASS_FUNC,	ATTRIB_COND },
+  { "endif",	(long int)do_endif,	INSN_CLASS_FUNC,	ATTRIB_COND },
+  { "endm",	(long int)do_endm,	INSN_CLASS_FUNC,	0 },
+  { "endw",	(long int)do_endw,	INSN_CLASS_FUNC,	0 },
+  { "equ",	(long int)do_equ,  	INSN_CLASS_FUNC,	0 },
+  { "error",	(long int)do_error, 	INSN_CLASS_FUNC,	0 },
+  { "expand",	(long int)do_expand,    INSN_CLASS_FUNC,	0 },
+  { "errorlevel", (long int)do_errlvl,  INSN_CLASS_FUNC,	0 },
+  { "if",	(long int)do_if,   	INSN_CLASS_FUNC,	ATTRIB_COND },
+  { "ifdef",	(long int)do_ifdef, 	INSN_CLASS_FUNC,	ATTRIB_COND },
+  { "ifndef",	(long int)do_ifndef,	INSN_CLASS_FUNC,	ATTRIB_COND },
+  { "list",	(long int)do_list, 	INSN_CLASS_FUNC,	0 },
+  { "local",	(long int)do_local, 	INSN_CLASS_FUNC,	0 },
+  { "macro",	(long int)do_macro,	INSN_CLASS_FUNC,	0 },
+  { "messg",	(long int)do_messg,	INSN_CLASS_FUNC,	0 },
+  { "noexpand", (long int)do_noexpand,  INSN_CLASS_FUNC,	0 },
+  { "nolist",	(long int)do_nolist,    INSN_CLASS_FUNC,	0 },
+  { "page",	(long int)do_page,      INSN_CLASS_FUNC,	0 },
+  { "processor",(long int)do_processor, INSN_CLASS_FUNC,	0 },
+  { "radix",	(long int)do_radix, 	INSN_CLASS_FUNC,	0 },
+  { "set",	(long int)do_set, 	INSN_CLASS_FUNC,	0 },
+  { "space",	(long int)do_space,     INSN_CLASS_FUNC,	0 },
+  { "variable", (long int)do_variable,  INSN_CLASS_FUNC,	0 },
+  { "while",	(long int)do_while, 	INSN_CLASS_FUNC,	0 },
+  { ".set",	(long int)do_set, 	INSN_CLASS_FUNC,	0 },
+  { "#else",	(long int)do_else,	INSN_CLASS_FUNC,	ATTRIB_COND },
+  { "#endif",	(long int)do_endif,	INSN_CLASS_FUNC,	ATTRIB_COND },
+  { "#ifdef",	(long int)do_ifdef, 	INSN_CLASS_FUNC,	ATTRIB_COND },
+  { "#ifndef",	(long int)do_ifndef,	INSN_CLASS_FUNC,	ATTRIB_COND },
+  { "#undefine", (long int)do_undefine,	INSN_CLASS_FUNC,	0 }
 };
 
-const int num_op_0 = TABLE_SIZE(op_0);
-
-struct insn op_1[] = {
-  { "__badram",   0, (long int)do_badram,    INSN_CLASS_FUNC,   0 },
-  { "__config",   0, (long int)do_config,    INSN_CLASS_FUNC,   0 },
-  { "__fuses",    0, (long int)do_config,    INSN_CLASS_FUNC,   0 },
-  { "__idlocs",   0, (long int)do_idlocs,    INSN_CLASS_FUNC,   0 },
-  { "__maxram",   0, (long int)do_maxram,    INSN_CLASS_FUNC,   0 },
-  { "bankisel",   0, (long int)do_bankisel,  INSN_CLASS_FUNC,   0 },
-  { "banksel",    0, (long int)do_banksel,   INSN_CLASS_FUNC,   0 },
-  { "data",       0, (long int)do_data,      INSN_CLASS_FUNC,   0 },
-  { "da",         0, (long int)do_da, 	     INSN_CLASS_FUNC,   0 },
-  { "db",         0, (long int)do_db, 	     INSN_CLASS_FUNC,   0 },
-  { "de",         0, (long int)do_de, 	     INSN_CLASS_FUNC,   0 },
-  { "dt",         0, (long int)do_dt, 	     INSN_CLASS_FUNC,   0 },
-  { "dw",         0, (long int)do_dw, 	     INSN_CLASS_FUNC,   0 },
-  { "fill",       0, (long int)do_fill,      INSN_CLASS_FUNC,   0 },
-  { "org",        0, (long int)do_org,       INSN_CLASS_FUNC,   0 },
-  { "pagesel",    0, (long int)do_pagesel,   INSN_CLASS_FUNC,   0 },
-  { "res",        0, (long int)do_res,       INSN_CLASS_FUNC,   0 }
+static struct insn  op_1[] = {
+  { "__badram", (long int)do_badram,    INSN_CLASS_FUNC,	0 },
+  { "__config", (long int)do_config,    INSN_CLASS_FUNC,	0 },
+  { "__fuses",  (long int)do_config,    INSN_CLASS_FUNC,	0 },
+  { "__idlocs", (long int)do_idlocs,    INSN_CLASS_FUNC,	0 },
+  { "__maxram", (long int)do_maxram,    INSN_CLASS_FUNC,	0 },
+  { "data",     (long int)do_data, 	INSN_CLASS_FUNC,	0 },
+  { "da",       (long int)do_da, 	INSN_CLASS_FUNC,	0 },
+  { "db",       (long int)do_db, 	INSN_CLASS_FUNC,	0 },
+  { "de",       (long int)do_de, 	INSN_CLASS_FUNC,	0 },
+  { "dt",       (long int)do_dt, 	INSN_CLASS_FUNC,	0 },
+  { "dw",       (long int)do_dw, 	INSN_CLASS_FUNC,	0 },
+  { "fill",	(long int)do_fill,  	INSN_CLASS_FUNC,	0 },
+  { "org",	(long int)do_org,       INSN_CLASS_FUNC,	0 },
+  { "res",	(long int)do_res,       INSN_CLASS_FUNC,	0 }
 };
 
-const int num_op_1 = TABLE_SIZE(op_1);
+/* XXXPRO: Need to add a struct here for any extra processor classes. */
+
+/* PIC 12-bit instruction set */
+static struct insn  op_12c5xx[] = {
+  { "ADDWF",  0x1c0,	INSN_CLASS_OPWF5 	},
+  { "ANDLW",  0xe00,	INSN_CLASS_LIT8 	},
+  { "ANDWF",  0x140,	INSN_CLASS_OPWF5 	},
+  { "BCF",    0x400,	INSN_CLASS_B5 		},
+  { "BSF",    0x500,	INSN_CLASS_B5 		},
+  { "BTFSC",  0x600,	INSN_CLASS_B5 		},
+  { "BTFSS",  0x700,	INSN_CLASS_B5		},
+  { "CALL",   0x900,	INSN_CLASS_LIT8 	},
+  { "CLRF",   0x060,	INSN_CLASS_OPF5 	},
+  { "CLRW",   0x040,	INSN_CLASS_IMPLICIT 	},
+  { "CLRWDT", 0x004, 	INSN_CLASS_IMPLICIT 	},
+  { "COMF",   0x240,	INSN_CLASS_OPWF5 	},
+  { "DECF",   0x0c0,	INSN_CLASS_OPWF5 	},
+  { "DECFSZ", 0x2c0,	INSN_CLASS_OPWF5 	},
+  { "GOTO",   0xa00,	INSN_CLASS_LIT9 	},
+  { "INCF",   0x280,	INSN_CLASS_OPWF5 	},
+  { "INCFSZ", 0x3c0,	INSN_CLASS_OPWF5 	},
+  { "IORLW",  0xd00,	INSN_CLASS_LIT8 	},
+  { "IORWF",  0x100,	INSN_CLASS_OPWF5 	},
+  { "MOVF",   0x200,	INSN_CLASS_OPWF5 	},
+  { "MOVLW",  0xc00,	INSN_CLASS_LIT8 	},
+  { "MOVWF",  0x020,	INSN_CLASS_OPF5 	},
+  { "NOP",    0x000,	INSN_CLASS_IMPLICIT 	},
+  { "OPTION", 0x002,	INSN_CLASS_IMPLICIT 	},
+  { "RETLW",  0x800,	INSN_CLASS_LIT8 	},
+  { "RETURN", 0x800,	INSN_CLASS_IMPLICIT 	}, /* special mnemonic */
+  { "RLF",    0x340,	INSN_CLASS_OPWF5 	},
+  { "RRF",    0x300,	INSN_CLASS_OPWF5 	},
+  { "SLEEP",  0x003,	INSN_CLASS_IMPLICIT 	},
+  { "SUBWF",  0x080,	INSN_CLASS_OPWF5 	},
+  { "SWAPF",  0x380,	INSN_CLASS_OPWF5 	},
+  { "TRIS",   0x000,	INSN_CLASS_OPF5 	}, /* not optimal */
+  { "XORLW",  0xf00,	INSN_CLASS_LIT8 	},
+  { "XORWF",  0x180,	INSN_CLASS_OPWF5 	}
+};
+
+/* Scenix SX has a superset of the PIC 12-bit instruction set */
+/*
+ * It would be nice if there was a more elegant way to do this,
+ * either by adding a flags field to struct insn, or by allowing a
+ * processor to have more than one associated table.
+ */
+static struct insn  op_sx[] = {
+  { "ADDWF",  0x1c0,	INSN_CLASS_OPWF5 	},
+  { "ANDLW",  0xe00,	INSN_CLASS_LIT8 	},
+  { "ANDWF",  0x140,	INSN_CLASS_OPWF5 	},
+  { "BANK",   0x018,    INSN_CLASS_LIT3_BANK    }, /* SX only */
+  { "BCF",    0x400,	INSN_CLASS_B5 		},
+  { "BSF",    0x500,	INSN_CLASS_B5 		},
+  { "BTFSC",  0x600,	INSN_CLASS_B5 		},
+  { "BTFSS",  0x700,	INSN_CLASS_B5		},
+  { "CALL",   0x900,	INSN_CLASS_LIT8 	},
+  { "CLRF",   0x060,	INSN_CLASS_OPF5 	},
+  { "CLRW",   0x040,	INSN_CLASS_IMPLICIT 	},
+  { "CLRWDT", 0x004, 	INSN_CLASS_IMPLICIT 	},
+  { "COMF",   0x240,	INSN_CLASS_OPWF5 	},
+  { "DECF",   0x0c0,	INSN_CLASS_OPWF5 	},
+  { "DECFSZ", 0x2c0,	INSN_CLASS_OPWF5 	},
+  { "GOTO",   0xa00,	INSN_CLASS_LIT9 	},
+  { "INCF",   0x280,	INSN_CLASS_OPWF5 	},
+  { "INCFSZ", 0x3c0,	INSN_CLASS_OPWF5 	},
+  { "IORLW",  0xd00,	INSN_CLASS_LIT8 	},
+  { "IORWF",  0x100,	INSN_CLASS_OPWF5 	},
+  { "IREAD",  0x041,    INSN_CLASS_IMPLICIT     }, /* SX only */
+  { "MODE",   0x050,    INSN_CLASS_LIT4         }, /* SX only */
+  { "MOVF",   0x200,	INSN_CLASS_OPWF5 	},
+  { "MOVLW",  0xc00,	INSN_CLASS_LIT8 	},
+  { "MOVMW",  0x042,    INSN_CLASS_IMPLICIT     }, /* SX only */
+  { "MOVWF",  0x020,	INSN_CLASS_OPF5 	},
+  { "MOVWM",  0x043,    INSN_CLASS_IMPLICIT     }, /* SX only */
+  { "NOP",    0x000,	INSN_CLASS_IMPLICIT 	},
+  { "OPTION", 0x002,	INSN_CLASS_IMPLICIT 	},
+  { "PAGE",   0x010,    INSN_CLASS_LIT3_PAGE    }, /* SX only */
+  { "RETI",   0x00e,    INSN_CLASS_IMPLICIT     }, /* SX only */
+  { "RETIW",  0x00f,    INSN_CLASS_IMPLICIT     }, /* SX only */
+  { "RETLW",  0x800,	INSN_CLASS_LIT8 	},
+  { "RETP",   0x00d,    INSN_CLASS_IMPLICIT     }, /* SX only */
+  { "RETURN", 0x00c,    INSN_CLASS_IMPLICIT     }, /* SX only */
+  { "RLF",    0x340,	INSN_CLASS_OPWF5 	},
+  { "RRF",    0x300,	INSN_CLASS_OPWF5 	},
+  { "SLEEP",  0x003,	INSN_CLASS_IMPLICIT 	},
+  { "SUBWF",  0x080,	INSN_CLASS_OPWF5 	},
+  { "SWAPF",  0x380,	INSN_CLASS_OPWF5 	},
+  { "TRIS",   0x000,	INSN_CLASS_OPF5 	}, /* not optimal */
+  { "XORLW",  0xf00,	INSN_CLASS_LIT8 	},
+  { "XORWF",  0x180,	INSN_CLASS_OPWF5 	}
+};
+
+/* PIC 14-bit instruction set */
+static struct insn  op_16cxx[] = {
+  { "ADDLW",  0x3e00, 	INSN_CLASS_LIT8 	},
+  { "ADDWF",  0x0700,	INSN_CLASS_OPWF7 	},
+  { "ANDLW",  0x3900,	INSN_CLASS_LIT8 	},
+  { "ANDWF",  0x0500,	INSN_CLASS_OPWF7 	},
+  { "BCF",    0x1000,	INSN_CLASS_B7 		},
+  { "BSF",    0x1400,	INSN_CLASS_B7 		},
+  { "BTFSC",  0x1800,	INSN_CLASS_B7 		},
+  { "BTFSS",  0x1c00,	INSN_CLASS_B7		},
+  { "CALL",   0x2000,	INSN_CLASS_LIT11 	},
+  { "CLRF",   0x0180,	INSN_CLASS_OPF7		},
+  { "CLRW",   0x0103,	INSN_CLASS_IMPLICIT 	},
+  { "CLRWDT", 0x0064, 	INSN_CLASS_IMPLICIT 	},
+  { "COMF",   0x0900,	INSN_CLASS_OPWF7 	},
+  { "DECF",   0x0300,	INSN_CLASS_OPWF7 	},
+  { "DECFSZ", 0x0b00,	INSN_CLASS_OPWF7 	},
+  { "GOTO",   0x2800,	INSN_CLASS_LIT11 	},
+  { "INCF",   0x0a00,	INSN_CLASS_OPWF7 	},
+  { "INCFSZ", 0x0f00,	INSN_CLASS_OPWF7 	},
+  { "IORLW",  0x3800,	INSN_CLASS_LIT8 	},
+  { "IORWF",  0x0400,	INSN_CLASS_OPWF7 	},
+  { "MOVF",   0x0800,	INSN_CLASS_OPWF7 	},
+  { "MOVLW",  0x3000,	INSN_CLASS_LIT8 	},
+  { "MOVWF",  0x0080,	INSN_CLASS_OPF7 	},
+  { "NOP",    0x0000,	INSN_CLASS_IMPLICIT 	},
+  { "OPTION", 0x0062,	INSN_CLASS_IMPLICIT 	},
+  { "RETFIE", 0x0009,	INSN_CLASS_IMPLICIT 	},
+  { "RETLW",  0x3400,	INSN_CLASS_LIT8 	},
+  { "RETURN", 0x0008,	INSN_CLASS_IMPLICIT 	},
+  { "RLF",    0x0d00,	INSN_CLASS_OPWF7 	},
+  { "RRF",    0x0c00,	INSN_CLASS_OPWF7 	},
+  { "SLEEP",  0x0063,	INSN_CLASS_IMPLICIT 	},
+  { "SUBLW",  0x3c00,	INSN_CLASS_LIT8 	},
+  { "SUBWF",  0x0200,	INSN_CLASS_OPWF7 	},
+  { "SWAPF",  0x0e00,	INSN_CLASS_OPWF7 	},
+  { "TRIS",   0x0060,	INSN_CLASS_OPF7		},
+  { "XORLW",  0x3a00,	INSN_CLASS_LIT8 	},
+  { "XORWF",  0x0600,	INSN_CLASS_OPWF7 	}
+};
+
+/* PIC 16-bit instruction set */
+static struct insn  op_17cxx[] = {
+  { "ADDLW",  0xb100,   INSN_CLASS_LIT8         },
+  { "ADDWF",  0x0e00,   INSN_CLASS_OPWF8        },
+  { "ADDWFC", 0x1000,   INSN_CLASS_OPWF8        },
+  { "ANDLW",  0xb500,   INSN_CLASS_LIT8         },
+  { "ANDWF",  0x0a00,   INSN_CLASS_OPWF8        },
+  { "BCF",    0x8800,   INSN_CLASS_B8           },
+  { "BSF",    0x8000,   INSN_CLASS_B8           },
+  { "BTFSC",  0x9800,   INSN_CLASS_B8           },
+  { "BTFSS",  0x9000,   INSN_CLASS_B8           },
+  { "BTG",    0x3800,   INSN_CLASS_B8           },
+  { "CALL",   0xe000,   INSN_CLASS_LIT13        },
+  { "CLRF",   0x2800,   INSN_CLASS_OPWF8        },
+  { "CLRWDT", 0x0004,   INSN_CLASS_IMPLICIT     },
+  { "COMF",   0x1200,   INSN_CLASS_OPWF8        },
+  { "CPFSEQ", 0x3100,   INSN_CLASS_OPF8         },
+  { "CPFSGT", 0x3200,   INSN_CLASS_OPF8         },
+  { "CPFSLT", 0x3000,   INSN_CLASS_OPF8         },
+  { "DAW",    0x2e00,   INSN_CLASS_OPWF8        },
+  { "DECF",   0x0600,   INSN_CLASS_OPWF8        },
+  { "DECFSZ", 0x1600,   INSN_CLASS_OPWF8        },
+  { "DCFSNZ", 0x2600,   INSN_CLASS_OPWF8        },
+  { "GOTO",   0xc000,   INSN_CLASS_LIT13        },
+  { "INCF",   0x1400,   INSN_CLASS_OPWF8        },
+  { "INCFSZ", 0x1e00,   INSN_CLASS_OPWF8        },
+  { "INFSNZ", 0x2400,   INSN_CLASS_OPWF8        },
+  { "IORLW",  0xb300,   INSN_CLASS_LIT8         },
+  { "IORWF",  0x0800,   INSN_CLASS_OPWF8        },
+  { "LCALL",  0xb700,   INSN_CLASS_LIT8         },
+  { "MOVFP",  0x6000,   INSN_CLASS_FP           },
+  { "MOVPF",  0x4000,   INSN_CLASS_PF           },
+  { "MOVLB",  0xb800,   INSN_CLASS_LIT8         },
+  { "MOVLR",  0xba00,   INSN_CLASS_LIT4S        },
+  { "MOVLW",  0xb000,   INSN_CLASS_LIT8         },
+  { "MOVWF",  0x0100,   INSN_CLASS_OPF8         },
+  { "MULLW",  0xbc00,   INSN_CLASS_LIT8         },
+  { "MULWF",  0x3400,   INSN_CLASS_OPF8         },
+  { "NEGW",   0x2c00,   INSN_CLASS_OPWF8        },
+  { "NOP",    0x0000,   INSN_CLASS_IMPLICIT     },
+  { "RETFIE", 0x0005,   INSN_CLASS_IMPLICIT     },
+  { "RETLW",  0xb600,   INSN_CLASS_LIT8         },
+  { "RETURN", 0x0002,   INSN_CLASS_IMPLICIT     },
+  { "RLCF",   0x1a00,   INSN_CLASS_OPWF8        },
+  { "RLNCF",  0x2200,   INSN_CLASS_OPWF8        },
+  { "RRCF",   0x1800,   INSN_CLASS_OPWF8        },
+  { "RRNCF",  0x2000,   INSN_CLASS_OPWF8        },
+  { "SETF",   0x2a00,   INSN_CLASS_OPWF8        },
+  { "SLEEP",  0x0003,   INSN_CLASS_IMPLICIT     },
+  { "SUBLW",  0xb200,   INSN_CLASS_LIT8         },
+  { "SUBWF",  0x0400,   INSN_CLASS_OPWF8        },
+  { "SUBWFB", 0x0200,   INSN_CLASS_OPWF8        },
+  { "SWAPF",  0x1c00,   INSN_CLASS_OPWF8        },
+  { "TABLRD", 0xa800,   INSN_CLASS_TBL3         },
+  { "TABLWT", 0xac00,   INSN_CLASS_TBL3         },
+  { "TLRD",   0xa000,   INSN_CLASS_TBL2         },
+  { "TLWT",   0xa400,   INSN_CLASS_TBL2         },
+  { "TSTFSZ", 0x3300,   INSN_CLASS_OPF8         },
+  { "XORLW",  0xb400,   INSN_CLASS_LIT8         },
+  { "XORWF",  0x0c00,   INSN_CLASS_OPWF8        }
+};
+
+static struct insn  op_18cxx[] = {
+  { "ADDLW",  0x0f00, 	INSN_CLASS_LIT8 	},
+  { "ADDWF",  0x2400,	INSN_CLASS_OPWFA8 	},
+  { "ADDWFC", 0x2000,	INSN_CLASS_OPWFA8 	},
+  { "ANDLW",  0x0b00,	INSN_CLASS_LIT8 	},
+  { "ANDWF",  0x1400,	INSN_CLASS_OPWFA8 	},
+  { "BC",     0xe200,	INSN_CLASS_RBRA8       	},
+  { "BCF",    0x9000,	INSN_CLASS_BA8 		},
+  { "BN",     0xe600,	INSN_CLASS_RBRA8       	},
+  { "BNC",    0xe300,	INSN_CLASS_RBRA8       	},
+  { "BNN",    0xe700,	INSN_CLASS_RBRA8       	},
+  { "BNOV",   0xe500,	INSN_CLASS_RBRA8       	},
+  { "BNZ",    0xe100,	INSN_CLASS_RBRA8       	},
+  { "BRA",    0xd000,	INSN_CLASS_RBRA11	},
+  { "BSF",    0x8000,	INSN_CLASS_BA8 		},
+  { "BTFSC",  0xb000,	INSN_CLASS_BA8 		},
+  { "BTFSS",  0xa000,	INSN_CLASS_BA8		},
+  { "BTG",    0x7000,	INSN_CLASS_BA8		},
+  { "BOV",    0xe400,	INSN_CLASS_RBRA8       	},
+  { "BZ",     0xe000,	INSN_CLASS_RBRA8       	},
+  { "CALL",   0xec00,	INSN_CLASS_CALL20 	},
+  { "CLRF",   0x6a00,	INSN_CLASS_OPFA8	},
+  { "CLRWDT", 0x0004, 	INSN_CLASS_IMPLICIT 	},
+  { "COMF",   0x1c00,	INSN_CLASS_OPWFA8 	},
+  { "CPFSEQ", 0x6200,	INSN_CLASS_OPFA8 	},
+  { "CPFSGT", 0x6400,	INSN_CLASS_OPFA8 	},
+  { "CPFSLT", 0x6000,	INSN_CLASS_OPFA8 	},
+  { "DAW",    0x0007,	INSN_CLASS_IMPLICIT 	},
+  { "DECF",   0x0400,	INSN_CLASS_OPWFA8 	},
+  { "DECFSZ", 0x2c00,	INSN_CLASS_OPWFA8 	},
+  { "DCFSNZ", 0x4c00,	INSN_CLASS_OPWFA8 	},
+  { "GOTO",   0xef00,	INSN_CLASS_LIT20 	},
+  { "INCF",   0x2800,	INSN_CLASS_OPWFA8 	},
+  { "INCFSZ", 0x3c00,	INSN_CLASS_OPWFA8 	},
+  { "INFSNZ", 0x4800,	INSN_CLASS_OPWFA8 	},
+  { "IORLW",  0x0900,	INSN_CLASS_LIT8 	},
+  { "IORWF",  0x1000,	INSN_CLASS_OPWFA8 	},
+  { "LFSR",   0xee00,	INSN_CLASS_FLIT12 	},
+  { "MOVF",   0x5000,	INSN_CLASS_OPWFA8 	},
+  { "MOVFF",  0xc000,	INSN_CLASS_FF 		},
+  { "MOVLB",  0x0100,	INSN_CLASS_LIT8 	},
+  { "MOVLW",  0x0e00,	INSN_CLASS_LIT8 	},
+  { "MOVWF",  0x6e00,	INSN_CLASS_OPFA8 	},
+  { "MULLW",  0x0d00,	INSN_CLASS_LIT8 	},
+  { "MULWF",  0x0200,	INSN_CLASS_OPFA8 	},
+  { "NEGF",   0x6c00,	INSN_CLASS_OPFA8 	},
+  { "NOP",    0x0000,	INSN_CLASS_IMPLICIT 	},
+  { "POP",    0x0006,	INSN_CLASS_IMPLICIT 	},
+  { "PUSH",   0x0005,	INSN_CLASS_IMPLICIT 	},
+  { "RCALL",  0xd800,	INSN_CLASS_RBRA11 	},
+  { "RESET",  0x00ff,	INSN_CLASS_IMPLICIT 	}, 
+  { "RETFIE", 0x0010,	INSN_CLASS_LIT1 	},
+  { "RETLW",  0x0c00,	INSN_CLASS_LIT8 	},
+  { "RETURN", 0x0012,	INSN_CLASS_LIT1 	},
+  { "RLCF",   0x3400,	INSN_CLASS_OPWFA8 	},
+  { "RLNCF",  0x4400,	INSN_CLASS_OPWFA8 	},
+  { "RRCF",   0x3000,	INSN_CLASS_OPWFA8 	},
+  { "RRNCF",  0x4000,	INSN_CLASS_OPWFA8 	},
+  { "SETF",   0x6800,	INSN_CLASS_OPFA8 	},
+  { "SLEEP",  0x0003,	INSN_CLASS_IMPLICIT 	},
+  { "SUBFWB", 0x5400,	INSN_CLASS_OPWFA8 	},
+  { "SUBLW",  0x0800,	INSN_CLASS_LIT8 	},
+  { "SUBWF",  0x5c00,	INSN_CLASS_OPWFA8 	},
+  { "SUBWFB", 0x5800,	INSN_CLASS_OPWFA8 	},
+  { "SWAPF",  0x3800,	INSN_CLASS_OPWFA8 	},
+  { "TBLRD",  0x0008,	INSN_CLASS_TBL 		},
+  { "TBLWT",  0x000c,	INSN_CLASS_TBL 		},
+  { "TSTFSZ", 0x6600,	INSN_CLASS_OPFA8	},
+  { "XORLW",  0x0a00,	INSN_CLASS_LIT8 	},
+  { "XORWF",  0x1800,	INSN_CLASS_OPWFA8	}
+};
+
+/* PIC 16-bit "Special" instruction set */
+static struct insn  op_18cxx_sp[] = {
+  { "CLRC",  0x90d8,	INSN_CLASS_IMPLICIT 	},
+  { "CLRDC", 0x92d8,	INSN_CLASS_IMPLICIT 	},
+  { "CLRN",  0x98d8,	INSN_CLASS_IMPLICIT 	},
+  { "CLROV", 0x96d8,	INSN_CLASS_IMPLICIT 	},
+  { "CLRW",  0x6ae8,	INSN_CLASS_IMPLICIT 	},
+  { "CLRZ",  0x94d8,	INSN_CLASS_IMPLICIT 	},
+
+  { "SETC",  0x80d8,	INSN_CLASS_IMPLICIT 	},
+  { "SETDC", 0x82d8,	INSN_CLASS_IMPLICIT 	},
+  { "SETN",  0x88d8,	INSN_CLASS_IMPLICIT 	},
+  { "SETOV", 0x86d8,	INSN_CLASS_IMPLICIT 	},
+  { "SETZ",  0x84d8,	INSN_CLASS_IMPLICIT 	},
+
+  { "SKPC",  0xa0d8,	INSN_CLASS_IMPLICIT 	},
+  { "SKPDC", 0xa2d8,	INSN_CLASS_IMPLICIT 	},
+  { "SKPN",  0xa8d8,	INSN_CLASS_IMPLICIT 	},
+  { "SKPOV", 0xa6d8,	INSN_CLASS_IMPLICIT 	},
+  { "SKPZ",  0xa4d8,	INSN_CLASS_IMPLICIT 	},
+
+  { "SKPNC", 0xb0d8,	INSN_CLASS_IMPLICIT 	},
+  { "SKPNDC",0xb2d8,	INSN_CLASS_IMPLICIT 	},
+  { "SKPNN", 0xb8d8,	INSN_CLASS_IMPLICIT 	},
+  { "SKPNOV",0xb6d8,	INSN_CLASS_IMPLICIT 	},
+  { "SKPNZ", 0xb4d8,	INSN_CLASS_IMPLICIT 	},
+
+  { "TGC",   0x70d8,	INSN_CLASS_IMPLICIT 	},
+  { "TGDC",  0x72d8,	INSN_CLASS_IMPLICIT 	},
+  { "TGN",   0x78d8,	INSN_CLASS_IMPLICIT 	},
+  { "TGOV",  0x76d8,	INSN_CLASS_IMPLICIT 	},
+  { "TGZ",   0x74d8,	INSN_CLASS_IMPLICIT 	}
+
+};
+
+/* PIC 12-bit and 14-bit "Special" instruction set */
+static struct insn special[] = {
+  { "addcf",    (long int)do_addcf,  INSN_CLASS_FUNC,        0 },
+  { "adddcf",   (long int)do_adddcf, INSN_CLASS_FUNC,        0 },
+  { "b",        (long int)do_b,      INSN_CLASS_FUNC,        0 },
+  { "bc",       (long int)do_bc,     INSN_CLASS_FUNC,        0 },
+  { "bdc",      (long int)do_bdc,    INSN_CLASS_FUNC,        0 },
+  { "bz",       (long int)do_bz,     INSN_CLASS_FUNC,        0 },
+  { "bnc",      (long int)do_bnc,    INSN_CLASS_FUNC,        0 },
+  { "bndc",     (long int)do_bndc,   INSN_CLASS_FUNC,        0 },
+  { "bnz",      (long int)do_bnz,    INSN_CLASS_FUNC,        0 },
+  { "clrc",     (long int)do_clrc,   INSN_CLASS_FUNC,        0 },
+  { "clrdc",    (long int)do_clrdc,  INSN_CLASS_FUNC,        0 },
+  { "clrz",     (long int)do_clrz,   INSN_CLASS_FUNC,        0 },
+  { "lcall",    (long int)do_lcall,  INSN_CLASS_FUNC,        0 },
+  { "lgoto",    (long int)do_lgoto,  INSN_CLASS_FUNC,        0 },
+  { "movfw",    (long int)do_movfw,  INSN_CLASS_FUNC,        0 },
+  { "negf",     (long int)do_negf,   INSN_CLASS_FUNC,        0 },
+  { "setc",     (long int)do_setc,   INSN_CLASS_FUNC,        0 },
+  { "setdc",    (long int)do_setdc,  INSN_CLASS_FUNC,        0 },
+  { "setz",     (long int)do_setz,   INSN_CLASS_FUNC,        0 }, 
+  { "skpc",     (long int)do_skpc,   INSN_CLASS_FUNC,        0 },
+  { "skpdc",    (long int)do_skpdc,  INSN_CLASS_FUNC,        0 },
+  { "skpz",     (long int)do_skpz,   INSN_CLASS_FUNC,        0 },
+  { "skpnc",    (long int)do_skpnc,  INSN_CLASS_FUNC,        0 },
+  { "skpndc",   (long int)do_skpndc, INSN_CLASS_FUNC,        0 },
+  { "skpnz",    (long int)do_skpnz,  INSN_CLASS_FUNC,        0 },
+  { "subcf",    (long int)do_subcf,  INSN_CLASS_FUNC,        0 },
+  { "subdcf",   (long int)do_subdcf, INSN_CLASS_FUNC,        0 },
+  { "tstf",     (long int)do_tstf,   INSN_CLASS_FUNC,        0 }
+
+};
+
+/* XXXPRO: Need to add a line here for any extra processors. */
+
+#define NUM_OP_0	(sizeof(op_0) / sizeof(op_0[0]))
+#define NUM_OP_1	(sizeof(op_1) / sizeof(op_1[0]))
+#define NUM_OP_12C5XX	(sizeof(op_12c5xx) / sizeof(op_12c5xx[0]))
+#define NUM_OP_16CXX	(sizeof(op_16cxx) / sizeof(op_16cxx[0]))
+#define NUM_OP_SX	(sizeof(op_sx) / sizeof(op_sx[0]))
+#define NUM_OP_17CXX    (sizeof(op_17cxx) / sizeof(op_17cxx[0]))
+#define NUM_OP_18CXX	(sizeof(op_18cxx) / sizeof(op_18cxx[0]))
+#define NUM_OP_18CXX_SP	(sizeof(op_18cxx_sp) / sizeof(op_18cxx_sp[0]))
+#define NUM_OP_SPECIAL	(sizeof(special) / sizeof(special[0]))
 
 void opcode_init(int stage)
 {
@@ -3481,80 +3078,238 @@ void opcode_init(int stage)
   switch (stage) {
   case 0:
     base = op_0;
-    count = num_op_0;
+    count = NUM_OP_0;
     break;
   case 1:
     base = op_1;
-    count = num_op_1;
+    count = NUM_OP_1;
     break;
   case 2:
-    state.device.class = gp_processor_class(state.processor);
-    switch (state.device.class) {
-    case PROC_CLASS_EEPROM8:
+
+    /* XXXPRO: Need to add a line here for any extra processors. */
+
+    switch (state.processor) {
+    case eeprom8:
       base = 0;
       count = 0;
       state.device.core_size = CORE_8BIT_MASK;
       state.device.config_address = 0;
       state.device.id_location = 0;
       break;
-    case PROC_CLASS_GENERIC:
+    case generic:
       base = 0;
       count = 0;
       state.device.core_size = CORE_12BIT_MASK;
       state.device.config_address = CONFIG_ADDRESS_12;
       state.device.id_location = IDLOC_ADDRESS_12;
       break;
-    case PROC_CLASS_PIC12:
+    case pic12c508:
+    case pic12c508a:
+    case pic12c509:
+    case pic12c509a:
+    case pic12ce518:
+    case pic12ce519:
+    case pic12cr509a:
+    case pic16c5x:
+    case pic16c505:
+    case pic16c52:
+    case pic16c54:
+    case pic16c54a:
+    case pic16c54b:
+    case pic16c54c:
+    case pic16c55:
+    case pic16c55a:
+    case pic16c56:
+    case pic16c56a:
+    case pic16c57:
+    case pic16c57c:
+    case pic16c58:
+    case pic16c58a:
+    case pic16c58b:   
+    case pic16cr54:
+    case pic16cr54a:
+    case pic16cr54b:
+    case pic16cr54c:
+    case pic16cr56:
+    case pic16cr56a:
+    case pic16cr57a:
+    case pic16cr57b:
+    case pic16cr57c:
+    case pic16cr58a:
+    case pic16cr58b:
+    case pic16hv540:
       base = op_12c5xx;
-      count = num_op_12c5xx;
+      count = NUM_OP_12C5XX;
       state.device.core_size = CORE_12BIT_MASK;
       state.device.config_address = CONFIG_ADDRESS_12;
       state.device.id_location = IDLOC_ADDRESS_12;
       break;
-    case PROC_CLASS_SX:
+    case sx18:
+    case sx20:
+    case sx28:
       base = op_sx;
-      count = num_op_sx;
+      count = NUM_OP_SX;
       state.device.core_size = CORE_12BIT_MASK;
       state.device.config_address = CONFIG_ADDRESS_12;
       state.device.id_location = IDLOC_ADDRESS_12;
       /* page instruction conflicts with the page directive */
       remove_symbol(state.stBuiltin, "page");    
       break;
-    case PROC_CLASS_PIC14:
+    case pic12c671:
+    case pic12c672:
+    case pic12ce673:
+    case pic12ce674:
+    case pic14000:
+    case pic16cxx:
+    case pic16c432:
+    case pic16c433:
+    case pic16c461:
+    case pic16c554:
+    case pic16c558:
+    case pic16c61:
+    case pic16c62:
+    case pic16c62a:
+    case pic16c62b:
+    case pic16c620:
+    case pic16c620a:
+    case pic16c621:
+    case pic16c621a:
+    case pic16c622:
+    case pic16c622a:
+    case pic16c63:
+    case pic16c63a:
+    case pic16c64:
+    case pic16c64a:
+    case pic16c641:
+    case pic16c642:
+    case pic16c65:
+    case pic16c65a:   
+    case pic16c65b:
+    case pic16c66:
+    case pic16c661:
+    case pic16c662:
+    case pic16c67:
+    case pic16c70:
+    case pic16c71:
+    case pic16c71a:
+    case pic16c710:
+    case pic16c711:
+    case pic16c712:
+    case pic16c715:
+    case pic16c716:
+    case pic16c717:
+    case pic16c72:
+    case pic16c72a:
+    case pic16c73:
+    case pic16c73a:
+    case pic16c73b:
+    case pic16c74:
+    case pic16c745:
+    case pic16c74a:
+    case pic16c74b:
+    case pic16c76:
+    case pic16c765:
+    case pic16c77:
+    case pic16c770:
+    case pic16c771:
+    case pic16c773:
+    case pic16c774:
+    case pic16c781:
+    case pic16c782:
+    case pic16c83:
+    case pic16c84:
+    case pic16c85:   
+    case pic16c86:   
+    case pic16c923:
+    case pic16c924:
+    case pic16c925:
+    case pic16c926:
+    case pic16ce623:
+    case pic16ce624:
+    case pic16ce625:
+    case pic16cr62:
+    case pic16cr620a:
+    case pic16cr63:
+    case pic16cr64:  
+    case pic16cr65:
+    case pic16cr72:
+    case pic16cr83:
+    case pic16cr84:
+    case pic16f627:
+    case pic16f628:
+    case pic16f73:
+    case pic16f74:
+    case pic16f83:
+    case pic16f84:
+    case pic16f85:
+    case pic16f86:
+    case pic16f84a:
+    case pic16f870:
+    case pic16f871:
+    case pic16f872:
+    case pic16f873:
+    case pic16f874:
+    case pic16f876:
+    case pic16f877:
+    case pic16f877a:
+    case pic16lc74b:
       base = op_16cxx;
-      count = num_op_16cxx;
+      count = NUM_OP_16CXX;
       state.device.core_size = CORE_14BIT_MASK;
       state.device.config_address = CONFIG_ADDRESS_14;
       state.device.id_location = IDLOC_ADDRESS_14;
       break;
-    case PROC_CLASS_PIC16:
+    case pic17cxx:
+    case pic17c42:
+    case pic17c42a:
+    case pic17c43:
+    case pic17c44:
+    case pic17c752:
+    case pic17c756:
+    case pic17c756a:
+    case pic17c762:
+    case pic17c766:
+    case pic17cr42:
+    case pic17cr43:
       base = op_17cxx;
-      count = num_op_17cxx;
+      count = NUM_OP_17CXX;
       state.device.core_size = CORE_16BIT_MASK;
       _17cxx_core = 1;
       state.device.config_address = CONFIG_17CXX;
       break;
-    case PROC_CLASS_PIC16E:
+    case pic18cxx2:
+    case pic18c242:
+    case pic18c252:
+    case pic18c442:
+    case pic18c452:
+    case pic18c601:
+    case pic18c658:
+    case pic18c801:
+    case pic18c858:
+    case pic18f010:
+    case pic18f012:
+    case pic18f020:
+    case pic18f022:
+    case pic18f242:
+    case pic18f248:
+    case pic18f252:
+    case pic18f258:
+    case pic18f442:
+    case pic18f448:
+    case pic18f452:
+    case pic18f458:
       base = op_18cxx;
-      count = num_op_18cxx;
+      count = NUM_OP_18CXX;
       state.device.core_size = CORE_16BIT_MASK;
       _16bit_core = 1;
       state.c_memory_base = CONFIG1L;
       state.device.config_address = CONFIG1L;
-      state.device.bsr_boundary = gp_processor_bsr_boundary(state.processor);
 
       /* The 16_bit core special macros are encoded directly into the
        * symbol table like regular instructions. */
-      for (i = 0; i < num_op_18cxx_sp; i++)
+      for (i = 0; i < NUM_OP_18CXX_SP; i++)
 	annotate_symbol( add_symbol(state.stBuiltin, op_18cxx_sp[i].name), 
 			 &op_18cxx_sp[i]);
-
-      if (state.extended_pic16e) {
-        /* Some 18xx devices have an extended instruction set. */
-        for (i = 0; i < num_op_18cxx_ext; i++)
-	  annotate_symbol( add_symbol(state.stBuiltin, op_18cxx_ext[i].name), 
-                           &op_18cxx_ext[i]);
-      }
 
       break;
 
@@ -3565,7 +3320,7 @@ void opcode_init(int stage)
   case 3:
     /* add 12 and 14 bit special macros */
     base = special;
-    count = num_op_special;
+    count = NUM_OP_SPECIAL;
     break;
   default:
     assert(0);
@@ -3587,23 +3342,17 @@ void opcode_init(int stage)
 
 void begin_cblock(struct pnode *c)
 {
-  if (asm_enabled()) { 
-    state.cblock = maybe_evaluate(c);
-  }
+  state.cblock = maybe_evaluate(c);
 }
 
-void cblock_expr(struct pnode *s)
+void cblock_expr(char *s)
 {
-  if ((asm_enabled()) && (can_evaluate_concatenation(s))) {
-    set_global(evaluate_concatenation(s), state.cblock, PERMANENT, gvt_cblock);
-    state.cblock++;
-  }
+  set_global(s, state.cblock, PERMANENT, gvt_cblock);
+  state.cblock++;
 }
 
-void cblock_expr_incr(struct pnode *s, struct pnode *incr)
+void cblock_expr_incr(char *s, struct pnode *incr)
 {
-  if ((asm_enabled()) && (can_evaluate_concatenation(s))) {
-    set_global(evaluate_concatenation(s), state.cblock, PERMANENT, gvt_cblock);
-    state.cblock += maybe_evaluate(incr);
-  }
+  set_global(s, state.cblock, PERMANENT, gvt_cblock);
+  state.cblock += maybe_evaluate(incr);
 }

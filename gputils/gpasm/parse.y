@@ -1,7 +1,6 @@
 %{
 /* Parser for gpasm
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
-   James Bowman, Craig Franklin
+   Copyright (C) 1998,1999,2000,2001 James Bowman, Craig Franklin
 
 This file is part of gputils.
 
@@ -22,15 +21,11 @@ Boston, MA 02111-1307, USA.  */
 
 #include "stdhdr.h"
 
-#include "libgputils.h"
 #include "gpasm.h"
-#include "evaluate.h"
+#include "gpsymbol.h"
 #include "gperror.h"
 #include "directive.h"
 #include "lst.h"
-#include "macro.h"
-#include "coff.h"
-#include "scan.h"
 
 void yyerror(char *message)
 {
@@ -55,13 +50,6 @@ struct pnode *mk_constant(int value)
 {
   struct pnode *new = mk_pnode(constant);
   new->value.constant = value;
-  return new;
-}
-
-struct pnode *mk_offset(struct pnode *p)
-{
-  struct pnode *new = mk_pnode(offset);
-  new->value.offset = p;
   return new;
 }
 
@@ -114,6 +102,8 @@ gpasmVal set_label(char *label, struct pnode *parms)
     value = do_or_append_insn("set", parms);
     if (!state.mac_prev) {
       set_global(label, value, TEMPORARY, gvt_constant);
+    } else {
+      state.mac_body->label = label;
     }
   }
 
@@ -146,27 +136,8 @@ void next_line(int value)
   char l[BUFSIZ];
   char *e = l;
 
-  if ((state.src->type == src_macro) || 
-      (state.src->type == src_while)) {
-    /* while loops can be defined inside a macro or nested */
-    if (state.mac_prev) {
-      state.lst.line.linetype = none;
-      if (state.mac_body)
-	state.mac_body->src_line = strdup(state.src->lst.m->src_line);
-    }
-
-    if (((state.src->type == src_while) || (state.lst.expand)) &&
-        (state.pass == 2)) {
-      assert(state.src->lst.m->src_line != NULL);
-      lst_format_line(state.src->lst.m->src_line, value);
-    }
-    
-    if (state.src->lst.m->next) {
-      state.src->lst.m = state.src->lst.m->next;
-    }
-  } else if ((state.src->type == src_file) &&
-             (state.src->lst.f != NULL)) {
-    fgets(l, BUFSIZ, state.src->lst.f);
+  if (state.pass == 2) {
+    fgets(l, BUFSIZ, state.src->f2);
     l[strlen(l) - 1] = '\0';	/* Eat the trailing newline */
 
     if (state.mac_prev) {
@@ -175,44 +146,12 @@ void next_line(int value)
 	state.mac_body->src_line = strdup(l);
     }
 
-    if (state.pass == 2) {
+    if (state.lst.enabled) {
       lst_format_line(e, value);
     }
   }
 
   state.src->line_number++;
-
-  switch (state.next_state) {
-    case state_exitmacro:
-      execute_exitm();
-      break;
-
-    case state_include:
-      open_src(state.next_buffer.file, 1);
-      free(state.next_buffer.file);
-      break;
-
-    case state_macro:
-      /* push the label for local directive */
-      state.stTop = push_macro_symbol_table(state.stTop);
-      execute_macro(state.next_buffer.macro, 0);
-      break;
-
-    case state_section:
-      /* create a new coff section */
-      coff_new_section(state.obj.new_sec_name, 
-                       state.obj.new_sec_addr, 
-                       state.obj.new_sec_flags);
-      break;
-
-    case state_while:
-      execute_macro(state.next_buffer.macro, 1);
-      break;
-
-    default:
-      break;
-  }
- 
 }
 
 
@@ -230,93 +169,31 @@ void next_line(int value)
 
 %token <s> LABEL
 %token <s> IDENTIFIER
-%token <s> CBLOCK
-%token <s> DEBUG_LINE
-%token <s> ENDC
-%token <s> ERRORLEVEL
-%token <s> FILL
-%token <s> LIST
+%token <s> CBLOCK, ENDC, FILL
 %token <i> NUMBER
-%token <s> PROCESSOR
 %token <s> STRING
-%token <s> INCLUDE
-%token <i> UPPER
 %token <i> HIGH
 %token <i> LOW
-%token <i> LSH
-%token <i> RSH
-%token <i> GREATER_EQUAL
-%token <i> LESS_EQUAL
-%token <i> EQUAL
-%token <i> NOT_EQUAL
-%token <i> '<'
-%token <i> '>'
-%token <i> '&'
-%token <i> '|'
-%token <i> '^'
-%token <i> LOGICAL_AND
-%token <i> LOGICAL_OR
-%token <i> '='
-%token <i> ASSIGN_PLUS
-%token <i> ASSIGN_MINUS
-%token <i> ASSIGN_MULTIPLY
-%token <i> ASSIGN_DIVIDE
-%token <i> ASSIGN_MODULUS
-%token <i> ASSIGN_LSH
-%token <i> ASSIGN_RSH
-%token <i> ASSIGN_AND
-%token <i> ASSIGN_OR
-%token <i> ASSIGN_XOR
-%token <i> INCREMENT
-%token <i> DECREMENT
-%token <i> TBL_NO_CHANGE
-%token <i> TBL_POST_INC
-%token <i> TBL_POST_DEC
-%token <i> TBL_PRE_INC
-%token <i> CONCAT
-%token <i> VAR
-%token <s> VARLAB_BEGIN
-%token <s> VAR_BEGIN
-%token <s> VAR_END
-%token <i> '['
-%token <i> ']'
+%token <i> LSH, RSH
+%token <i> GREATER_EQUAL, LESS_EQUAL, EQUAL, NOT_EQUAL, '<', '>'
+%token <i> '&', '|', '^'
+%token <i> LOGICAL_AND, LOGICAL_OR
+%token <i> '=', ASSIGN_PLUS, ASSIGN_MINUS, ASSIGN_MULTIPLY, ASSIGN_DIVIDE
+%token <i> ASSIGN_MODULUS, ASSIGN_LSH, ASSIGN_RSH
+%token <i> ASSIGN_AND, ASSIGN_OR, ASSIGN_XOR, INCREMENT, DECREMENT
+%token <i> TBL_NO_CHANGE, TBL_POST_INC, TBL_POST_DEC, TBL_PRE_INC
+%token <i> CONCAT, VAR
+%token <s> VARLAB_BEGIN, VAR_BEGIN, VAR_END
 
-%type <i> '+'
-%type <i> '-'
-%type <i> '*'
-%type <i> '/'
-%type <i> '%'
-%type <i> '!'
-%type <i> '~'
+%type <i> '+', '-', '*', '/', '%', '!', '~'
 %type <s> line
 %type <s> label_concat
-%type <s> decimal_ops
 %type <i> statement
 %type <p> parameter_list
-%type <p> expr
-%type <p> e0
-%type <p> e1
-%type <p> e2
-%type <p> e3
-%type <p> e4
-%type <p> e5
-%type <p> e6
-%type <p> e7
-%type <p> e8
-%type <p> e9
+%type <p> expr, e0, e1, e2, e3, e4, e5, e6, e7, e8, e9
 %type <p> cidentifier
-%type <i> e1op
-%type <i> e2op
-%type <i> e3op
-%type <i> e4op
-%type <i> e5op
-%type <i> e6op
-%type <i> e7op
-%type <i> e8op
-%type <i> e9op
+%type <i> e1op, e2op, e3op, e4op, e5op, e6op, e7op, e8op, e9op
 %type <i> assign_equal_ops
-%type <p> list_block
-%type <p> list_expr
 
 %%
 /* Grammar rules */
@@ -328,7 +205,6 @@ program:
         { 
           state.lst.line.was_org = state.org; 
           state.lst.line.linetype = none; 
-          state.next_state = state_nochange;
         } line
 	| program error '\n'
 	{ 
@@ -342,7 +218,7 @@ line:
 	  struct pnode *parms;
 	  int exp_result;
 
-          exp_result = do_insn("set", mk_list($3, NULL));          
+          exp_result = do_or_append_insn("set", mk_list($3, NULL));          
           parms = mk_list(mk_2op(return_op($2), 
                                  mk_symbol($1), 
                                  mk_constant(exp_result)), NULL);
@@ -378,7 +254,7 @@ line:
 	|
 	label_concat statement
 	{
-	  if (asm_enabled() && (state.lst.line.linetype == none))
+	  if (state.lst.line.linetype == none)
 	    state.lst.line.linetype = insn;
 	  
 	  if (asm_enabled()) {
@@ -402,21 +278,13 @@ line:
 		annotate_symbol(mac, state.mac_head);
 		h = state.mac_head;
 		h->line_number = state.src->line_number;
-		h->file_symbol = state.src->file_symbol;
 	      }
 	      h->pass = state.pass;
- 	      
-	      /* The macro is defined so allow calls. */
-	      if (state.pass == 2)
-	        h->defined = 1;
 
 	      state.mac_head = NULL;
 	    } else if (!state.mac_prev) {
 	      /* Outside a macro, just define the label. */
 	      switch (state.lst.line.linetype) {
-	      case sec:
-		strncpy(state.obj.new_sec_name, $1, 78);
-		break;
 	      case set:
 		set_global($1, $2, TEMPORARY, gvt_constant);
 		break;
@@ -427,15 +295,16 @@ line:
 	      case insn:
 		set_global($1, $2 << _16bit_core, PERMANENT, gvt_address);
 		break;
-	      case res:
-		set_global($1, $2, PERMANENT, gvt_static);
-                break;
 	      case dir:
                 gperror(GPE_ILLEGAL_LABEL, NULL);
                 break;
               default:
 		break;
 	      }
+	    } else {
+	      /* Inside a macro; add the label to the current line */
+	      if (state.mac_body)
+		state.mac_body->label = $1;
 	    }
 	  }
 	  next_line($2);
@@ -453,7 +322,34 @@ line:
 	}
 	;
 
-decimal_ops: ERRORLEVEL | DEBUG_LINE; 
+label_concat:
+	LABEL
+        { 
+          $$ = $1;
+        }
+        |
+        VARLAB_BEGIN expr ')'
+        {
+          if (!state.mac_prev) {
+            $$ = evaluate_concatenation(mk_2op(CONCAT,  mk_symbol($1), 
+                         mk_1op(VAR, $2)));
+          } else {
+            gperror(GPE_UNKNOWN, 
+                    "This operation is not yet supported in macros");
+          }
+        }
+        |
+        VARLAB_BEGIN expr VAR_END
+        {
+          if (!state.mac_prev) {
+            $$ = evaluate_concatenation(mk_2op(CONCAT,  mk_symbol($1), 
+                      mk_2op(CONCAT, mk_1op(VAR, $2), mk_symbol($3))));
+          } else {
+            gperror(GPE_UNKNOWN, 
+                    "This operation is not yet supported in macros");
+          }
+        }        
+        ;
 
 statement:
 	'\n'
@@ -463,37 +359,6 @@ statement:
 	  } else {
 	    macro_append();
 	  }
-	}
-	|
-	INCLUDE '\n'
-	{
-	  $$ = do_or_append_insn("include", mk_list(mk_string($1), NULL));
-	}
-	|
-	PROCESSOR {  force_ident = 1; }
-        IDENTIFIER '\n'
-	{
-	  $$ = do_or_append_insn($1, mk_list(mk_symbol($3), NULL));
-	  force_ident = 0;
-	}
-	|
-	LIST '\n'
-	{
-	  $$ = do_or_append_insn($1, NULL);
-	}
-	|
-	LIST {  force_decimal = 1; }
-        list_block '\n'
-	{
-	  $$ = do_or_append_insn($1, $3);
-	  force_decimal = 0;
-	}
-	|
-	decimal_ops {  force_decimal = 1; }
-        parameter_list '\n'
-	{
-	  $$ = do_or_append_insn($1, $3);
-	  force_decimal = 0;
 	}
 	|
 	IDENTIFIER '\n'
@@ -508,69 +373,47 @@ statement:
 	|
 	FILL IDENTIFIER ')' ',' expr '\n'
 	{
-	  int number;
+	  int number = eval_fill_number($5);
 	  int i;
 
-          if (!state.mac_prev) {
-            number = eval_fill_number($5);
-
-            for (i = 0; i < number; i++) {
-              $$ = do_insn($2, NULL);
-            }
-          } else {
-	    macro_append();
-	  }
+         if (!state.mac_prev) {
+           for (i = 0; i < number; i++) {
+             $$ = do_insn($2, NULL);
+           }
+         } else {
+           gperror(GPE_UNKNOWN, 
+                   "This operation is not yet supported in macros");
+         }
 	}
 	|
 	FILL IDENTIFIER parameter_list ')' ',' expr '\n'
 	{
-	  int number;
+	  int number = eval_fill_number($6);
 	  int i;
 
-          if (!state.mac_prev) {
-            number = eval_fill_number($6);
-
-            for (i = 0; i < number; i++) {
-              $$ = do_insn($2, $3);
-            }
-          } else {
-	    macro_append();
-	  }
+         if (!state.mac_prev) {
+           for (i = 0; i < number; i++) {
+             $$ = do_insn($2, $3);
+           }
+         } else {
+           gperror(GPE_UNKNOWN, 
+                   "This operation is not yet supported in macros");
+         }
 	}
 	|
-	CBLOCK expr '\n'
-	{
-	  if (!state.mac_prev) {
-	    begin_cblock($2);
-	  } else {
-	    macro_append();
-	  }
-	  next_line(0);
-	}
+	CBLOCK expr '\n' { begin_cblock($2); next_line(0); }
         const_block
 	ENDC '\n'
 	{
-	  if (state.mac_prev) {
-	    macro_append();
-	  }
 	  $$ = 0;
 	}
-	|
-	CBLOCK '\n'
-	{
-	  if (state.mac_prev) {
-	    macro_append();
-	  }
-	  next_line(0);
-	}
-	const_block
-	ENDC '\n'
-	{
-	  if (state.mac_prev) {
-	    macro_append();
-	  }
-	  $$ = 0;
-	}
+        |
+        CBLOCK '\n' { next_line(0); }
+        const_block
+        ENDC '\n'
+        {
+           $$ = 0;
+        }
 	|
 	CBLOCK error ENDC '\n'
 	{
@@ -590,29 +433,17 @@ const_line:
 	'\n'
 	|
 	const_def_list '\n'
+	|
+	LABEL '\n'
 	{
-	  if (state.mac_prev) {
-	    macro_append();
-	  }
+	  cblock_expr($1);
 	}
 	|
-	label_concat '\n'
+	LABEL expr '\n'
 	{
-	  if (!state.mac_prev) {
-	    cblock_expr(mk_symbol($1));
-	  } else {
-	    macro_append();
-	  }
+	  cblock_expr_incr($1, $2);
 	}
-	|
-	label_concat expr '\n'
-	{
-	  if (!state.mac_prev) {
-	    cblock_expr_incr(mk_symbol($1), $2);
-	  } else {
-	    macro_append();
-	  }
-	}
+
 	;
 
 const_def_list:
@@ -622,18 +453,14 @@ const_def_list:
 	;
 
 const_def:
-	cidentifier
+	IDENTIFIER
 	{
-	  if (!state.mac_prev) {
-	    cblock_expr($1);
-	  }
+	  cblock_expr($1);
 	}
 	|
-	cidentifier ':' expr
+	IDENTIFIER ':' expr
 	{
-	  if (!state.mac_prev) {
-	    cblock_expr_incr($1, $3);
-	  }
+	  cblock_expr_incr($1, $3);
 	}
 	;
 
@@ -664,6 +491,19 @@ expr:
 	|
 	STRING
         {
+	  /* Cook up the string, replacing \X with its code. */
+	  char *ps, *pd;
+
+	  ps = pd = $1;
+	  while (*ps) {
+	    if (*ps != '\\') {
+	      *pd++ = *ps++;
+	    } else {
+	      *pd++ = gpasm_magic(ps);
+	      ps += 2;
+	    }
+	  }
+	  *pd = 0;
 	  $$ = mk_string($1);
         }
 	;
@@ -765,7 +605,7 @@ e1:
 	}
 	;
 
-e1op:	UPPER | HIGH | LOW | '-' | '!' | '~' | '+';
+e1op:	HIGH | LOW | '-' | '!' | '~' | '+';
 
 e0:
 	cidentifier
@@ -786,11 +626,6 @@ e0:
 	'(' expr ')'
 	{
 	  $$ = $2;
-	}
-	|
-	'[' expr ']'
-	{
-	  $$ = mk_offset($2);
 	}
 	|
 	'*' 
@@ -831,59 +666,5 @@ cidentifier:
                         mk_2op(CONCAT, mk_1op(VAR, $2), mk_symbol($3)));
         }
         ;
-
-label_concat:
-	LABEL
-        { 
-          $$ = $1;
-        }
-        |
-        VARLAB_BEGIN expr ')'
-        {
-          if (asm_enabled() && !state.mac_prev) {
-	    $$ = evaluate_concatenation(mk_2op(CONCAT,  mk_symbol($1), 
-                           mk_1op(VAR, $2)));
-	  }
-        }
-        |
-        VARLAB_BEGIN expr VAR_END
-        {
-          if (asm_enabled() && !state.mac_prev) {
-            $$ = evaluate_concatenation(mk_2op(CONCAT,  mk_symbol($1), 
-                      mk_2op(CONCAT, mk_1op(VAR, $2), mk_symbol($3))));
-	  }
-        }        
-        ;
-
-list_block:
-	list_expr
-	{
-	  $$ = mk_list($1, NULL);
-	}
-	|
-	list_expr ',' list_block
-	{
-	  $$ = mk_list($1, $3);
-	}
-	;
-
-list_expr:
-	IDENTIFIER
-        {
-	  if ((strcasecmp($1, "p") == 0) || (strcasecmp($1, "pe") == 0)) { 
-            force_ident = 1;
-          }
-        }
-        e9op e8
-	{
-	  $$ = mk_2op($3, mk_symbol($1), $4);
-	  force_ident = 0;
-	}
-	|
-	e8
-	{
-	  $$ = $1;
-	}
-	;
 
 %%

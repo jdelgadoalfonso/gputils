@@ -22,8 +22,7 @@
 ;==========================================================================
 
 ;Rev:   Date:    Reason:
-;1.02	05/28/02 Corrected values for _CP_ALL and _CP_OFF in Configuration Bits section.
-;1.01   09/13/01 Added the PIR2 bit CMIF and the PIE2 bit CMIE
+
 ;1.00   04/19/01 Initial Release (BD - generated from PIC16F877.inc)
 
 ;==========================================================================
@@ -124,11 +123,9 @@ C                            EQU     H'0000'
 GIE                          EQU     H'0007'
 PEIE                         EQU     H'0006'
 T0IE                         EQU     H'0005'
-TMR0IE                       EQU     H'0005'
 INTE                         EQU     H'0004'
 RBIE                         EQU     H'0003'
 T0IF                         EQU     H'0002'
-TMR0IF                       EQU     H'0002'
 INTF                         EQU     H'0001'
 RBIF                         EQU     H'0000'
 
@@ -145,7 +142,6 @@ TMR1IF                       EQU     H'0000'
 
 ;----- PIR2 Bits ----------------------------------------------------------
 
-CMIF			     EQU     H'0006'
 EEIF                         EQU     H'0004'
 BCLIF                        EQU     H'0003'
 CCP2IF                       EQU     H'0000'
@@ -261,7 +257,6 @@ TMR1IE                       EQU     H'0000'
 
 ;----- PIE2 Bits ----------------------------------------------------------
 
-CMIE			     EQU     H'0006'
 EEIE                         EQU     H'0004'
 BCLIE                        EQU     H'0003'
 CCP2IE                       EQU     H'0000'
@@ -372,8 +367,8 @@ RD                           EQU     H'0000'
 ;
 ;==========================================================================
 
-_CP_ALL                      EQU     H'1FFF'
-_CP_OFF                      EQU     H'3FFF'
+_CP_ALL                      EQU     H'3FFF'
+_CP_OFF                      EQU     H'1FFF'
 _DEBUG_OFF                   EQU     H'3FFF'
 _DEBUG_ON                    EQU     H'37FF'
 _WRT_OFF                     EQU     H'3FFF'    ; No prog memmory write protection

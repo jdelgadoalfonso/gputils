@@ -30,8 +30,6 @@
 ;1.02   03/02/01 PORTF, PORTG, TRISF, and TRISG addresses corrected.
 ;1.03   03/06/01 RD bit in PMCON1 defined.
 ;1.04   03/12/01 Locations of PMDATH and PMADR restored to before v1.01.
-;1.05	10/19/01 Locations of PMDATH and PMADR restored to before v1.04.
-;1.06	06/03/01 Values for _CP_ALL, _CP_75, _CP_50, and _BODEN_OFF corrected.
 
 ;==========================================================================
 ;
@@ -120,8 +118,8 @@ LCDD15                       EQU     H'011F'
 TRISF                        EQU     H'0187'
 TRISG                        EQU     H'0188'
 PMDATA			     EQU     H'018C'
-PMDATH			     EQU     H'018D'
-PMADR			     EQU     H'018E'
+PMADR			     EQU     H'018D'
+PMDATH			     EQU     H'018E'
 PMADRH                       EQU     H'018F'
 
 
@@ -333,11 +331,11 @@ RD                        EQU     H'0000'
 ;
 ;==========================================================================
 
-_CP_ALL                      EQU     H'3FCF'
-_CP_75                       EQU     H'3FDF'
-_CP_50                       EQU     H'3FEF'
+_CP_ALL                      EQU     H'00CF'
+_CP_75                       EQU     H'15DF'
+_CP_50                       EQU     H'2AEF'
 _CP_OFF                      EQU     H'3FFF'
-_BODEN_OFF		     EQU     H'3FBF'
+_BODEN_OFF		     EQU     H'3FEF'
 _BODEN_ON		     EQU     H'3FFF'
 _PWRTE_OFF                   EQU     H'3FFF'
 _PWRTE_ON                    EQU     H'3FF7'

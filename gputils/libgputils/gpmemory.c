@@ -1,6 +1,5 @@
 /* Supports instruction memory.
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
-   James Bowman, Scott Dattalo
+   Copyright (C) 1998,1999,2000,2001 James Bowman, Scott Dattalo
 
 This file is part of gputils.
 
@@ -20,7 +19,7 @@ the Free Software Foundation, 59 Temple Place - Suite 330,
 Boston, MA 02111-1307, USA.  */
 
 #include "stdhdr.h"
-#include "libgputils.h"
+#include "gpmemory.h"
 
 /************************************************************************
 
@@ -92,7 +91,7 @@ MemBlock * i_memory_new(MemBlock *m, MemBlock *mbp, int base_address)
 
   base = base_address >> I_MEM_BITS;
 
-  mbp->memory = (unsigned int *)calloc(MAX_I_MEM, sizeof(unsigned int));
+  mbp->memory = (unsigned int *)malloc(MAX_I_MEM * sizeof(unsigned int));
   mbp->base   = base;
 
   do {
@@ -215,7 +214,7 @@ int i_memory_used(MemBlock *m)
  * 
  *
  ************************************************************************/
-void print_i_memory(MemBlock *m, int byte_addr)
+void print_i_memory(MemBlock *m)
 {
   int base,i,j,row_used;
   char c;
@@ -235,7 +234,7 @@ void print_i_memory(MemBlock *m, int byte_addr)
 	  row_used = 1;
 
       if(row_used) {
-	printf("%08X  ",(base+i) << byte_addr );
+	printf("%08X  ",(base+i) );
 
 	for(j = 0; j<WORDS_IN_ROW; j++)
 	  printf("%04X ", m->memory[i+j] & 0xffff );

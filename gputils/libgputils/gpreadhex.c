@@ -1,6 +1,5 @@
 /* Read ".HEX" files and store it in memory
-   Copyright (C) 2001, 2002, 2003, 2004, 2005
-   Craig Franklin
+   Copyright (C) 2001 Craig Franklin
 
 This file is part of gputils.
 
@@ -20,7 +19,10 @@ the Free Software Foundation, 59 Temple Place - Suite 330,
 Boston, MA 02111-1307, USA.  */
 
 #include "stdhdr.h"
-#include "libgputils.h"
+
+#include "gpmemory.h"
+#include "gpwritehex.h"
+#include "gpreadhex.h"
 
 #define LINESIZ 520
 
@@ -69,22 +71,23 @@ unsigned int swapword(unsigned int input)
   return number; 
 }
 
-struct hex_data *
-readhex(char *filename, MemBlock *m)
+struct hex_data readhex(char *filename, MemBlock *m)
 {
-  struct hex_data *info = malloc(sizeof(*info));
   int length, address, type, data;
   int i;
   int page = 0;
 
-  info->hex_format = inhx8m;
-  info->size = 0;
-  info->error = 0;
-
+  struct hex_data info = {
+    inhx8m,             /* hex_format */
+    0,                  /* # bytes in memory */
+    0                   /* error */
+  };
+  
   /* Open the input file */
-  if ( (infile = fopen(filename,"rt")) == NULL ){
-    perror(filename);
-    exit(1);
+  if ( (infile = fopen(filename,"rb")) == NULL ){
+    printf("Can't open input file\n");
+    info.error = 1;
+    return info;
   }
     
   /* go to the beginning of the file */
@@ -108,7 +111,7 @@ readhex(char *filename, MemBlock *m)
       return info;
     }
 
-    if (info->hex_format != inhx16) {
+    if (info.hex_format != inhx16) {
       length = length / 2;
     }
     
@@ -116,7 +119,7 @@ readhex(char *filename, MemBlock *m)
     address = readword();
     address = swapword(address);
 
-    if (info->hex_format == inhx16) {
+    if (info.hex_format == inhx16) {
       address = address * 2;
     }
     
@@ -125,23 +128,23 @@ readhex(char *filename, MemBlock *m)
 
     if (type == 4) {
 
-      if (info->hex_format == inhx16) {
+      if (info.hex_format == inhx16) {
         printf("\nhex format error\n");
         fclose(infile);
-        info->error = 1;
+        info.error = 1;
         return info;      
       }
 
       /* inhx32 segment line*/
       page = readword();
-      info->hex_format = inhx32;
+      info.hex_format = inhx32;
 
     } else {
 
       /* read the data */
       for (i = 0; i < length; i += 1) {
         data = readword();
-        if (info->hex_format == inhx16) {
+        if (info.hex_format == inhx16) {
           data = swapword(data);        
         }
         i_memory_put(m, 
@@ -149,7 +152,7 @@ readhex(char *filename, MemBlock *m)
                      data | MEM_USED_MASK);
       }
 
-      info->size += (length * 2); 
+      info.size += (length * 2); 
 
     }
     
@@ -157,18 +160,18 @@ readhex(char *filename, MemBlock *m)
     data = readbyte();
     
     if ((checksum & 0xFF) != 0) { 
-      if (info->hex_format == inhx8m) {
+      if (info.hex_format == inhx8m) {
         /*  first attempt at inhx8m failed, try inhx16 */
         fseek(infile, 0L, 0);	  
-        info->hex_format = inhx16;
-        info->size = 0;
+        info.hex_format = inhx16;
+        info.size = 0;
         /* data in i_memory is trash */
         i_memory_free(m);
         m = i_memory_create();
       } else {
         printf("\nChecksum Error\n");
         fclose(infile);
-        info->error = 1;
+        info.error = 1;
         return info;
       }
     }

@@ -1,6 +1,5 @@
 /* Read ".HEX" files and store it in memory
-   Copyright (C) 2001, 2002, 2003, 2004, 2005
-   Craig Franklin
+   Copyright (C) 2001 Craig Franklin
 
 This file is part of gputils.
 
@@ -28,6 +27,6 @@ struct hex_data {
   int          error;
 };
 
-struct hex_data *readhex(char *filename, MemBlock *m);
+struct hex_data readhex(char *filename, MemBlock *m);
 
 #endif

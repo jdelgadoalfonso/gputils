@@ -1,6 +1,5 @@
 /* gpcoff.h - header file for pic object files
-   Copyright (C) 2001, 2002, 2003, 2004, 2005
-   Craig Franklin
+   Copyright (C) 2001 Craig Franklin
 
 This file is part of gputils.
 
@@ -21,9 +20,6 @@ Boston, MA 02111-1307, USA.  */
 
 #ifndef __GPCOFF_H__
 #define __GPCOFF_H__
-
-
-/* These definitions are for the COFF as stored in a file. */
 
 /* define the typical values, if they aren't found warn the user */
 #define MICROCHIP_MAGIC 0x1234
@@ -95,7 +91,7 @@ struct scnhdr
 #define STYP_TEXT     0x0020
 /* Section contains initialized data */
 #define STYP_DATA     0x0040
-/* Section contains uninitialized data */
+/* Section contains unitialized data */
 #define STYP_BSS      0x0080
 /* Section contains initialized data for ROM */
 #define STYP_DATA_ROM 0x0100
@@ -110,8 +106,6 @@ struct scnhdr
 #define STYP_ACCESS   0x8000
 /* Section contains the activation record for a function */
 #define STYP_ACTREC   0x10000
-/* Section has been relocated.  This is a temporary flag used by the linker */
-#define STYP_RELOC    0x20000
 
 /* relocation entry */
 struct reloc
@@ -124,6 +118,11 @@ struct reloc
 };
 
 #define RELOC_SIZ 12
+
+/* FIXME: MCHIP defines r_offset as part of their relocation structure.  This
+doesn't seem to be standard coff.  It shouldn't be necessary.  I think this
+value should always be the section header's r_paddr value.  Including it
+is unneccesary.  Find out. */
 
 /* relocation for the CALL instruction (first word only on 18cxx) */
 #define     RELOCT_CALL     1
@@ -302,7 +301,7 @@ struct syment
 #define C_LIST      108  /* absoulte listing on or off */
 #define C_SECTION   109  /* section */
 
-/* Auxiliary symbol table entry for a file */
+/* Auxillary symbol table entry for a file */
 struct aux_file
 {
   unsigned long  x_offset;  /* String table offset for filename */
@@ -311,7 +310,7 @@ struct aux_file
   char _unused[10];
 };
 
-/* Auxiliary symbol table entry for a section */
+/* Auxillary symbol table entry for a section */
 struct aux_scn
 {
   unsigned long  x_scnlen;  /* Section Length */
@@ -320,7 +319,7 @@ struct aux_scn
   char _unused[10];
 };
 
-/* Auxiliary symbol table entry for the tagname of a struct/union/enum */
+/* Auxillary symbol table entry for the tagname of a struct/union/enum */
 struct aux_tag
 {
   char _unused[6];
@@ -331,7 +330,7 @@ struct aux_tag
   char _unused3[2];
 };
 
-/* Auxiliary symbol table entry for an end of struct/union/enum */
+/* Auxillary symbol table entry for an end of struct/union/enum */
 struct aux_eos
 {
   unsigned long x_tagndx;    /* Symbol index of struct/union/enum tag */
@@ -340,7 +339,7 @@ struct aux_eos
   char _unused2[10];
 };
 
-/* Auxiliary symbol table entry for a function name */
+/* Auxillary symbol table entry for a function name */
 struct aux_fcn
 {
   unsigned long x_tagndx;   /* Unused??  Tag Index */
@@ -351,7 +350,7 @@ struct aux_fcn
   unsigned short x_actsize; /* size of static activation record to allocate */
 };
 
-/* Auxiliary symbol table entry for an array */
+/* Auxillary symbol table entry for an array */
 struct aux_arr
 {
   unsigned long  x_tagndx;   /* Unused??  Tag Index */
@@ -360,7 +359,7 @@ struct aux_arr
   unsigned short x_dimen[4]; /* Size of first four dimensions */
 };
 
-/* Auxiliary symbol table entry for the end of a block or function */
+/* Auxillary symbol table entry for the end of a block or function */
 struct aux_eobf
 {
   char _unused[4];
@@ -369,7 +368,7 @@ struct aux_eobf
   char _unused2[12];
 };
 
-/* Auxiliary symbol table entry for the beginning of a block or function */
+/* Auxillary symbol table entry for the beginning of a block or function */
 struct aux_bobf
 {
   char _unused[4];
@@ -380,7 +379,7 @@ struct aux_bobf
   char _unused3[2];
 };
 
-/* Auxiliary symbol table entry for a variable of type struct/union/enum */
+/* Auxillary symbol table entry for a variable of type struct/union/enum */
 struct aux_var
 {
   unsigned long x_tagndx;  /* Symbol Index of struct/union/enum tagname */
@@ -389,7 +388,7 @@ struct aux_var
   char _unused2[10];
 };
 
-/* Auxiliary entries */
+/* Auxillary entries */
 #define X_DIMNUM   4
 #define AUX_NONE   0
 #define AUX_FILE   1  /* detail information for a source file */
@@ -401,210 +400,5 @@ struct aux_var
 #define AUX_EOBF   7  /* end of block or function */
 #define AUX_BOBF   8  /* beginning of block or function */
 #define AUX_VAR    9  /* variable */
-#define AUX_DIRECT 10 /* direct message */
-#define AUX_IDENT  11 /* ident */
-
-/* These definitions are for the COFF as stored in memory. */
-
-/* relocation linked list */
-
-typedef struct gp_reloc_type 
-{
-  /* entry relative address */
-  long address;
-
-  /* symbol */
-  struct gp_symbol_type *symbol;
-
-  /* symbol number, only valid when generating a coff file */
-  long symbol_number;
-
-  /* offset added to address of symbol */
-  short offset;
-
-  /* relocation type */
-  unsigned short type;
-
-  struct gp_reloc_type *next;
-} gp_reloc_type;
-
-/* line number linked list */
-
-typedef struct gp_linenum_type 
-{
-  /* source file symbol */
-  struct gp_symbol_type *symbol;
-
-  /* line number */
-  unsigned short line_number; 
-
-  /* address of code for this line number */
-  unsigned long address;     
-
-  struct gp_linenum_type *next;
-} gp_linenum_type;
-
-/* auxiliary symbol linked list */
-
-typedef struct gp_aux_type 
-{
-  /* auxiliary symbol type */
-  long type;
-
-  /* FIXME: Finish the aux entries. */
-  union {
-    struct {
-      unsigned char command;
-      char *string;
-    } _aux_direct;
-    struct {
-      char *filename;
-      unsigned long line_number; 
-    } _aux_file;
-    struct {
-      char *string;
-    } _aux_ident;
-    struct {
-      unsigned long  length;
-      unsigned short nreloc;
-      unsigned short nlineno;
-    } _aux_scn;
-    char data[SYMBOL_SIZE];
-  } _aux_symbol;
-  
-  struct gp_aux_type *next;
-} gp_aux_type;
-
-/* symbol linked list */
-
-typedef struct gp_symbol_type 
-{
-  /* symbol name */
-  char *name;
-
-  /* symbol value */ 
-  long value;
-
-  /* section number, only for used for determining symbol type: 
-     N_DEBUG = -2, N_ABS = -1, N_UNDEF = 0, or N_SCNUM = 1 if defined */
-  short section_number;
-  
-  /* defining section */ 
-  struct gp_section_type *section;
-
-  /* type */
-  unsigned short type;
-
-  /* storage class */
-  char class;
-
-   /* number of auxiliary symbols */
-  char num_auxsym;
-
-  /* auxiliary symbols */
-  struct gp_aux_type *aux_list;
-
-  /* symbol number, only valid when writing coff or cod file */  
-  unsigned long number;
-
-  struct gp_symbol_type *next;
-} gp_symbol_type;
-
-/* section linked list */
-
-typedef struct gp_section_type 
-{
-  /* section name */
-  char *name;
-
-  /* section symbol */
-  struct gp_symbol_type *symbol;
-
-  /* flags */
-  unsigned long flags;
-  
-  /* section address */
-  unsigned long address;
-  
-  /* section size in bytes */
-  unsigned long size;
-  
-  /* memory linked list */
-  MemBlock *data;
-
-  /* number of relocations */
-  unsigned short num_reloc;
-
-  /* head of relocations */
-  gp_reloc_type *relocations;
-
-  /* tail of relocations */
-  gp_reloc_type *relocations_tail;
-
-  /* number of line numbers */
-  unsigned short num_lineno;
-
-  /* head of line numbers */
-  gp_linenum_type *line_numbers;
-
-  /* tail of line numbers */
-  gp_linenum_type *line_numbers_tail;
-
-  /* section number, only valid when writing coff file */  
-  unsigned long number;
-
-  /* data pointer, only valid when writing coff file */  
-  unsigned long data_ptr;
-
-  /* relocations pointer, only valid when writing coff file */  
-  unsigned long reloc_ptr;
-
-  /* linenumber pointer, only valid when writing coff file */  
-  unsigned long lineno_ptr;
-
-  struct gp_section_type *next;
-} gp_section_type;
-
-typedef struct gp_object_type 
-{
-  /* object filename */
-  char *filename;
-
-  /* processor */
-  enum pic_processor processor;
-  
-  /* processor class */
-  enum proc_class class;
-  
-  /* time object was created */
-  time_t time;
-  
-  /* flags */
-  unsigned short flags;
-  
-  /* number of sections */
-  long num_sections;
-
-  /* head of sections */
-  gp_section_type *sections;
-
-  /* tail of sections */
-  gp_section_type *sections_tail;
-
-  /* number of symbols */
-  long num_symbols;
-  
-  /* head of symbols */
-  gp_symbol_type *symbols;
-
-  /* tail of symbols */
-  gp_symbol_type *symbols_tail;
-
-  /* symbol table pointer, only valid when writing coff file */  
-  unsigned long symbol_ptr;
-
-  /* next object in the linked list */
-  struct gp_object_type *next;
-} gp_object_type;
 
 #endif

@@ -1,6 +1,5 @@
 /* Linker script processing
-   Copyright (C) 2001, 2002, 2003, 2004, 2005
-   Craig Franklin
+   Copyright (C) 2001 Craig Franklin
  
 This file is part of gputils.
  
@@ -44,8 +43,7 @@ struct pnode {
   } value;
 };
 
-void script_error(char *messg, char *detail);
-int add_path(struct pnode *parms);
+void gplkrscr_error(char *messg, char *detail);
 int execute_command(char *name, struct pnode *parms);
 
 #endif

@@ -1,6 +1,5 @@
 /* ".LST" file output for gpasm
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
-   James Bowman, Craig Franklin
+   Copyright (C) 1998,1999,2000,2001 James Bowman, Craig Franklin
 
 This file is part of gputils.
 
@@ -21,10 +20,9 @@ Boston, MA 02111-1307, USA.  */
 
 #include "stdhdr.h"
 
-#include "libgputils.h"
 #include "gpasm.h"
+#include "gpsymbol.h"
 #include "cod.h"
-#include "coff.h"
 
 extern int _16bit_core;
 
@@ -68,47 +66,53 @@ void lst_line(char *line)
 
 void lst_init()
 {
-  state.lst.lineofpage = 0;
-  state.lst.page = 0;
+
   state.lst.linesperpage = 60;
-  state.lst.line_number = 1;
   state.lst.memorymap = 1;
   state.lst.symboltable = 1;
 
-  /* Determine state.startdate */
-  gp_date_string(state.lst.startdate, sizeof(state.lst.startdate));
-
-  if (!state.cmd_line.macro_expand){
-    state.lst.expand = true;
+  if (state.cmd_line.macro_expand == 0){
+    state.lst.expand = 1;
   }  
-  
-  if (state.cmd_line.lst_force)
-    state.lst.force = true; 
-  else
-    state.lst.force = false;
 
-  state.lst.config_address = 0;
-  state.lst.title_name[0] = '\0';
-  state.lst.subtitle_name[0] = '\0';  
-  state.lst.tabstop = 8;	/* Default tabstop every 8 */
-
-  if (state.lstfile != named) {
-    strncpy(state.lstfilename, state.basefilename, sizeof(state.lstfilename));
-    strncat(state.lstfilename, ".lst", sizeof(state.lstfilename));  
-  }
-
-  if (state.lstfile == suppress) {
+  switch (state.lstfile) {
+  case suppress:
     state.lst.f = NULL;
-    state.lst.enabled = false;
-    unlink(state.lstfilename);
-  } else {
-    state.lst.f = fopen(state.lstfilename, "wt");
+    state.lst.enabled = 0;
+    break;
+  case normal:
+    strcpy(state.lstfilename, state.basefilename);
+    strcat(state.lstfilename, ".lst");
+  case named:
+    /* Don't need to do anything - name is already set up */
+    state.lst.f = fopen(state.lstfilename, "w");
     if (state.lst.f == NULL) {
       perror(state.lstfilename);
       exit(1);
     }
-    state.lst.enabled = true;
+    state.lst.fc = add_file(ft_lst,state.lstfilename);
+    state.lst.enabled = 1;
   }
+
+  /* Determine state.startdate */
+  {
+    time_t now;
+    struct tm *now_tm;
+
+    time(&now);
+    now_tm = localtime(&now);
+    sprintf(state.lst.startdate,
+	    "%d-%d-%d  %02d:%02d:%02d",
+	    now_tm->tm_mon + 1,
+	    now_tm->tm_mday,
+	    1900 + now_tm->tm_year,
+	    now_tm->tm_hour,
+	    now_tm->tm_min,
+	    now_tm->tm_sec);
+  }
+
+  state.lst.tabstop = 8;	/* Default tabstop every 8 */
+  state.lst.line_number = 1;
 
   cod_lst_line(COD_FIRST_LST_LINE);
 
@@ -117,58 +121,42 @@ void lst_init()
 void lst_memory_map(MemBlock *m)
 {
   char buf[BUFSIZ];
-  int i, j, base, row_used, num_per_line, num_per_block;
+  char *e;
+  int i, j, base, row_used;
 
   lst_line("");
   lst_line("");
   lst_line("MEMORY USAGE MAP ('X' = Used,  '-' = Unused)");
   lst_line("");
 
-  if (_16bit_core) {
-    /* uses byte addressing so read half as many words */
-    num_per_line = 32;
-    num_per_block = 8;
-  } else {
-    num_per_line = 64;
-    num_per_block = 16;
-  }
-
   while(m) {
     assert(m->memory != NULL);
 
     base = (m->base << I_MEM_BITS);
 
-    for (i = 0; i < MAX_I_MEM; i += num_per_line) {
+    for(i = 0; i<MAX_I_MEM; i+=64) {
       row_used = 0;
 
-      for (j = 0; j < num_per_line; j++) {
-	if (m->memory[i+j] & MEM_USED_MASK) {
+      for(j = 0; j<64; j++)
+	if( m->memory[i+j] )
 	  row_used = 1;
-	  break;
-	}
-      }
 
       if(row_used) {
-        snprintf(buf, sizeof(buf), "%08x :", (i + base) << _16bit_core);
-	for (j = 0; j < num_per_line; j++) {
-          if ((j % num_per_block) == 0) {
-	    strncat(buf, " ", sizeof(buf));
+        e = buf;
+        sprintf(e, "%04x :", (i + base));
+	e += strlen(e);
+	for(j = 0; j<64; j++) {
+          if ((j%16) == 0) {
+	    *e++ = ' ';
           }
-          if (m->memory[i + j] & MEM_USED_MASK) {
-	    strncat(buf, "X", sizeof(buf));
-	    if (_16bit_core) {
-	      /* each word has two bytes */
-	      strncat(buf, "X", sizeof(buf));
-	    }
+          if ((i_memory_get(m, i+j) & MEM_USED_MASK)) {
+	    *e++ = 'X';
           } else {
-	    strncat(buf, "-", sizeof(buf));
-	    if (_16bit_core) {
-	      /* each word has two bytes */
-	      strncat(buf, "-", sizeof(buf));
-	    }
+	    *e++ = '-';
           }
         }
 
+	*e = '\0';		/* terminate the new string */
         lst_line(buf);
       }
     }
@@ -180,9 +168,7 @@ void lst_memory_map(MemBlock *m)
   lst_line("All other memory blocks unused.");
   lst_line("");
 
-  snprintf(buf, sizeof(buf), 
-           "Program Memory Words Used: %i",
-           i_memory_used(state.i_memory));
+  sprintf(buf, "Program Memory Words Used: %i", i_memory_used(state.i_memory));
   lst_line(buf);
 
 }
@@ -190,69 +176,71 @@ void lst_memory_map(MemBlock *m)
 void lst_close()
 {
   cod_lst_line(COD_LAST_LST_LINE);
+  fprintf(state.lst.f,
+	  "\n\n");
+  fprintf(state.lst.f,
+	  "Errors   : %7d\n",
+	  state.num.errors);
+  fprintf(state.lst.f,
+	  "Warnings : %7d reported, %7d suppressed\n",
+	  state.num.warnings,
+          state.num.warnings_suppressed);
+  fprintf(state.lst.f,
+	  "Messages : %7d reported, %7d suppressed\n",
+	  state.num.messages,
+          state.num.messages_suppressed);
+  fprintf(state.lst.f,
+	  "\f\n");
 
-  if (state.lst.f) {
-    fprintf(state.lst.f,
-	    "\n\n");
-    fprintf(state.lst.f,
-	    "Errors   : %7d\n",
-	    state.num.errors);
-    fprintf(state.lst.f,
-	    "Warnings : %7d reported, %7d suppressed\n",
-	    state.num.warnings,
-            state.num.warnings_suppressed);
-    fprintf(state.lst.f,
-	    "Messages : %7d reported, %7d suppressed\n",
-	    state.num.messages,
-            state.num.messages_suppressed);
-    fprintf(state.lst.f,
-	    "\f\n");
-  
-    fclose(state.lst.f);
-  }
+  fclose(state.lst.f);
 }
 
 void lst_format_line(char *src_line, int value)
 {
   char m[BUFSIZ];
-  char buf[BUFSIZ];
+  char *e;
   unsigned int emitted = 0;
 
-  assert(src_line != NULL);
-  
+  e = m;
   switch (state.lst.line.linetype) {
   case equ: 
   case set:
-    snprintf(m, sizeof(m), "  %08X", value);
-    strncat(m, "     ", sizeof(m));
+    sprintf(e, "  %08X", value);
+    e += strlen(e);
+    strcpy(e, "     ");
+    e += 5;
     break;
   case org:
-    snprintf(m, sizeof(m), "%04X      ", state.org << _16bit_core);
-    strncat(m, "     ", sizeof(m));
+    sprintf(e, "%04X      ", state.org << _16bit_core);
+    e += strlen(e);
+    strcpy(e, "     ");
+    e += 5;
     break;
   case idlocs:
     /* not used for 16 bit devices, config is used */
-    snprintf(m, sizeof(m), "%04X %04X %04X ",
+    sprintf(e, "%04X %04X %04X ",
             state.device.id_location,
             i_memory_get(state.i_memory, state.device.id_location) & 0xffff,
             i_memory_get(state.i_memory, 
 		         state.device.id_location + 1) & 0xffff);
+    e += strlen(e);
     break;
   case insn:
-    snprintf(m, sizeof(m), "%04X ", state.lst.line.was_org << _16bit_core);
+    sprintf(e, "%04X ", state.lst.line.was_org << _16bit_core);
+    e += strlen(e);
     emitted = state.org - state.lst.line.was_org;
-    if (emitted >= 1) {
-      snprintf(buf, sizeof(buf), "%04X ", i_memory_get(state.i_memory, 
+    if (emitted >= 1)
+      sprintf(e, "%04X ", i_memory_get(state.i_memory, 
 			               state.lst.line.was_org) & 0xffff);
-      strncat(m, buf, sizeof(m));
-    } else
-      strncat(m, "     ", sizeof(m));
-    if (emitted >= 2) {
-      snprintf(buf, sizeof(buf), "%04X ", i_memory_get(state.i_memory, 
+    else
+      sprintf(e, "     ");
+    e += strlen(e);
+    if (emitted >= 2)
+      sprintf(e, "%04X ", i_memory_get(state.i_memory, 
 			               state.lst.line.was_org + 1) & 0xffff);
-      strncat(m, buf, sizeof(buf));
-    } else
-      strncat(m, "     ", sizeof(m));
+    else
+      sprintf(e, "     ");
+      e += strlen(e);
     break;
   case config:
     if(_16bit_core) {
@@ -260,53 +248,49 @@ void lst_format_line(char *src_line, int value)
 	 words in the list file. */
       if (state.lst.config_address == CONFIG4L) {
         /* Special case */
-        snprintf(m, sizeof(m), "%06X %04X    ",   
-                 state.lst.config_address,
-                 i_memory_get(state.i_memory, 
-		 	      state.lst.config_address >> 1) & 0xffff);
+        sprintf(e, "%06X %04X    ",   
+                state.lst.config_address,
+                i_memory_get(state.i_memory, 
+			     state.lst.config_address >> 1) & 0xffff);
+        e += strlen(e);	  
       } else if((state.lst.config_address & 0x1) == 0) {
         /* if it is an even address don't print anything */
-	strncpy(m, "               ", sizeof(m));
+	strcpy(e, "               ");
+        e += 15;
       } else {
-        snprintf(m, sizeof(m), "%06X %04X    ",   
-                 state.lst.config_address - 1,
-                 i_memory_get(state.i_memory, 
-			     (state.lst.config_address - 1) >> 1) & 0xffff);
+        sprintf(e, "%06X %04X    ",   
+                state.lst.config_address - 1,
+                i_memory_get(state.i_memory, 
+			    (state.lst.config_address - 1) >> 1) & 0xffff);
+        e += strlen(e);
       }
     } else {
-      snprintf(m, sizeof(m), "%06X %04X    ",   
-               state.lst.config_address,
-               i_memory_get(state.i_memory, 
-		            state.lst.config_address) & 0xffff);
+      sprintf(e, "%06X %04X    ",   
+              state.lst.config_address,
+              i_memory_get(state.i_memory, 
+		           state.lst.config_address) & 0xffff);
+      e += strlen(e);
     }
     break;
-  case res:
-    strncpy(m, "               ", sizeof(m));
-    if (SECTION_FLAGS & STYP_TEXT) {
-      /* generate line numbers for res directives in program memory */
-      emitted = state.org - state.lst.line.was_org;
-    }
-    break;
-  case sec:
   case dir:
   case none:
   default:
-    strncpy(m, "               ", sizeof(m));
+    strcpy(e, "               ");
+    e += 15;
     break;
   }
 
   if (state.stGlobal == state.stTop) {
-    snprintf(buf, sizeof(buf), "%05d ", state.src->line_number);
+    sprintf(e, "%05d ", state.src->line_number);
   } else {		  
-    snprintf(buf, sizeof(buf), "    M ");
+    sprintf(e, "    M ");
   }
-  strncat(m, buf, sizeof(m));
+  e += strlen(e);
 
   /* Now copy 'l' to 'e', expanding tabs as required */
   {
     int column = 0;
     char *old;
-    char *e = m + strlen(m);
         
     old = src_line;
 
@@ -327,27 +311,17 @@ void lst_format_line(char *src_line, int value)
     *e = '\0';		/* terminate the new string */
   }
 
-  coff_linenum(emitted);
-
-  /* Don't write to file is list is disabled */
-  if (!state.lst.enabled)
-    return;
-
   /* Tell the .cod file that the next line(s) has an opcode(s) */
   state.cod.emitting = emitted;
 
   lst_line(m);
 
-#ifdef GPUTILS_DEBUG
-  fprintf(stderr, "%s\n\n", m);
-#endif
-
   if (state.lst.line.linetype == idlocs) {
-    snprintf(m, sizeof(m), "     %04X %04X ",
-             i_memory_get(state.i_memory, 
-		          state.device.id_location + 2) & 0xffff,
-             i_memory_get(state.i_memory, 
-		          state.device.id_location + 3) & 0xffff);      
+    sprintf(m, "     %04X %04X ",
+            i_memory_get(state.i_memory, 
+		         state.device.id_location + 2) & 0xffff,
+            i_memory_get(state.i_memory, 
+		         state.device.id_location + 3) & 0xffff);      
     lst_line(m);   
   }
 
@@ -356,17 +330,17 @@ void lst_format_line(char *src_line, int value)
 
     for (i = 2; i < emitted; i += 2) {
       if ((i + 1) < emitted)
-        snprintf(m, sizeof(m), "%04X %04X %04X",
-                 ((state.lst.line.was_org + i) << _16bit_core),
-                 i_memory_get(state.i_memory, 
-                              state.lst.line.was_org + i) & 0xffff,
-		 i_memory_get(state.i_memory, 
-                              state.lst.line.was_org + i + 1) & 0xffff);
+        sprintf(m, "%04X %04X %04X",
+                ((state.lst.line.was_org + i) << _16bit_core),
+                i_memory_get(state.i_memory, 
+                             state.lst.line.was_org + i) & 0xffff,
+		i_memory_get(state.i_memory, 
+                             state.lst.line.was_org + i + 1) & 0xffff);
       else
-        snprintf(m, sizeof(m), "%04X %04X",
-		 ((state.lst.line.was_org + i) << _16bit_core),
-		 i_memory_get(state.i_memory, 
-			      state.lst.line.was_org + i) & 0xffff);
+        sprintf(m, "%04X %04X",
+		((state.lst.line.was_org + i) << _16bit_core),
+		i_memory_get(state.i_memory, 
+			     state.lst.line.was_org + i) & 0xffff);
         lst_line(m);
       }
 
@@ -384,7 +358,7 @@ void lst_symbol_table(struct symbol_table *table)
   char buf[BUFSIZ];
 
   lst_line("SYMBOL TABLE");
-  snprintf(buf, sizeof(buf), "%-32s  %-8s", "  LABEL", "  VALUE");
+  sprintf(buf, "%-32s  %-8s", "  LABEL", "  VALUE");
   lst_line(buf);
   lst_line("");
 
@@ -402,7 +376,7 @@ void lst_symbol_table(struct symbol_table *table)
     struct variable *var;
 
     var = get_symbol_annotation(lst[i]);
-    snprintf(buf, sizeof(buf),
+    sprintf(buf,
             symbol_format, 
             get_symbol_name(lst[i]),
             var ? var->value : 0);
@@ -432,7 +406,7 @@ void lst_defines_table(struct symbol_table *table)
     char *defined_as;
 
     defined_as = get_symbol_annotation(lst[i]);
-    snprintf(buf, sizeof(buf),
+    sprintf(buf,
             symbol_format, 
             get_symbol_name(lst[i]),
             defined_as);

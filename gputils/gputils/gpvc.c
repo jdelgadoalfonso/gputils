@@ -1,6 +1,5 @@
 /* Displays contents of ".COD" files
-   Copyright (C) 2001, 2002, 2003, 2004, 2005
-   Scott Dattalo
+   Copyright (C) 2001 Scott Dattalo
 
 This file is part of gputils.
  
@@ -21,21 +20,20 @@ Boston, MA 02111-1307, USA.  */
 
 #include "stdhdr.h"
 
-#include "libgputils.h"
 #include "gpvc.h"
 #include "dump.h"
 #include "block.h"
 
 FILE *codefile;  
 char filename[BUFFER_LENGTH];
-char temp[COD_BLOCK_SIZE];
-char *source_file_names[MAX_SOURCE_FILES];
-FILE *source_files[MAX_SOURCE_FILES];
+char temp[BLOCK_SIZE];
+char *source_file_names[20];
+FILE *source_files[20];
 DirBlockInfo main_dir;
 
-int byte_addr;
+int addrsize;
 
-char directory_block_data[COD_BLOCK_SIZE];
+char directory_block_data[BLOCK_SIZE];
 char * SymbolType4[154] = {
   "a_reg          ", "x_reg          ", "c_short        ", "c_long         ",
   "c_ushort       ", "c_ulong        ", "c_pointer      ", "c_upointer     ",
@@ -82,23 +80,36 @@ char * SymbolType4[154] = {
 
 void show_usage(void)
 {
-  printf("Usage: gpdasm [options] file\n");
-  printf("Options: [defaults in brackets after descriptions]\n");
-  printf("  -a, --all          Display all information in .cod file.\n");
-  printf("  -d, --directory    Display directory header.\n");
-  printf("  -l, --listing      Display source listing.\n");
-  printf("  -m, --message      Display debug message area.\n");
-  printf("  -h, --help         Show this usage message.\n");
-  printf("  -r, --rom          Display rom.\n");
-  printf("  -s, --symbols      Display symbols.\n");
-  printf("  -v, --version      Show version.\n");
+  printf("Usage: gpdasm <options> <filename>\n");
+  printf("Where <options> are:\n");
+  #ifdef HAVE_GETOPT_LONG  
+  printf("  -a, --all          Display all information in .cod file\n");
+  printf("  -d, --directory    Display directory header\n");
+  printf("  -l, --listing      Display source listing cross\n");
+  printf("  -m, --message      Display debug message area\n");
+  printf("  -h, --help         Show this usage message \n");
+  printf("  -r, --rom          Display rom\n");
+  printf("  -s, --symbols      Display symbols\n");
+  printf("  -v, --version      Show version\n");
+  #else
+  printf("  -a    Display all information in .cod file\n");
+  printf("  -d    Display directory header\n");
+  printf("  -l    Display source listing cross\n");
+  printf("  -m    Display debug message area\n");
+  printf("  -h    Show this usage message \n");
+  printf("  -r    Display rom\n");
+  printf("  -s    Display symbols\n");
+  printf("  -v    Show version\n");
+  #endif
   printf("\n");
   printf("Report bugs to:\n");
-  printf("%s\n", PACKAGE_BUGREPORT);
+  printf("%s\n", BUG_REPORT_URL);
   exit(0);
 }
 
 #define GET_OPTIONS "?adhlmrsv"
+
+#ifdef HAVE_GETOPT_LONG
 
   /* Used: adhlmrsv */
   static struct option longopts[] =
@@ -114,19 +125,24 @@ void show_usage(void)
     { 0, 0, 0, 0 }
   };
 
-#define GETOPT_FUNC getopt_long(argc, argv, GET_OPTIONS, longopts, 0)
+  #define GETOPT_FUNC getopt_long(argc, argv, GET_OPTIONS, longopts, 0)
+
+#else
+
+  #define GETOPT_FUNC getopt(argc, argv, GET_OPTIONS)
+
+#endif
 
 int main(int argc, char *argv[])
 {
+  extern char *optarg;
   extern int optind;
   unsigned int buffer_size;
   int c,usage=0;
   int display_flags;
   Directory *dir;
 
-  gp_init();
-
-  byte_addr = 0;
+  addrsize = 1;
 
 #define DISPLAY_NOTHING 0
 #define DISPLAY_DIR     1
@@ -169,29 +185,31 @@ int main(int argc, char *argv[])
       break;
   }
   
-  if ((optind + 1) == argc)
-    strncpy(filename, argv[optind], sizeof(filename));
+  if (optind < argc)
+    strcpy(filename, argv[optind]);
   else
     usage = 1;
 
   if(display_flags == DISPLAY_NOTHING)
     display_flags = DISPLAY_ALL;
 
+
   if (usage) {
     show_usage();
   }
 
-  codefile = fopen(filename,"rb");
+  codefile = fopen(filename,"r");
   if(codefile == NULL) {
-    perror(filename);
+    printf("Unable to open %s\n",filename);
     exit(1);
   }
+
 
   /* Start off by reading the directory block */
   read_directory();
 
   fseek(codefile, 0,SEEK_SET);
-  buffer_size = fread(directory_block_data, 1, COD_BLOCK_SIZE, codefile);
+  buffer_size = fread(directory_block_data, 1, BLOCK_SIZE, codefile);
 
   if(display_flags & DISPLAY_DIR)
     directory_block();
@@ -215,5 +233,5 @@ int main(int argc, char *argv[])
   if(display_flags & DISPLAY_MESS)
     dump_message_area();
 
-  return EXIT_SUCCESS;
+  return(0);
 }

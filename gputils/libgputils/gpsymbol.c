@@ -1,6 +1,5 @@
 /* Symbol table support
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
-   James Bowman
+   Copyright (C) 1998,1999,2000,2001 James Bowman
 
 This file is part of gputils.
 
@@ -20,7 +19,8 @@ the Free Software Foundation, 59 Temple Place - Suite 330,
 Boston, MA 02111-1307, USA.  */
 
 #include "stdhdr.h"
-#include "libgputils.h"
+
+#include "gpsymbol.h"
 
 /* Base the hash func on the 1st, 2nd, 3rd and last characters of the
    string, and its length. */
@@ -53,7 +53,7 @@ static int hashfunc(struct symbol_table *t, char *s)
 }
 
 struct symbol_table *push_symbol_table(struct symbol_table * table,
-				       gp_boolean case_insensitive)
+				       int case_insensitive)
 {
   struct symbol_table *new = calloc(sizeof(*new), 1);
 

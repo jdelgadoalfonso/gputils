@@ -1,6 +1,5 @@
 /* Displays contents of ".COD" files
-   Copyright (C) 2001, 2002, 2003, 2004, 2005
-   Scott Dattalo
+   Copyright (C) 2001 Scott Dattalo
 
 This file is part of gputils.
  
@@ -26,6 +25,9 @@ Boston, MA 02111-1307, USA.  */
 
 void directory_block(void);
 void read_block(char * block, int block_number);
+void clear_block(Block *b);
+void create_block(Block *b);
+void delete_block(Block *b);
 void read_directory(void);
 
 #endif

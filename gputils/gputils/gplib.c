@@ -1,6 +1,5 @@
 /* GNU PIC Librarian
-   Copyright (C) 2001, 2002, 2003, 2004, 2005
-   Craig Franklin
+   Copyright (C) 2001 Craig Franklin
 
 This file is part of gputils.
  
@@ -21,79 +20,93 @@ Boston, MA 02111-1307, USA.  */
 
 #include "stdhdr.h"
 
-#include "libgputils.h"
 #include "gplib.h"
+#include "gpsymbol.h"
+#include "gparchive.h"
+#include "gpcofflink.h"
+
+/* FIXME:  It seems that Mchip lib files do not use a symbol table as the
+first entry in the library.  Mplib does check to make sure the same symbol
+name doesn't appear more than once.  For now, gplib will do the same.  In
+the future, a symbol table should help reduce the link time */ 
+
+/* FIXME:  check for duplicate symbols */
 
 struct gplib_state state = {
   ar_null,            /* default mode, do nothing */              
+  { 0 ,0 },           /* set the error counters to zero */
   0,                  /* number of objects */
+  0                   /* quiet */
 };
 
 struct symbol_table *definition_tbl = NULL;
 struct symbol_table *symbol_index = NULL;
+
+
+/* FIXME: replace with functions from gpmessage.c */
+void gplib_error(char *messg)
+{
+  state.num.errors++;
+  if (state.quiet != 1)
+    printf("error: %s\n", messg); 
+
+  return;
+}
+
+void gplib_warning(char *messg)
+{
+  state.num.warnings++;
+  if (state.quiet != 1)
+    printf("warning: %s\n", messg); 
+
+  return;
+}
 
 void select_mode(enum lib_modes mode)
 {
   if (state.mode == ar_null) { 
     state.mode = mode;
   } else {
-    gp_error("multiple library operations selected");
+    gplib_error("multiple library operations selected");
   }
-}
-
-/* return the object name without the path */
-
-static char *
-object_name(char *file_name)
-{
-  char *name;
-
-  name = strrchr(file_name, PATH_CHAR);
-  if (name) {
-    name++;
-  } else {
-    name = file_name;
-  }
-
-  return name;
-}
-
-static gp_boolean
-has_path(char *file_name)
-{
-  char *name;
-
-  name = strrchr(file_name, PATH_CHAR);
-
-  if (name) {
-    return true;
-  } else {
-    return false;  
-  }
-
 }
 
 void show_usage(void)
 {
-  printf("Usage: gplib [options] library [member]\n");
-  printf("Options: [defaults in brackets after descriptions]\n");
-  printf("  -c, --create               Create a new library.\n");
-  printf("  -d, --delete               Delete member from library.\n");
-  printf("  -h, --help                 Show this usage message.\n");
-  printf("  -n, --no-index             Don't add symbol index.\n");
-  printf("  -q, --quiet                Quiet mode.\n");
-  printf("  -r, --replace              Add or replace member from library.\n");
-  printf("  -s, --symbols              List global symbols in library.\n");
-  printf("  -t, --list                 List members in library.\n");
-  printf("  -v, --version              Show version.\n");
-  printf("  -x, --extract              Extract member from library.\n");
+  printf("Usage: gplib <options> library <member>\n");
+  printf("Where <options> are:\n");
+  #ifdef HAVE_GETOPT_LONG
+  printf("  -c, --create               Create a new library \n");
+  printf("  -d, --delete               Delete member from library \n");
+  printf("  -h, --help                 Show this usage message \n");
+  printf("  -n, --no-index             Don't add symbol index \n");
+  printf("  -q, --quiet                Quiet mode \n");
+  printf("  -r, --replace              Add or replace member from library \n");
+  printf("  -s, --symbols              List global symbols in library \n");
+  printf("  -t, --list                 List members in library \n");
+  printf("  -v, --version              Show version \n");
+  printf("  -x, --extract              Extract member from library \n");
+  #else
+  printf("  -c             Create a new library \n");
+  printf("  -d             Delete member from library \n");
+  printf("  -h             Show this usage message \n");
+  printf("  -n             Don't add symbol index \n");
+  printf("  -q             Quiet mode \n");
+  printf("  -r             Add or replace member from library \n");
+  printf("  -s             List global symbols in library \n");
+  printf("  -t             List members in library \n");
+  printf("  -v             Show version \n");
+  printf("  -x             Extract member from library \n");
+  #endif
   printf("\n");
   printf("Report bugs to:\n");
-  printf("%s\n", PACKAGE_BUGREPORT);
+  printf("%s\n", BUG_REPORT_URL);
   exit(0);
 }
 
 #define GET_OPTIONS "?cdhnqrstvx"
+
+#ifdef HAVE_GETOPT_LONG
 
   static struct option longopts[] =
   {
@@ -110,29 +123,35 @@ void show_usage(void)
     { 0, 0, 0, 0 }
   };
 
-#define GETOPT_FUNC getopt_long(argc, argv, GET_OPTIONS, longopts, 0)
+  #define GETOPT_FUNC getopt_long(argc, argv, GET_OPTIONS, longopts, 0)
+
+#else
+
+  #define GETOPT_FUNC getopt(argc, argv, GET_OPTIONS)
+
+#endif
+
 
 int main(int argc, char *argv[])
 {
+  extern char *optarg;
   extern int optind;
   int i = 0;
   int c;
-  gp_boolean usage = false;
-  gp_boolean update_archive = false;
-  gp_boolean no_index = false;
-  gp_archive_type *object = NULL;
+  int usage = 0;
+  int update_archive = 0;
+  char buffer[BUFSIZ];
+  int  no_index = 0;
 
-  gp_init();
-
-  /* symbols are case sensitive */
-  definition_tbl = push_symbol_table(NULL, false);
-  symbol_index = push_symbol_table(NULL, false);
+  /* FIXME: are the symbols case insensitive? */
+  definition_tbl = push_symbol_table(NULL, 1);
+  symbol_index = push_symbol_table(NULL, 1);
 
   while ((c = GETOPT_FUNC) != EOF) {
     switch (c) {
     case '?':
     case 'h':
-      usage = true;
+      usage = 1;
       break;
     case 'c':
       select_mode(ar_create);
@@ -141,10 +160,10 @@ int main(int argc, char *argv[])
       select_mode(ar_delete);
       break;
     case 'n':
-      no_index = true;
+      no_index = 1;
       break;
     case 'q':
-      gp_quiet = true;
+      state.quiet = 1;
       break;
     case 'r':
       select_mode(ar_replace);
@@ -169,31 +188,29 @@ int main(int argc, char *argv[])
 
   if (optind < argc) {
     /* fetch the library name */
-    state.filename = argv[optind++];
+    state.filename = argv[optind];
+    optind++;
     /* some operations require object filenames or membernames */
     for ( ; optind < argc; optind++) {
       state.objectname[state.numobjects] = argv[optind];
-      if (state.numobjects >= MAX_OBJ_NAMES) {
-        gp_error("exceeded maximum number of object files");
+      if (state.numobjects >= MAX_NAMES) {
+        gplib_error("exceeded maximum number of object files");
         break;
       }
       state.numobjects++;
     }
   } else {
-    usage = true;
+    usage = 1;
   }
 
   /* User did not select an operation */
-  if (state.mode == ar_null) {
-    usage = true;
-  }
+  if (state.mode == ar_null)
+    usage = 1;
 
   /* User did not provide object names */
-  if ((state.mode != ar_list) && 
-      (state.mode != ar_symbols) && 
-      (state.numobjects == 0)) {
-    usage = true;
-  }
+  if ((state.mode != ar_list) && (state.mode != ar_symbols) && 
+      (state.numobjects == 0))
+    usage = 1;
 
   if (usage) {
     show_usage();
@@ -201,83 +218,79 @@ int main(int argc, char *argv[])
 
   /* if we are not creating a new archive, we have to read an existing one */
   if (state.mode != ar_create) {
-    if (gp_identify_coff_file(state.filename) != archive_file) {
-      gp_error("\"%s\" is not a valid archive file", state.filename);
-      exit(1);
-    } else {
-      state.archive = gp_archive_read(state.filename);
+    state.archive = read_coff_archive(state.filename, &buffer[0]);
+    if (state.archive == NULL) {
+      gplib_error(&buffer[0]);
+      return 1;
     }
   }
+
+  /* FIXME: Process the options when argv's read, like gplink does.  */
     
   /* process the option */
   i = 0;
   switch (state.mode) {
   case ar_create: 
-  case ar_replace:
     while (i < state.numobjects) {
-      if (gp_identify_coff_file(state.objectname[i]) != object_file) {
-        gp_error("\"%s\" is not a valid object file", state.objectname[i]);
-        break;
-      } else {
-        state.archive = gp_archive_add_member(state.archive, 
-                                              state.objectname[i],
-                                              object_name(state.objectname[i]));
+      state.archive = add_archive_member(state.archive, 
+                                         state.objectname[i],
+                                         &buffer[0]);
+      if (state.archive == NULL) {
+        gplib_error(&buffer[0]);
+        break;      
       }
       i++;
     }
-    update_archive = true;
+    update_archive = 1;
     break;
 
   case ar_delete: 
     while (i < state.numobjects) {
-      if (has_path(state.objectname[i])) {
-        gp_error("invalid object name \"%s\"", state.objectname[i]);
-        break;
-      }
-      object = gp_archive_find_member(state.archive, state.objectname[i]);
-      if (object == NULL) {
-        gp_error("object \"%s\" not found", state.objectname[i]);
-        break;
-      } else {
-        state.archive = gp_archive_delete_member(state.archive, 
-                                                 state.objectname[i]);
+      state.archive = delete_archive_member(state.archive, 
+                                            state.objectname[i],
+                                            &buffer[0]);
+      if (state.archive == NULL) {
+        gplib_error(&buffer[0]);
+        break;      
       }
       i++;
     }
-    update_archive = true;
+    update_archive = 1;
     break;
 
   case ar_extract:
     while (i < state.numobjects) {
-      if (has_path(state.objectname[i])) {
-        gp_error("invalid object name \"%s\"", state.objectname[i]);
+      if (extract_archive_member(state.archive, 
+                                 state.objectname[i],
+                                 &buffer[0])) {
+        gplib_error(&buffer[0]);
         break;
-      }
-      object = gp_archive_find_member(state.archive, state.objectname[i]);
-      if (object == NULL) {
-        gp_error("object \"%s\" not found", state.objectname[i]);
-        break;
-      } else {
-        if (gp_archive_extract_member(state.archive, state.objectname[i])) {
-          gp_error("can't write file \"%s\"", state.objectname[i]);
-          break;
-        }
       }
       i++;
     } 
     break;
 
   case ar_list:
-    gp_archive_list_members(state.archive);
+    list_archive_members(state.archive);
     break;
 
-  case ar_symbols:
-    if (gp_archive_have_index(state.archive) == 0) {
-      gp_error("this archive has no symbol index");
-    } else {
-      gp_archive_read_index(symbol_index, state.archive);
-      gp_archive_print_table(symbol_index);
+  case ar_replace:
+    while (i < state.numobjects) {
+      state.archive = add_archive_member(state.archive, 
+                                         state.objectname[i],
+                                         &buffer[0]);
+      if (state.archive == NULL) {
+        gplib_error(&buffer[0]);
+        break;      
+      }
+      i++;
     }
+    update_archive = 1;
+    break; 
+
+  case ar_symbols:
+    gp_archive_read_index(symbol_index, state.archive);
+    gp_archive_print_table(symbol_index);
     break;
 
   case ar_null:
@@ -286,27 +299,31 @@ int main(int argc, char *argv[])
   }
 
   /* If the archive is being modified remove the old symbol index */
-  if (update_archive) {
+  if (update_archive == 1) {
     state.archive = gp_archive_remove_index(state.archive);
   }
 
   /* check for duplicate symbols */
-  gp_archive_make_index(state.archive, definition_tbl);
+  if (gp_archive_make_index(state.archive, definition_tbl, &buffer[0])) {
+    gplib_error(&buffer[0]);
+  }
 
   /* add the symbol index to the archive */      
-  if (update_archive && (!no_index)) {
-    state.archive = gp_archive_add_index(definition_tbl, state.archive);
+  if ((update_archive == 1) && (no_index == 0)) {
+      state.archive = gp_archive_add_index(definition_tbl, 
+                                           state.archive, 
+					   &buffer[0]);
   }
 
   /* write the new or modified archive */
-  if (update_archive && (gp_num_errors == 0)) {
-    if (gp_archive_write(state.archive, state.filename))
-      gp_error("can't write the new archive file");
+  if ((update_archive == 1) && (state.num.errors == 0)) {
+    if (write_archive(state.archive, state.filename, &buffer[0]))
+      gplib_error(&buffer[0]);
   }
 
-  if (gp_num_errors > 0)
-    return EXIT_FAILURE;
+  if (state.num.errors > 0)
+    return 1;
   else
-    return EXIT_SUCCESS;
+    return 0;
 
 }

@@ -1,6 +1,5 @@
 /* .cod file support
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
-   James Bowman, Scott Dattalo
+   Copyright (C) 1998,1999,2000,2001 James Bowman, Scott Dattalo
 
 This file is part of gputils.
 
@@ -196,14 +195,5 @@ typedef struct dir_block_info {
 #define COD_ST_C_SHORT       2
 #define COD_ST_ADDRESS      46
 #define COD_ST_CONSTANT     47
-
-/* common cod functions */
-void gp_cod_strncpy(char *dest, char *src, int max_len);
-void gp_cod_clear(Block *b);
-void gp_cod_delete(Block *b);
-void gp_cod_next(Block *b, int *block_number);
-void gp_cod_create(Block *b, int *block_number);
-void gp_cod_date(char *buffer, size_t sizeof_buffer);
-void gp_cod_time(char *buffer, size_t sizeof_buffer);
 
 #endif

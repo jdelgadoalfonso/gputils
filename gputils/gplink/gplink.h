@@ -1,6 +1,5 @@
 /* gplink - GNU PIC Linker
-   Copyright (C) 2001, 2002, 2003, 2004, 2005
-   Craig Franklin
+   Copyright (C) 2001 Craig Franklin
  
 This file is part of gputils.
  
@@ -22,59 +21,33 @@ Boston, MA 02111-1307, USA.  */
 #ifndef GPLINK_H
 #define GPLINK_H
 
-#define GPLINK_VERSION_STRING ("gplink-" VERSION " alpha")
+#define GPLINK_VERSION_STRING ("gplink-" VERSION " pre-alpha")
 
+#define MAX_NAMES 256
 #define MAX_PATHS 100
 
-struct archivelist {
-  char                *name;
-  gp_archive_type     *archive;
-  struct archivelist  *next;
-};
+#include "gpmemory.h"
+#include "gpwritehex.h"
 
-enum outfile { normal, suppress, named };
+enum modes { _hex, _object};
 
 extern struct gplink_state {
-  char startdate[80];              /* When gplink ran */
+  enum modes mode;                 /* default mode */ 
   enum formats hex_format;         /* format of the output */
+  int quiet;			   /* suppress linker outputs when 1 */ 
+  int debug;                       /* enable gplink debug features */
   char *paths[MAX_PATHS];          /* the list of include paths */
   int numpaths;                    /* number of paths in the list */
-  int byte_addr;                   /* program memory uses byte addressing */
-  enum pic_processor processor;
-  enum proc_class class;
-  enum outfile
-    codfile,			   /* Symbol output file control */
-    hexfile,			   /* Hex output file control */
-    lstfile,			   /* List output file control */
-    mapfile,			   /* Map output file control */
-    objfile;			   /* Executable object file control */
-  gp_boolean fill_enable;	   /* Fill unused program memory with value */
-  unsigned int fill_value;	   /* Value to fill program memory with */
-  gp_boolean has_stack;            /* Has stack directive in linker script */
-  unsigned int stack_size;	   /* Value to fill program memory with */
-  gp_boolean has_idata;            /* Has initialized data memory */
-  char  *srcfilename,		   /* Script file name */
-    basefilename[BUFSIZ],	   /* basename for generating hex,list,symbol filenames */
-    codfilename[BUFSIZ],	   /* Symbol (.cod) file name */
-    hexfilename[BUFSIZ],	   /* Hex (.hex) file name */
-    lstfilename[BUFSIZ],	   /* Symbol (.lst) file name */
-    mapfilename[BUFSIZ],	   /* List (.map) file name */
-    objfilename[BUFSIZ];	   /* Object (.o) file name */
+  struct {			   /* Totals for errors, warnings, messages */
+    int errors;
+    int warnings;
+    int messages;
+  } num;
+  char  *srcfilename;		   /* Script file name */
+  char  *basefilename;		   /* Script file name */
   struct source_context *src;	   /* Top of the stack of the script files */
-  struct {			   /* Map file state: */
-    FILE *f;			     /*   Map file output */
-  } map;
-  struct {			   /* Symbol file state: */
-    FILE *f;			     /*   Symbol file output */
-    gp_boolean enabled;		     /*   symbol file is enabled */
-    int emitting;                    /*   flag indicating when an opcode is emitted */
-  } cod;
-  struct {			   /* List file state: */
-    FILE *f;			     /*   List file output */
-    gp_boolean enabled;		     /*   list file is enabled */
-    struct list_context *src;        /*   list file context */
-    int was_org;                     /*   last address that generated code */
-  } lst;
+  struct objectlist     *objects;
+  struct archivelist    *archives;
   struct {
     struct symbol_table *definition; /* section definitions from script */
     struct symbol_table *logical;    /* logical definitions from script */
@@ -84,9 +57,7 @@ extern struct gplink_state {
     struct symbol_table *missing;    /* missing external symbols */
     struct symbol_table *archive;    /* archive symbol index */
   } symbol;
-  struct archivelist    *archives;
-  gp_object_type        *object;     /* object files */
-  MemBlock              *i_memory;   /* Instruction memory linked list */
+  struct objectfile *output;         /* output object file */
 } state;
 
 struct source_context {
@@ -95,15 +66,6 @@ struct source_context {
   unsigned int line_number;
   struct yy_buffer_state *yybuf;
   struct source_context *prev;
-};
-
-struct list_context {
-  char *name;
-  gp_symbol_type *symbol;
-  FILE *f; 
-  gp_boolean missing_source;
-  unsigned int line_number;
-  struct list_context *prev;
 };
 
 void gplink_error(char *messg);

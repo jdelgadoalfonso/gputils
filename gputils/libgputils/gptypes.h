@@ -1,6 +1,5 @@
 /* libgputils typedefs
-   Copyright (C) 2001, 2002, 2003, 2004, 2005
-   Craig Franklin
+   Copyright (C) 2001 Craig Franklin
 
 This file is part of gputils.
 
@@ -22,6 +21,6 @@ Boston, MA 02111-1307, USA.  */
 #ifndef __GPTYPES_H__
 #define __GPTYPES_H__
 
-typedef enum { false = (0 == 1), true = (0 == 0) } gp_boolean;
+typedef enum gp_boolean_type {false, true} gp_boolean;
 
 #endif

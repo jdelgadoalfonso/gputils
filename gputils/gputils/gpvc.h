@@ -1,6 +1,5 @@
 /* Displays contents of ".COD" files
-   Copyright (C) 2001, 2002, 2003, 2004, 2005
-   Scott Dattalo
+   Copyright (C) 2001 Scott Dattalo
 
 This file is part of gputils.
  
@@ -27,18 +26,18 @@ Boston, MA 02111-1307, USA.  */
 
 #define GPVC_VERSION_STRING ("gpvc-" VERSION " alpha")
 #define BUFFER_LENGTH 256
-#define MAX_SOURCE_FILES 100 
+#define BLOCK_SIZE    512
 
 extern FILE *codefile;  
 extern char filename[BUFFER_LENGTH];
-extern char temp[COD_BLOCK_SIZE];
-extern char *source_file_names[MAX_SOURCE_FILES];
-extern FILE *source_files[MAX_SOURCE_FILES];
+extern char temp[BLOCK_SIZE];
+extern char *source_file_names[20];
+extern FILE *source_files[20];
 extern DirBlockInfo main_dir;
 
-extern int byte_addr;
+extern int addrsize;
 
-extern char directory_block_data[COD_BLOCK_SIZE];
+extern char directory_block_data[BLOCK_SIZE];
 extern char * SymbolType4[154];
 
 #endif

@@ -57,6 +57,18 @@ BANKED          EQU 1
 ;       16Cxxx/17Cxxx Substitutions
 ;==========================================================================
 
+  #define clrw clrf WREG       ; PIC16Cxxx code substitution (WREG is addressable)
+  #define CLRW CLRF WREG       ; PIC16Cxxx code substitution (WREG is addressable)
+  #define negw negf WREG       ; PIC16Cxxx code substitution (WREG is addressable)
+  #define NEGW NEGF WREG       ; PIC16Cxxx code substitution (WREG is addressable)
+  #define movpf movff          ; PIC17Cxxx code substitution
+  #define MOVPF MOVFF          ; PIC17Cxxx code substitution
+  #define movfp movff          ; PIC17Cxxx code substitution
+  #define MOVFP MOVFF          ; PIC17Cxxx code substitution
+  #define lcall call           ; PIC17Cxxx code substitution
+  #define LCALL CALL           ; PIC17Cxxx code substitution
+  #define lgoto goto           ; PIC17Cxxx code substitution
+  #define LGOTO GOTO           ; PIC17Cxxx code substitution
   #define DDRA  TRISA          ; PIC17Cxxx SFR substitution
   #define DDRB  TRISB          ; PIC17Cxxx SFR substitution
   #define DDRC  TRISC          ; PIC17Cxxx SFR substitution
@@ -472,7 +484,7 @@ T0PS2           EQU  H'0002'
 T0PS1           EQU  H'0001'
 T0PS0           EQU  H'0000'
 
-;----- OSCCON Bits ---------------------------------------------------------
+;----- OSCON Bits ---------------------------------------------------------
 SCS             EQU  H'0000'
 
 ;----- LVDCON Bits ---------------------------------------------------------
@@ -484,8 +496,8 @@ LVDL1           EQU  H'0001'
 LVDL0           EQU  H'0000'
 
 ;----- WDTCON Bits ---------------------------------------------------------
-SWDTE           EQU  H'0000'
 SWDTEN          EQU  H'0000'
+SWDTE           EQU  H'0000'
 
 ;----- RCON Bits -----------------------------------------------------------
 IPEN            EQU  H'0007'
@@ -1502,9 +1514,21 @@ RH7             EQU  7
 
 ;----- PORTJ ------------------------------------------------------------------
 RJ0             EQU  0
+AD8             EQU  0
 RJ1             EQU  1
+AD9             EQU  1
 RJ2             EQU  2
+AD10            EQU  2
 RJ3             EQU  3
+AD11            EQU  3
+RJ4             EQU  4
+AD12            EQU  4
+RJ5             EQU  5
+AD13            EQU  5
+RJ6             EQU  6
+AD14            EQU  6
+RJ7             EQU  7
+AD15            EQU  7
 
 
 ;----- PORTK ------------------------------------------------------------------

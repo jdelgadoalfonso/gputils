@@ -1,6 +1,5 @@
 /* Implements directives, pseudo-ops and processor opcodes
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
-   James Bowman, Craig Franklin
+   Copyright (C) 1998,1999,2000,2001 James Bowman, Craig Franklin
 
 This file is part of gputils.
 
@@ -33,9 +32,11 @@ Boston, MA 02111-1307, USA.  */
 gpasmVal do_insn(char *name, struct pnode *parms);
 void opcode_init(int stage);
 void begin_cblock(struct pnode *c);
-void cblock_expr(struct pnode *s);
-void cblock_expr_incr(struct pnode *s, struct pnode *incr);
+void cblock_expr(char *s);
+void cblock_expr_incr(char *s, struct pnode *incr);
+char *evaluate_concatenation(struct pnode *p);
 int asm_enabled(void);
-int check_page(int address);
+int check_page(struct pnode *p);
+int eval_fill_number(struct pnode *p);
 
 #endif

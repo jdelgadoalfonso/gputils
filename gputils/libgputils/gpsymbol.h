@@ -1,6 +1,5 @@
 /* Symbol table support
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
-   James Bowman
+   Copyright (C) 1998,1999,2000,2001 James Bowman
 
 This file is part of gputils.
 
@@ -33,14 +32,13 @@ struct symbol {
 
 struct symbol_table {
   int count;
-  gp_boolean case_insensitive;
+  int case_insensitive;
   int (*compare)(const char *__s1, const char *__s2);
   struct symbol *hash_table[HASH_SIZE];
   struct symbol_table *prev;
 };
 
-struct symbol_table *push_symbol_table(struct symbol_table *, 
-                                       gp_boolean case_insensitive);
+struct symbol_table *push_symbol_table(struct symbol_table *, int case_insensitive);
 struct symbol_table *pop_symbol_table(struct symbol_table *);
 
 struct symbol *add_symbol(struct symbol_table *, char *name);

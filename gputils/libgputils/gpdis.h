@@ -1,6 +1,5 @@
 /* Convert one word from memory into an equivalent assembly instruction
-   Copyright (C) 2001, 2002, 2003, 2004, 2005
-   Craig Franklin
+   Copyright (C) 2001 Craig Franklin
 
 This file is part of gputils.
 
@@ -22,13 +21,7 @@ Boston, MA 02111-1307, USA.  */
 #ifndef __GPDIS_H__
 #define __GPDIS_H__
 
-extern gp_boolean gp_decode_mnemonics;
-extern gp_boolean gp_decode_extended;
-
-int gp_disassemble(MemBlock *m,
-                   int org,
-                   enum proc_class class,
-                   char *buffer,
-                   size_t sizeof_buffer);
+void mem2asm12(int insn, char buffer[80]);
+void mem2asm14(int insn, char buffer[80]);
 
 #endif

@@ -1,6 +1,5 @@
 /* memory header file.
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
-   James Bowman, Scott Dattalo
+   Copyright (C) 1998,1999,2000,2001 James Bowman, Scott Dattalo
 
 This file is part of gputils.
 
@@ -44,6 +43,6 @@ void i_memory_free(MemBlock *m);
 int i_memory_get(MemBlock *m, unsigned int address);
 void i_memory_put(MemBlock *i_memory, unsigned int address, unsigned int value);
 int i_memory_used(MemBlock *m);
-void print_i_memory(MemBlock *m, int byte_addr);
+void print_i_memory(MemBlock *m);
 
 #endif

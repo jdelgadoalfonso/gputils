@@ -1,6 +1,5 @@
 /* libgputils header
-   Copyright (C) 2001, 2002, 2003, 2004, 2005
-   Craig Franklin
+   Copyright (C) 2001 Craig Franklin
 
 This file is part of gputils.
 
@@ -22,29 +21,17 @@ Boston, MA 02111-1307, USA.  */
 #ifndef __LIBGPUTILS_H__
 #define __LIBGPUTILS_H__
 
-/* library files */
-#include <gptypes.h>
-#include <gpsystem.h>
-#include <gpmessage.h>
-
-/* common files */
-#include <gpmemory.h>
-#include <gpopcode.h>
-#include <gpprocessor.h>
-#include <gpsymbol.h>
-#include <gpdis.h>
-#include <gpwritehex.h>
-#include <gpreadhex.h>
-
-/* COFF files */
-#include <gpcoff.h>
-#include <gparchive.h>
-#include <gpcoffgen.h>
-#include <gpcofflink.h>
-#include <gpreadobj.h>
-#include <gpwriteobj.h>
-
-/* COD files */
-#include <gpcod.h>
+#include <gputils/gptypes.h>
+#include <gputils/gpcod.h>
+#include <gputils/gpcoff.h>
+#include <gputils/gpsymbol.h>
+#include <gputils/gpmemory.h>
+#include <gputils/gpreadobj.h>
+#include <gputils/gparchive.h>
+#include <gputils/gpcoffgen.h>
+#include <gputils/gpcofflink.h>
+#include <gputils/gpdis.h>
+#include <gputils/gpreadhex.h>
+#include <gputils/gpwritehex.h>
 
 #endif

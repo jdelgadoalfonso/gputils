@@ -1,7 +1,6 @@
 %{
 /* Parser for linker scripts
-   Copyright (C) 2001, 2002, 2003, 2004, 2005
-   Craig Franklin
+   Copyright (C) 2001 Craig Franklin
 
 This file is part of gputils.
 
@@ -21,15 +20,13 @@ the Free Software Foundation, 59 Temple Place - Suite 330,
 Boston, MA 02111-1307, USA.  */
 
 #include "stdhdr.h"
-
-#include "libgputils.h"
 #include "gplink.h"
 #include "scan.h"
 #include "script.h"
 
 void yyerror(char *message)
 {
-  script_error(message, NULL);
+  gplink_error(message);
 }
 
 int yylex(void);
@@ -106,20 +103,15 @@ static struct pnode *mk_1op(int op, struct pnode *p0)
   struct pnode *p;
 }
 
-%token <s> SYMBOL
-%token <s> LIBPATH
-%token <s> LKRPATH
+%token <s> SYMBOL, LIBPATH, LKRPATH
 %token <s> PATH
-%token <s> LEXEOF
 %token <i> NUMBER
 %type <i> '='
 %type <i> e1op
 
 %type <s> line
-%type <p> e0
-%type <p> e1
-%type <p> parameter_list
-%type <p> path_list 
+%type <p> e0, e1
+%type <p> parameter_list, path_list 
 
 %%
 /* Grammar rules */
@@ -143,43 +135,20 @@ line:
           /* do nothing */
 	}
 	|
-	LEXEOF
-	{
-	  YYACCEPT;
-	}
-	|
 	LIBPATH path_list '\n'
 	{
-	  add_path($2);
-	}
-	|
-	LIBPATH path_list LEXEOF
-	{
-	  add_path($2);
-	  YYACCEPT;
+
 	}
 	|
 	LKRPATH path_list '\n'
 	{
-	  add_path($2);
-	}
-	|
-	LKRPATH path_list LEXEOF
-	{
-	  add_path($2);
-	  YYACCEPT;
+
 	}
 	|
 	SYMBOL parameter_list '\n'
 	{
 	  execute_command($1, $2);
-	}
-	|
-	SYMBOL parameter_list LEXEOF
-	{
-	  execute_command($1, $2);
-	  YYACCEPT;
-	}
+        }
 	;
 
 path_list:
@@ -227,6 +196,5 @@ e0:
 	{
 	  $$ = mk_constant($1);
 	}
-	;
 
 %%

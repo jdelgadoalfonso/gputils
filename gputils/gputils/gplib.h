@@ -1,6 +1,5 @@
 /* gplib - GNU PIC librarian
-   Copyright (C) 2001, 2002, 2003, 2004, 2005
-   Craig Franklin
+   Copyright (C) 2001 Craig Franklin
  
 This file is part of gputils.
  
@@ -32,15 +31,20 @@ enum lib_modes {
   ar_null 
 };
 
-#define GPLIB_VERSION_STRING ("gplib-" VERSION " alpha")
-#define MAX_OBJ_NAMES 256
+#define GPLIB_VERSION_STRING ("gplib-" VERSION " pre-alpha")
+#define MAX_NAMES 256
 
 extern struct gplib_state {
-  enum lib_modes mode;          	/* operating mode */
-  int numobjects;               	/* number of objects in the list */
-  char *filename;               	/* library file name */
-  char *objectname[MAX_OBJ_NAMES];  	/* the list of object filenames */
-  gp_archive_type *archive; 	        /* internal archive format */
+  enum lib_modes mode;          /* operating mode */
+  struct {			/* Totals for errors, warnings, messages */
+    int errors;
+    int warnings;
+  } num;
+  int numobjects;               /* number of objects in the list */
+  int  quiet;                   /* suppress outputs when 1 */ 
+  char *filename;               /* library file name */
+  char *objectname[MAX_NAMES];  /* the list of object filenames */
+  struct coff_archive *archive; /* internal archive format */
 } state;
 
 #endif

@@ -1,6 +1,5 @@
 /* Error handling
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
-   James Bowman, Craig Franklin
+   Copyright (C) 1998,1999,2000,2001 James Bowman, Craig Franklin
 
 This file is part of gputils.
 
@@ -26,13 +25,8 @@ void gperror(unsigned int code, char *message);
 void gpwarning(unsigned int code, char *message);
 void gpmessage(unsigned int code, char *message);
 
-/* Alternate message functions. Only the prototypes are provided, the user
-   must link their own function into gpasm. */
-void user_error(unsigned int code, char *message);
-void user_warning(unsigned int code, char *message);
-void user_message(unsigned int code, char *message);
-
 void add_code(int code);
+void print_errorcodes(void);
 
 /* Error codes
  *
@@ -60,7 +54,6 @@ enum GPE_codes {
   GPE_DIFFLAB          = 116,
   GPE_ADDROVF          = 117,  /* address overflow */
   GPE_ADDROVR          = 118,  /* overwriting a previously written address */
-  GPE_BAD_CALL_ADDR    = 120,
   GPE_ILLEGAL_LABEL    = 121,
   GPE_ILLEGAL_DIR      = 123,
   GPE_ILLEGAL_ARGU     = 124,
@@ -76,18 +69,10 @@ enum GPE_codes {
   GPE_NO_MACRO_NAME    = 135,
   GPE_DUPLICATE_MACRO  = 136,
   GPE_BAD_WHILE_LOOP   = 140,
-  GPE_ILLEGAL_NESTING  = 143,
   GPE_UNMATCHED_ENDM   = 145,
-  GPE_OBJECT_ONLY      = 149,
-  GPE_UNRESOLVABLE     = 151,
-  GPE_WRONG_SECTION    = 152,
-  GPE_CONTIG_SECTION   = 154,
-  GPE_MUST_BE_LABEL    = 156,
   GPE_UNKNOWN          = 157,
-  GPE_FILL_ODD         = 159,
-  GPE_CONTIG_CONFIG    = 163,
-  GPE_CONTIG_IDLOC     = 164,
-  GPE_MISSING_BRACKET  = 168
+  GPE_FILL_ODD         = 159
+
 };
 
 /* Warning codes
@@ -139,7 +124,6 @@ enum GPM_codes {
   GPM_EXTPAGE          = 312,
   GPM_CBLOCK           = 313,
   GPM_UNKNOWN          = 314,
-  GPM_W_MODIFIED       = 316,
   GPM_SPECIAL_MNEMONIC = 318
 };
 

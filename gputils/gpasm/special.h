@@ -1,6 +1,5 @@
 /* Implements special instruction mnemonics
-   Copyright (C) 2001, 2002, 2003, 2004, 2005
-   Craig Franklin
+   Copyright (C) 2001 Craig Franklin
 
 This file is part of gputils.
 
@@ -22,7 +21,129 @@ Boston, MA 02111-1307, USA.  */
 #ifndef __SPECIAL_H__
 #define __SPECIAL_H__
 
-extern struct insn special[];
-extern const int num_op_special;
+extern gpasmVal do_addcf(gpasmVal r, 
+                         char *name, 
+                         int arity, 
+                         struct pnode *parms);
+extern gpasmVal do_adddcf(gpasmVal r, 
+                          char *name, 
+                          int arity, 
+                          struct pnode *parms);
+extern gpasmVal do_b(gpasmVal r, 
+                     char *name, 
+                     int arity, 
+                     struct pnode *parms);
+extern gpasmVal do_bc(gpasmVal r,
+		      char *name,
+		      int arity,
+		      struct pnode *parms);
+extern gpasmVal do_bdc(gpasmVal r,
+		       char *name,
+		       int arity,
+		       struct pnode *parms);                      
+extern gpasmVal do_bz(gpasmVal r,
+		      char *name,
+		      int arity,
+		      struct pnode *parms);
+extern gpasmVal do_bnc(gpasmVal r,
+		       char *name,
+		       int arity,
+		       struct pnode *parms);
+extern gpasmVal do_bnz(gpasmVal r,
+		       char *name,
+		       int arity,
+		       struct pnode *parms);
+extern gpasmVal do_bndc(gpasmVal r,
+		        char *name,
+		        int arity,
+		        struct pnode *parms);
+extern gpasmVal do_bnz(gpasmVal r,
+		       char *name,
+		       int arity,
+		       struct pnode *parms);
+extern gpasmVal do_clrc(gpasmVal r,
+		        char *name,
+		        int arity,
+		        struct pnode *parms);
+extern gpasmVal do_clrdc(gpasmVal r,
+		         char *name,
+		         int arity,
+		         struct pnode *parms);                        
+extern gpasmVal do_clrz(gpasmVal r,
+		        char *name,
+		        int arity,
+		        struct pnode *parms);
+extern gpasmVal do_lcall(gpasmVal r, 
+                         char *name, 
+                         int arity, 
+                         struct pnode *parms);
+extern gpasmVal do_lgoto(gpasmVal r,
+		         char *name,
+		         int arity,
+		         struct pnode *parms);
+extern gpasmVal do_movfw(gpasmVal r,
+		         char *name,
+		         int arity,
+		         struct pnode *parms);
+extern gpasmVal do_negf(gpasmVal r,
+		        char *name,
+		        int arity,
+		        struct pnode *parms);
+extern gpasmVal do_setc(gpasmVal r,
+		        char *name,
+		        int arity,
+		        struct pnode *parms);
+extern gpasmVal do_setdc(gpasmVal r,
+		         char *name,
+		         int arity,
+		         struct pnode *parms);
+extern gpasmVal do_setdc(gpasmVal r,
+		         char *name,
+		         int arity,
+		         struct pnode *parms);
+extern gpasmVal do_setz(gpasmVal r,
+		        char *name,
+		        int arity,
+		        struct pnode *parms);
+extern gpasmVal do_skpc(gpasmVal r, 
+                        char *name, 
+                        int arity, 
+                        struct pnode *parms);
+extern gpasmVal do_setdc(gpasmVal r,
+		         char *name,
+		         int arity,
+		         struct pnode *parms);
+extern gpasmVal do_skpz(gpasmVal r,
+		        char *name,
+		        int arity,
+		        struct pnode *parms);
+extern gpasmVal do_skpnc(gpasmVal r,
+		         char *name,
+		         int arity,
+		         struct pnode *parms);
+extern gpasmVal do_skpdc(gpasmVal r,
+		         char *name,
+		         int arity,
+		         struct pnode *parms);
+extern gpasmVal do_skpndc(gpasmVal r,
+		          char *name,
+		          int arity,
+		          struct pnode *parms);
+extern gpasmVal do_skpnz(gpasmVal r,
+		         char *name,
+		         int arity,
+		         struct pnode *parms);
+extern gpasmVal do_subcf(gpasmVal r,
+		         char *name,
+		         int arity,
+		         struct pnode *parms);
+extern gpasmVal do_subdcf(gpasmVal r,
+		         char *name,
+		         int arity,
+		         struct pnode *parms);
+extern gpasmVal do_tstf(gpasmVal r,
+		        char *name,
+		        int arity,
+		        struct pnode *parms);
 
 #endif

@@ -1,3 +1,0 @@
-files memseg1.o memseg2.o memseg3.o
-
-include 16f877a.lkr

@@ -1,6 +1,5 @@
 /* ".HEX" file output for gputils
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
-   James Bowman, Craig Franklin
+   Copyright (C) 1998,1999,2000,2001 James Bowman, Craig Franklin
 
 This file is part of gputils.
 
@@ -20,7 +19,9 @@ the Free Software Foundation, 59 Temple Place - Suite 330,
 Boston, MA 02111-1307, USA.  */
 
 #include "stdhdr.h"
-#include "libgputils.h"
+
+#include "gpmemory.h"
+#include "gpwritehex.h"
 
 /* mode flags */
 #define all   0
@@ -183,12 +184,12 @@ int writehex (char *basefilename,
   }
 
    /* build file names */
-  strncpy(hexfilename, basefilename, sizeof(hexfilename));
-  strncat(hexfilename, ".hex", sizeof(hexfilename));
-  strncpy(lowhex, basefilename, sizeof(lowhex));
-  strncat(lowhex, ".hxl", sizeof(lowhex));
-  strncpy(highhex, basefilename, sizeof(highhex));
-  strncat(highhex, ".hxh", sizeof(highhex));
+  strcpy(hexfilename, basefilename);
+  strcat(hexfilename, ".hex");
+  strcpy(lowhex, basefilename);
+  strcat(lowhex, ".hxl");
+  strcpy(highhex, basefilename);
+  strcat(highhex, ".hxh");
 
   if (numerrors) {
     /* Remove the hex files (if any) */
@@ -203,39 +204,23 @@ int writehex (char *basefilename,
 
     /* Write the low memory */
     hex = fopen(lowhex, "wt");
-    if (hex == NULL) {
-      perror(lowhex);
-      exit(1);
-    }
     write_i_mem(hex_format, low);
     fclose(hex);
 
     /* Write the high memory */
     hex = fopen(highhex, "wt");
-    if (hex == NULL) {
-      perror(highhex);
-      exit(1);
-    }
     write_i_mem(hex_format, high);
     fclose(hex);
 
   } else if (hex_format == inhx16) {
 
     hex = fopen(hexfilename, "wt");
-    if (hex == NULL) {
-      perror(hexfilename);
-      exit(1);
-    }
     write_i_mem(hex_format, swap);
     fclose(hex);
 
   } else {
 
     hex = fopen(hexfilename, "wt");
-    if (hex == NULL) {
-      perror(hexfilename);
-      exit(1);
-    }
     if (byte_words)
       write_i_mem(hex_format, byte);
     else

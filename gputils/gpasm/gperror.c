@@ -1,6 +1,5 @@
 /* Error handling for gpasm
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
-   James Bowman, Craig Franklin
+   Copyright (C) 1998,1999,2000,2001 James Bowman, Craig Franklin
 
 This file is part of gputils.
 
@@ -21,7 +20,6 @@ Boston, MA 02111-1307, USA.  */
 
 #include "stdhdr.h"
 
-#include "libgputils.h"
 #include "gpasm.h"
 #include "gperror.h"
 #include "lst.h"
@@ -32,6 +30,19 @@ struct error_list {
 };
 
 static struct error_list *errorcodes_list = NULL;
+
+/* debug code */
+void print_errorcodes(void)
+{
+  struct error_list *list = errorcodes_list;
+
+  printf("errorlevel values = ");
+  while(list) {
+    printf("%i ", list->value);
+    list = list->next;
+  }
+  printf("\n");
+}
 
 void add_code(int code)
 {
@@ -101,8 +112,6 @@ char *gp_geterror(unsigned int code)
     return "Address wrapped around 0. ";
   case GPE_ADDROVR:
     return "Overwriting previous address contents.";
-  case GPE_BAD_CALL_ADDR:
-    return "Call or jump not allowed at this address (must be in low half of page)";
   case GPE_ILLEGAL_LABEL:
     return "Illegal label.";
   case GPE_ILLEGAL_DIR:
@@ -133,28 +142,10 @@ char *gp_geterror(unsigned int code)
     return "Duplicate macro name.";
   case GPE_BAD_WHILE_LOOP:
     return "WHILE must terminate within 256 iterations.";
-  case GPE_ILLEGAL_NESTING:
-    return "Illegal nesting.";
   case GPE_UNMATCHED_ENDM:
     return "Unmatched ENDM.";
-  case GPE_OBJECT_ONLY:
-    return "Directive only allowed when generating an object file.";
-  case GPE_UNRESOLVABLE:
-    return "Operand contains unresolvable labels or is too complex.";
-  case GPE_WRONG_SECTION:
-    return "Executable code and data must be defined in an appropriate section.";
-  case GPE_CONTIG_SECTION:
-    return "Each object file section must be contiguous.";
-  case GPE_MUST_BE_LABEL:
-    return "Operand must be an address label.";
   case GPE_FILL_ODD:
     return "Cannot use FILL Directive with odd number of bytes.";
-  case GPE_CONTIG_CONFIG:
-    return "__CONFIG directives must be contiguous.";
-  case GPE_CONTIG_IDLOC:
-    return "__IDLOC directives must be contiguous.";
-  case GPE_MISSING_BRACKET:
-    return "Square brackets required around offset operand.";
   case GPE_UNKNOWN:
   default:
     return "UNKNOWN";
@@ -169,34 +160,26 @@ void gperror(unsigned int code,
   if (state.pass == 2) {
     if(message == NULL)
       message = gp_geterror(code);
-
-#ifndef GP_USER_ERROR
-    /* standard output */
+    if (state.src)
+      sprintf(full_message,
+	      "%s:%d:Error [%03d] %s",
+	      state.src->name,
+	      state.src->line_number,
+	      code,
+	      message);
+    else
+      sprintf(full_message,
+	      "Error [%03d] %s",
+	      code,
+	      message);
     if (!state.quiet) {
-      if (state.src)
-        snprintf(full_message, sizeof(full_message),
-                 "%s:%d:Error [%03d] %s",
-                 state.src->name,
-                 state.src->line_number,
-                 code,
-                 message);
-      else
-        snprintf(full_message, sizeof(full_message),
-                 "Error [%03d] %s",
-                 code,
-                 message);
-
       printf("%s\n", full_message);
     }
-#else
-    user_error(code, message);
-#endif
 
-    /* list file output */
-    snprintf(full_message, sizeof(full_message),
-	     "Error [%03d] : %s",
-	     code,
-	     message);
+    sprintf(full_message,
+	    "Error [%03d] : %s",
+	    code,
+	    message);
 
     lst_line(full_message);
 
@@ -257,34 +240,26 @@ void gpwarning(unsigned int code,
     if ((state.error_level <= 1) && check_code(code)) {
       if(message == NULL)
         message = gp_getwarning(code);
-
-#ifndef GP_USER_WARNING
-      /* standard output */
+      if (state.src)
+        sprintf(full_message,
+	        "%s:%d:Warning [%03d] %s",
+	        state.src->name,
+	        state.src->line_number,
+	        code,
+	        message);
+      else
+        sprintf(full_message,
+	        "Warning [%03d] %s",
+	        code,
+	        message);
       if (!state.quiet) {
-        if (state.src)
-          snprintf(full_message, sizeof(full_message),
-                   "%s:%d:Warning [%03d] %s",
-                   state.src->name,
-                   state.src->line_number,
-                   code,
-                   message);
-        else
-          snprintf(full_message, sizeof(full_message),
-                   "Warning [%03d] %s",
-                   code,
-                   message);
-
         printf("%s\n", full_message);
       } 
-#else
-      user_warning(code, message);
-#endif
 
-      /* list file output */
-      snprintf(full_message, sizeof(full_message),
-	       "Warning [%03d] : %s",
-	       code,
-	       message);
+      sprintf(full_message,
+	      "Warning [%03d] : %s",
+	      code,
+	      message);
 
       lst_line(full_message);
 
@@ -295,13 +270,14 @@ void gpwarning(unsigned int code,
   }
 }
 
+
 char *gp_getmessage(unsigned int code)
 {
   switch(code) {
   case GPM_USER:
     return "MESSAGE:";
   case GPM_BANK:
-    return "Register in operand not in bank 0. Ensure bank bits are correct.";
+    return "Argument out of range. Least significant bits used.";
   case GPM_RANGE:
     return "Program word too large. Truncated to core size.";
   case GPM_IDLOC:
@@ -309,7 +285,7 @@ char *gp_getmessage(unsigned int code)
   case GPM_NOF:
     return "Using default destination of 1 (file).";
   case GPM_PAGE:
-    return "Crossing page boundary -- ensure page bits are set.";
+    return "Crossing page boundary - ensure page bits are set.";
   case GPM_PAGEBITS:
     return "Setting page bits.";
   case GPM_SUPVAL:
@@ -319,11 +295,9 @@ char *gp_getmessage(unsigned int code)
   case GPM_SUPRAM:
     return "Superceding current maximum RAM and RAM map.";
   case GPM_EXTPAGE:
-    return "Page or Bank selection not needed for this device.";
+    return "Page bits are not needed.";
   case GPM_CBLOCK:
     return "CBLOCK will begin at address 0.";
-  case GPM_W_MODIFIED:
-    return "W Register modified.";
   case GPM_SPECIAL_MNEMONIC:
     return "Special Instruction Mnemonic used."; 
   case GPM_UNKNOWN:
@@ -342,34 +316,26 @@ void gpmessage(unsigned int code,
     if ((state.error_level == 0) && check_code(code)){
       if(message == NULL)
         message = gp_getmessage(code);
-
-#ifndef GP_USER_MESSAGE
-      /* standard output */
+      if (state.src)
+        sprintf(full_message,
+	        "%s:%d:Message [%03d] %s",
+	        state.src->name,
+	        state.src->line_number,
+	        code,
+	        message);
+      else
+        sprintf(full_message,
+	        "Message [%03d] %s",
+	        code,
+	        message);
       if (!state.quiet) {
-        if (state.src)
-          snprintf(full_message, sizeof(full_message),
-                   "%s:%d:Message [%03d] %s",
-                   state.src->name,
-                   state.src->line_number,
-                   code,
-                   message);
-        else
-          snprintf(full_message, sizeof(full_message),
-                   "Message [%03d] %s",
-                   code,
-                   message);
-
         printf("%s\n", full_message);
       }
-#else
-      user_message(code, message);
-#endif
 
-      /* list file output */
-      snprintf(full_message, sizeof(full_message),
-               "Message [%03d] : %s",
-               code,
-               message);
+      sprintf(full_message,
+	      "Message [%03d] : %s",
+	      code,
+	      message);
 
       lst_line(full_message);
 

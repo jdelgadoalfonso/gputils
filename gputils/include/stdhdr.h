@@ -1,6 +1,5 @@
 /* standard defines and includes
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
-   James Bowman, Craig Franklin
+   Copyright (C) 1998,1999,2000,2001 James Bowman, Craig Franklin
    
 This file is part of gputils.
  
@@ -30,25 +29,20 @@ Boston, MA 02111-1307, USA.  */
 #include <stdio.h>
 #include <assert.h>
 
-#ifdef HAVE_STDLIB_H
 #include <stdlib.h>
-#endif
-
-#ifndef EXIT_SUCCESS
-#define EXIT_SUCCESS 0
-#define EXIT_FAILURE 1
-#endif
 
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
 
-#include "getopt.h"
+#ifdef HAVE_GETOPT_H
+#include <getopt.h>
+#else
+#undef HAVE_GETOPT_LONG
+#endif
 
-#ifndef HAVE_STDLIB_H
 #ifdef HAVE_MALLOC_H
 #include <malloc.h>
-#endif
 #endif
 
 #ifndef HAVE_STRCASECMP
@@ -67,14 +61,6 @@ Boston, MA 02111-1307, USA.  */
 #include <ctype.h>
 #include <errno.h>
 
-#ifdef HAVE_DOS_BASED_FILE_SYSTEM
-  #define PATH_CHAR '\\'
-  #define COPY_CHAR "\\"
-#else
-  #define PATH_CHAR '/'
-  #define COPY_CHAR "/"
-#endif
-
-#define GPUTILS_COPYRIGHT_STRING "Copyright (c) 1998-2005 gputils project"
+#define BUG_REPORT_URL "<URL:http://gputils.sourceforge.net/>"
 
 #endif

@@ -1,5 +1,5 @@
         LIST
-; P18F458.INC  Standard Header File, Version 1.10   Microchip Technology, Inc.
+; P18F458.INC  Standard Header File, Version 0.10   Microchip Technology, Inc.
         NOLIST
 
 ; This header file defines configurations, registers, and other useful bits of
@@ -24,8 +24,6 @@
 ;Rev:   Date:        Details:                                         Who:
 ;0.90  15 May 2001   Preliminary Release                               dzb
 ;0.99  29 June2001   Rev 1                                             dzb
-;1.00  29 Oct.2001   Corrections & Additions			       cjh
-;1.10  25 Jun 2002   Added CFGS as EECON1 bit 6 name                   pas
 ;==========================================================================
 ;
 ;       Verify Processor
@@ -55,6 +53,18 @@ BANKED		EQU 1
 ;       16Cxxx/17Cxxx Substitutions
 ;==========================================================================
 
+  #define clrw clrf WREG       ; PIC16Cxxx code substitution (WREG is addressable)
+  #define CLRW CLRF WREG       ; PIC16Cxxx code substitution (WREG is addressable)
+  #define negw negf WREG       ; PIC16Cxxx code substitution (WREG is addressable)
+  #define NEGW NEGF WREG       ; PIC16Cxxx code substitution (WREG is addressable)
+  #define movpf movff          ; PIC17Cxxx code substitution
+  #define MOVPF MOVFF          ; PIC17Cxxx code substitution
+  #define movfp movff          ; PIC17Cxxx code substitution
+  #define MOVFP MOVFF          ; PIC17Cxxx code substitution
+  #define lcall call           ; PIC17Cxxx code substitution
+  #define LCALL CALL           ; PIC17Cxxx code substitution
+  #define lgoto goto           ; PIC17Cxxx code substitution
+  #define LGOTO GOTO           ; PIC17Cxxx code substitution
   #define DDRA  TRISA          ; PIC17Cxxx SFR substitution
   #define DDRB  TRISB          ; PIC17Cxxx SFR substitution
   #define DDRC  TRISC          ; PIC17Cxxx SFR substitution
@@ -332,11 +342,6 @@ RXF0SIDH        EQU  H'0F00'
 ;----- STKPTR Bits --------------------------------------------------------
 STKFUL          EQU  H'0007'
 STKUNF          EQU  H'0006'
-SP4	        EQU  H'0004'
-SP3	        EQU  H'0003'
-SP2	        EQU  H'0002'
-SP1	        EQU  H'0001'
-SP0	        EQU  H'0000'
 
 ;----- INTCON Bits --------------------------------------------------------
 GIE             EQU  H'0007'
@@ -364,18 +369,9 @@ T0IP            EQU  H'0002'      ; For compatibility with T0IE and T0IF
 RBIP            EQU  H'0000'
 
 ;----- INTCON3 Bits --------------------------------------------------------
-INT2IP		EQU  H'0007'
-INT2P		EQU  H'0007'
 INT1IP          EQU  H'0006'
-INT1P           EQU  H'0006'
-INT2IE		EQU  H'0004'
-INT2E		EQU  H'0004'
 INT1IE          EQU  H'0003'
-INT1E           EQU  H'0003'
-INT2IF		EQU  H'0001'
-INT2F		EQU  H'0001'
 INT1IF          EQU  H'0000'
-INT1F           EQU  H'0000'
 
 ;----- STATUS Bits --------------------------------------------------------
 N               EQU  H'0004'
@@ -394,7 +390,7 @@ T0PS2           EQU  H'0002'
 T0PS1           EQU  H'0001'
 T0PS0           EQU  H'0000'
 
-;----- OSCCON Bits ---------------------------------------------------------
+;----- OSCON Bits ---------------------------------------------------------
 SCS             EQU  H'0000'
 
 ;----- LVDCON Bits ---------------------------------------------------------
@@ -406,7 +402,6 @@ LVDL1           EQU  H'0001'
 LVDL0           EQU  H'0000'
 
 ;----- WDTCON Bits ---------------------------------------------------------
-SWDTE           EQU  H'0000'
 SWDTEN          EQU  H'0000'
 
 ;----- RCON Bits -----------------------------------------------------------
@@ -524,17 +519,7 @@ ECCP1M2         EQU  H'0002'
 ECCP1M1         EQU  H'0001'
 ECCP1M0         EQU  H'0000'
 
-;----- ECCP1DEL Bits -----------------------------------------------------
-EPDC0            EQU  H'0000'
-EPDC1            EQU  H'0001'
-EPDC2            EQU  H'0002'
-EPDC3            EQU  H'0003'
-EPDC4            EQU  H'0004'
-EPDC5            EQU  H'0005'
-EPDC6            EQU  H'0006'
-EPDC7            EQU  H'0007'
-
-;----- ECCPAS Bits --------------------------------------------------------
+;----- CVRCON Bits --------------------------------------------------------
 ECCPASE         EQU  H'0007'
 ECCPAS2         EQU  H'0006'
 ECCPAS1         EQU  H'0005'
@@ -610,8 +595,7 @@ RCD8            EQU  H'0000'    ; Backward compatibility only
 
 ;----- EECON1 Bits --------------------------------------------------------
 EEPGD           EQU  H'0007'
-EEFS            EQU  H'0006'    ; Backward compatibility only
-CFGS            EQU  H'0006'
+EEFS            EQU  H'0006'
 FREE            EQU  H'0004'
 WRERR           EQU  H'0003'
 WREN            EQU  H'0002'
@@ -704,9 +688,7 @@ TMR1IE          EQU  H'0000'
 
 ;----- COMSTAT Bits ---------------------------------------------------------
 RX1OVFL         EQU  H'0007'
-RXB0OVFL        EQU  H'0007'
 RX2OVFL         EQU  H'0006'
-RXB1OVFL        EQU  H'0006'
 TXBO            EQU  H'0005'
 TXBP            EQU  H'0004'
 RXBP            EQU  H'0003'
@@ -744,24 +726,24 @@ BRP2            EQU  H'0002'
 BRP1            EQU  H'0001'
 BRP0            EQU  H'0000'
 
-;----- CANCON Bits -------------------------------------------------------------
+;----- CANCON Bits --------------------------------------------------------
 REQOP2          EQU  H'0007'
 REQOP1          EQU  H'0006'
 REQOP0          EQU  H'0005'
 ABAT            EQU  H'0004'
-WIN2            EQU  H'0003'
-WIN1            EQU  H'0002'
-WIN0            EQU  H'0001'
+WIN2            EQU  H'0002'
+WIN1            EQU  H'0001'
+WIN0            EQU  H'0000'
 
-;----- CANSTAT Bits -----------------------------------------------------------
+;----- CANSTAT Bits -------------------------------------------------------
 OPMODE2         EQU  H'0007'
 OPMODE1         EQU  H'0006'
 OPMODE0         EQU  H'0005'
-ICODE2          EQU  H'0003'
-ICODE1          EQU  H'0002'
-ICODE0          EQU  H'0001'
+ICODE2          EQU  H'0002'
+ICODE1          EQU  H'0001'
+ICODE0          EQU  H'0000'
 
-;----- RXBnCON Bits -----------------------------------------------------------
+;----- RXBnCON Bits -------------------------------------------------------
 RXFUL           EQU  H'0007'
 RXM1            EQU  H'0006'
 RXM0            EQU  H'0005'
@@ -772,7 +754,23 @@ JTOFF           EQU  H'0001'
 FILHIT1         EQU  H'0001'
 FILHIT0         EQU  H'0000'
 
-;----- TXBnCON Bits ----------------------------------------------------------
+;----- RXB0SIDL, RXFnSIDL, and RXMnSIDL Bits ----------------------------------------------------------
+SRR             EQU  H'0004'
+EXID            EQU  H'0003'
+
+;----- RXB0DLC Bits -----------------------------------------------------------------
+RXRTR           EQU  H'0006'
+RESB1           EQU  H'0005'
+RESBO           EQU  H'0004'
+
+;----- TXBnDLC Bits -------------------------------------------------------
+TXRTR           EQU  H'0006'
+DLC3            EQU  H'0003'
+DLC2            EQU  H'0002'
+DLC1            EQU  H'0001'
+DLC0            EQU  H'0000'
+
+;----- TXBnCON Bits -------------------------------------------------------
 TXABT           EQU  H'0006'
 TXLARB          EQU  H'0005'
 TXERR           EQU  H'0004'
@@ -780,484 +778,8 @@ TXREQ           EQU  H'0003'
 TXPRI1          EQU  H'0001'
 TXPRI0          EQU  H'0000'
 
-;----- TXERRCNT Bits ----------------------------------------------------------
-TEC7            EQU  H'0007'
-TEC6            EQU  H'0006'
-TEC5            EQU  H'0005'
-TEC4            EQU  H'0004'
-TEC3            EQU  H'0003'
-TEC2            EQU  H'0002'
-TEC1            EQU  H'0001'
-TEC0            EQU  H'0000'
-
-;----- RXERRCNT Bits ----------------------------------------------------------
-REC7            EQU  H'0007'
-REC6            EQU  H'0006'
-REC5            EQU  H'0005'
-REC4            EQU  H'0004'
-REC3            EQU  H'0003'
-REC2            EQU  H'0002'
-REC1            EQU  H'0001'
-REC0            EQU  H'0000'
-
-;----- RXBnDLC and TXBnDLC Bits -----------------------------------------------
-RXRTR           EQU  H'0006'
-TXRTR           EQU  H'0006'
-RESB1           EQU  H'0005'
-RESB0           EQU  H'0004'
-DLC3            EQU  H'0003'
-DLC2            EQU  H'0002'
-DLC1            EQU  H'0001'
-DLC0            EQU  H'0000'
-
-;----- RXBnEIDL, RXFnEIDL, RXMnEIDL, and TXBnEIDL Bits -------------------------
-EID7            EQU  H'0007'
-EID6            EQU  H'0006'
-EID5            EQU  H'0005'
-EID4            EQU  H'0004'
-EID3            EQU  H'0003'
-EID2            EQU  H'0002'
-EID1            EQU  H'0001'
-EID0            EQU  H'0000'
-
-;----- RXBnEIDH, RXFnEIDH, RXMnEIDH, and TXBnEIDH Bits -------------------------
-EID15           EQU  H'0007'
-EID14           EQU  H'0006'
-EID13           EQU  H'0005'
-EID12           EQU  H'0004'
-EID11           EQU  H'0003'
-EID10           EQU  H'0002'
-EID9            EQU  H'0001'
-EID8            EQU  H'0000'
-
-;----- RXBnSIDL, RXFnSIDL, RXMnSIDL, and TXBnSIDL Bits ----------------------
-SID2            EQU  H'0007'
-SID1            EQU  H'0006'
-SID0            EQU  H'0005'
-SRR             EQU  H'0004'
-EXID            EQU  H'0003'
+;----- TXBnSIDL Bits ----------------------------------------------------------
 EXIDE           EQU  H'0003'
-EXIDEN          EQU  H'0003'
-EID17           EQU  H'0001'
-EID16           EQU  H'0000'
-
-;----- RXBnSIDH, RXFnSIDH, RXMnSIDH, and TXBnSIDH Bits ----------------------
-SID10           EQU  H'0007'
-SID9            EQU  H'0006'
-SID8            EQU  H'0005'
-SID7            EQU  H'0004'
-SID6            EQU  H'0003'
-SID5            EQU  H'0002'
-SID4            EQU  H'0001'
-SID3            EQU  H'0001'
-
-;----- RXB0D7 Bits ----------------------------------------------------------
-RB0D77          EQU  H'0007'
-RB0D76          EQU  H'0006'
-RB0D75          EQU  H'0005'
-RB0D74          EQU  H'0004'
-RB0D73          EQU  H'0003'
-RB0D72          EQU  H'0002'
-RB0D71          EQU  H'0001'
-RB0D70          EQU  H'0000'
-
-;----- RXB0D6 Bits ----------------------------------------------------------
-RB0D67          EQU  H'0007'
-RB0D66          EQU  H'0006'
-RB0D65          EQU  H'0005'
-RB0D64          EQU  H'0004'
-RB0D63          EQU  H'0003'
-RB0D62          EQU  H'0002'
-RB0D61          EQU  H'0001'
-RB0D60          EQU  H'0000'
-
-;----- RXB0D5 Bits ----------------------------------------------------------
-RB0D57          EQU  H'0007'
-RB0D56          EQU  H'0006'
-RB0D55          EQU  H'0005'
-RB0D54          EQU  H'0004'
-RB0D53          EQU  H'0003'
-RB0D52          EQU  H'0002'
-RB0D51          EQU  H'0001'
-RB0D50          EQU  H'0000'
-
-;----- RXB0D4 Bits ----------------------------------------------------------
-RB0D47          EQU  H'0007'
-RB0D46          EQU  H'0006'
-RB0D45          EQU  H'0005'
-RB0D44          EQU  H'0004'
-RB0D43          EQU  H'0003'
-RB0D42          EQU  H'0002'
-RB0D41          EQU  H'0001'
-RB0D40          EQU  H'0000'
-
-;----- RXB0D3 Bits ----------------------------------------------------------
-RB0D37          EQU  H'0007'
-RB0D36          EQU  H'0006'
-RB0D35          EQU  H'0005'
-RB0D34          EQU  H'0004'
-RB0D33          EQU  H'0003'
-RB0D32          EQU  H'0002'
-RB0D31          EQU  H'0001'
-RB0D30          EQU  H'0000'
-
-;----- RXB0D2 Bits ----------------------------------------------------------
-RB0D27          EQU  H'0007'
-RB0D26          EQU  H'0006'
-RB0D25          EQU  H'0005'
-RB0D24          EQU  H'0004'
-RB0D23          EQU  H'0003'
-RB0D22          EQU  H'0002'
-RB0D21          EQU  H'0001'
-RB0D20          EQU  H'0000'
-
-;----- RXB0D1 Bits ----------------------------------------------------------
-RB0D17          EQU  H'0007'
-RB0D16          EQU  H'0006'
-RB0D15          EQU  H'0005'
-RB0D14          EQU  H'0004'
-RB0D13          EQU  H'0003'
-RB0D12          EQU  H'0002'
-RB0D11          EQU  H'0001'
-RB0D10          EQU  H'0000'
-
-;----- RXB0D0 Bits ----------------------------------------------------------
-RB0D07          EQU  H'0007'
-RB0D06          EQU  H'0006'
-RB0D05          EQU  H'0005'
-RB0D04          EQU  H'0004'
-RB0D03          EQU  H'0003'
-RB0D02          EQU  H'0002'
-RB0D01          EQU  H'0001'
-RB0D00          EQU  H'0000'
-
-;----- RXB1D7 Bits ----------------------------------------------------------
-RXB1D77          EQU  H'0007'
-RXB1D76          EQU  H'0006'
-RXB1D75          EQU  H'0005'
-RXB1D74          EQU  H'0004'
-RXB1D73          EQU  H'0003'
-RXB1D72          EQU  H'0002'
-RXB1D71          EQU  H'0001'
-RXB1D70          EQU  H'0000'
-
-;----- RXB1D6 Bits ----------------------------------------------------------
-RXB1D67          EQU  H'0007'
-RXB1D66          EQU  H'0006'
-RXB1D65          EQU  H'0005'
-RXB1D64          EQU  H'0004'
-RXB1D63          EQU  H'0003'
-RXB1D62          EQU  H'0002'
-RXB1D61          EQU  H'0001'
-RXB1D60          EQU  H'0000'
-
-;----- RXB1D5 Bits ----------------------------------------------------------
-RXB1D57          EQU  H'0007'
-RXB1D56          EQU  H'0006'
-RXB1D55          EQU  H'0005'
-RXB1D54          EQU  H'0004'
-RXB1D53          EQU  H'0003'
-RXB1D52          EQU  H'0002'
-RXB1D51          EQU  H'0001'
-RXB1D50          EQU  H'0000'
-
-
-;----- RXB1D4 Bits ----------------------------------------------------------
-RXB1D47          EQU  H'0007'
-RXB1D46          EQU  H'0006'
-RXB1D45          EQU  H'0005'
-RXB1D44          EQU  H'0004'
-RXB1D43          EQU  H'0003'
-RXB1D42          EQU  H'0002'
-RXB1D41          EQU  H'0001'
-RXB1D40          EQU  H'0000'
-
-
-;----- RXB1D3 Bits ----------------------------------------------------------
-RXB1D37          EQU  H'0007'
-RXB1D36          EQU  H'0006'
-RXB1D35          EQU  H'0005'
-RXB1D34          EQU  H'0004'
-RXB1D33          EQU  H'0003'
-RXB1D32          EQU  H'0002'
-RXB1D31          EQU  H'0001'
-RXB1D30          EQU  H'0000'
-
-
-;----- RXB1D2 Bits ----------------------------------------------------------
-RXB1D27          EQU  H'0007'
-RXB1D26          EQU  H'0006'
-RXB1D25          EQU  H'0005'
-RXB1D24          EQU  H'0004'
-RXB1D23          EQU  H'0003'
-RXB1D22          EQU  H'0002'
-RXB1D21          EQU  H'0001'
-RXB1D20          EQU  H'0000'
-
-
-;----- RXB1D1 Bits ----------------------------------------------------------
-RXB1D17          EQU  H'0007'
-RXB1D16          EQU  H'0006'
-RXB1D15          EQU  H'0005'
-RXB1D14          EQU  H'0004'
-RXB1D13          EQU  H'0003'
-RXB1D12          EQU  H'0002'
-RXB1D11          EQU  H'0001'
-RXB1D10          EQU  H'0000'
-
-;----- RXB1D0 Bits ----------------------------------------------------------
-RXB1D07          EQU  H'0007'
-RXB1D06          EQU  H'0006'
-RXB1D05          EQU  H'0005'
-RXB1D04          EQU  H'0004'
-RXB1D03          EQU  H'0003'
-RXB1D02          EQU  H'0002'
-RXB1D01          EQU  H'0001'
-RXB1D00          EQU  H'0000'
-
-
-;----- TXB2D7 Bits ----------------------------------------------------------
-TXB2D77          EQU  H'0007'
-TXB2D76          EQU  H'0006'
-TXB2D75          EQU  H'0005'
-TXB2D74          EQU  H'0004'
-TXB2D73          EQU  H'0003'
-TXB2D72          EQU  H'0002'
-TXB2D71          EQU  H'0001'
-TXB2D70          EQU  H'0000'
-
-;----- TXB2D6 Bits ----------------------------------------------------------
-TXB2D67          EQU  H'0007'
-TXB2D66          EQU  H'0006'
-TXB2D65          EQU  H'0005'
-TXB2D64          EQU  H'0004'
-TXB2D63          EQU  H'0003'
-TXB2D62          EQU  H'0002'
-TXB2D61          EQU  H'0001'
-TXB2D60          EQU  H'0000'
-
-;----- TXB2D5 Bits ----------------------------------------------------------
-TXB2D57          EQU  H'0007'
-TXB2D56          EQU  H'0006'
-TXB2D55          EQU  H'0005'
-TXB2D54          EQU  H'0004'
-TXB2D53          EQU  H'0003'
-TXB2D52          EQU  H'0002'
-TXB2D51          EQU  H'0001'
-TXB2D50          EQU  H'0000'
-
-;----- TXB2D4 Bits ----------------------------------------------------------
-TXB2D47          EQU  H'0007'
-TXB2D46          EQU  H'0006'
-TXB2D45          EQU  H'0005'
-TXB2D44          EQU  H'0004'
-TXB2D43          EQU  H'0003'
-TXB2D42          EQU  H'0002'
-TXB2D41          EQU  H'0001'
-TXB2D40          EQU  H'0000'
-
-;----- TXB2D3 Bits ----------------------------------------------------------
-TXB2D37          EQU  H'0007'
-TXB2D36          EQU  H'0006'
-TXB2D35          EQU  H'0005'
-TXB2D34          EQU  H'0004'
-TXB2D33          EQU  H'0003'
-TXB2D32          EQU  H'0002'
-TXB2D31          EQU  H'0001'
-TXB2D30          EQU  H'0000'
-
-;----- TXB2D2 Bits ----------------------------------------------------------
-TXB2D27          EQU  H'0007'
-TXB2D26          EQU  H'0006'
-TXB2D25          EQU  H'0005'
-TXB2D24          EQU  H'0004'
-TXB2D23          EQU  H'0003'
-TXB2D22          EQU  H'0002'
-TXB2D21          EQU  H'0001'
-TXB2D20          EQU  H'0000'
-
-;----- TXB2D1 Bits ----------------------------------------------------------
-TXB2D17          EQU  H'0007'
-TXB2D16          EQU  H'0006'
-TXB2D15          EQU  H'0005'
-TXB2D14          EQU  H'0004'
-TXB2D13          EQU  H'0003'
-TXB2D12          EQU  H'0002'
-TXB2D11          EQU  H'0001'
-TXB2D10          EQU  H'0000'
-
-;----- TXB2D0 Bits ----------------------------------------------------------
-TXB2D07          EQU  H'0007'
-TXB2D06          EQU  H'0006'
-TXB2D05          EQU  H'0005'
-TXB2D04          EQU  H'0004'
-TXB2D03          EQU  H'0003'
-TXB2D02          EQU  H'0002'
-TXB2D01          EQU  H'0001'
-TXB2D00          EQU  H'0000'
-
-
-;----- TXB1D7 Bits ----------------------------------------------------------
-TXB1D77          EQU  H'0007'
-TXB1D76          EQU  H'0006'
-TXB1D75          EQU  H'0005'
-TXB1D74          EQU  H'0004'
-TXB1D73          EQU  H'0003'
-TXB1D72          EQU  H'0002'
-TXB1D71          EQU  H'0001'
-TXB1D70          EQU  H'0000'
-
-;----- TXB1D6 Bits ----------------------------------------------------------
-TXB1D67          EQU  H'0007'
-TXB1D66          EQU  H'0006'
-TXB1D65          EQU  H'0005'
-TXB1D64          EQU  H'0004'
-TXB1D63          EQU  H'0003'
-TXB1D62          EQU  H'0002'
-TXB1D61          EQU  H'0001'
-TXB1D60          EQU  H'0000'
-
-;----- TXB1D5 Bits ----------------------------------------------------------
-TXB1D57          EQU  H'0007'
-TXB1D56          EQU  H'0006'
-TXB1D55          EQU  H'0005'
-TXB1D54          EQU  H'0004'
-TXB1D53          EQU  H'0003'
-TXB1D52          EQU  H'0002'
-TXB1D51          EQU  H'0001'
-TXB1D50          EQU  H'0000'
-
-;----- TXB1D4 Bits ----------------------------------------------------------
-TXB1D47          EQU  H'0007'
-TXB1D46          EQU  H'0006'
-TXB1D45          EQU  H'0005'
-TXB1D44          EQU  H'0004'
-TXB1D43          EQU  H'0003'
-TXB1D42          EQU  H'0002'
-TXB1D41          EQU  H'0001'
-TXB1D40          EQU  H'0000'
-
-;----- TXB1D3 Bits ----------------------------------------------------------
-TXB1D37          EQU  H'0007'
-TXB1D36          EQU  H'0006'
-TXB1D35          EQU  H'0005'
-TXB1D34          EQU  H'0004'
-TXB1D33          EQU  H'0003'
-TXB1D32          EQU  H'0002'
-TXB1D31          EQU  H'0001'
-TXB1D30          EQU  H'0000'
-
-;----- TXB1D2 Bits ----------------------------------------------------------
-TXB1D27          EQU  H'0007'
-TXB1D26          EQU  H'0006'
-TXB1D25          EQU  H'0005'
-TXB1D24          EQU  H'0004'
-TBB1D23          EQU  H'0003'
-TXB1D22          EQU  H'0002'
-TXB1D21          EQU  H'0001'
-TXB1D20          EQU  H'0000'
-
-;----- TXB1D1 Bits ----------------------------------------------------------
-TXB1D17          EQU  H'0007'
-TXB1D16          EQU  H'0006'
-TXB1D15          EQU  H'0005'
-TXB1D14          EQU  H'0004'
-TXB1D13          EQU  H'0003'
-TXB1D12          EQU  H'0002'
-TXB1D11          EQU  H'0001'
-TXB1D10          EQU  H'0000'
-
-;----- TXB1D0 Bits ----------------------------------------------------------
-TXB1D07          EQU  H'0007'
-TXB1D06          EQU  H'0006'
-TXB1D05          EQU  H'0005'
-TXB1D04          EQU  H'0004'
-TXB1D03          EQU  H'0003'
-TXB1D02          EQU  H'0002'
-TXB1D01          EQU  H'0001'
-TXB1D00          EQU  H'0000'
-
-
-;----- TXB0D7 Bits ----------------------------------------------------------
-TXB0D77          EQU  H'0007'
-TXB0D76          EQU  H'0006'
-TXB0D75          EQU  H'0005'
-TXB0D74          EQU  H'0004'
-TXB0D73          EQU  H'0003'
-TXB0D72          EQU  H'0002'
-TXB0D71          EQU  H'0001'
-TXB0D70          EQU  H'0000'
-
-;----- TXB0D6 Bits ----------------------------------------------------------
-TXB0D67          EQU  H'0007'
-TXB0D66          EQU  H'0006'
-TXB0D65          EQU  H'0005'
-TXB0D64          EQU  H'0004'
-TXB0D63          EQU  H'0003'
-TXB0D62          EQU  H'0002'
-TXB0D61          EQU  H'0001'
-TXB0D60          EQU  H'0000'
-
-;----- TXB0D5 Bits ----------------------------------------------------------
-TXB0D57          EQU  H'0007'
-TXB0D56          EQU  H'0006'
-TXB0D55          EQU  H'0005'
-TXB0D54          EQU  H'0004'
-TXB0D53          EQU  H'0003'
-TXB0D52          EQU  H'0002'
-TXB0D51          EQU  H'0001'
-TXB0D50          EQU  H'0000'
-
-;----- TXB0D4 Bits ----------------------------------------------------------
-TXB0D47          EQU  H'0007'
-TXB0D46          EQU  H'0006'
-TXB0D45          EQU  H'0005'
-TXB0D44          EQU  H'0004'
-TXB0D43          EQU  H'0003'
-TXB0D42          EQU  H'0002'
-TXB0D41          EQU  H'0001'
-TXB0D40          EQU  H'0000'
-
-;----- TXB0D3 Bits ----------------------------------------------------------
-TXB0D37          EQU  H'0007'
-TXB0D36          EQU  H'0006'
-TXB0D35          EQU  H'0005'
-TXB0D34          EQU  H'0004'
-TXB0D33          EQU  H'0003'
-TXB0D32          EQU  H'0002'
-TXB0D31          EQU  H'0001'
-TXB0D30          EQU  H'0000'
-
-;----- TXB0D2 Bits ----------------------------------------------------------
-TXB0D27          EQU  H'0007'
-TXB0D26          EQU  H'0006'
-TXB0D25          EQU  H'0005'
-TXB0D24          EQU  H'0004'
-TXB0D23          EQU  H'0003'
-TXB0D22          EQU  H'0002'
-TXB0D21          EQU  H'0001'
-TXB0D20          EQU  H'0000'
-
-;----- TXB0D1 Bits ----------------------------------------------------------
-TXB0D17          EQU  H'0007'
-TXB0D16          EQU  H'0006'
-TXB0D15          EQU  H'0005'
-TXB0D14          EQU  H'0004'
-TXB0D13          EQU  H'0003'
-TXB0D12          EQU  H'0002'
-TXB0D11          EQU  H'0001'
-TXB0D10          EQU  H'0000'
-
-;----- TXB0D0 Bits ----------------------------------------------------------
-TXB0D07          EQU  H'0007'
-TXB0D06          EQU  H'0006'
-TXB0D05          EQU  H'0005'
-TXB0D04          EQU  H'0004'
-TXB0D03          EQU  H'0003'
-TXB0D02          EQU  H'0002'
-TXB0D01          EQU  H'0001'
-TXB0D00          EQU  H'0000'
-
 
 ;==========================================================================
 ;
@@ -1268,7 +790,6 @@ TXB0D00          EQU  H'0000'
 ;----- PORTA ------------------------------------------------------------------
 RA0             EQU  0
 AN0             EQU  0
-CVREF           EQU  0
 RA1             EQU  1
 AN1             EQU  1
 RA2             EQU  2
@@ -1282,7 +803,6 @@ T0CKI           EQU  4
 RA5             EQU  5
 AN4             EQU  5
 SS              EQU  5
-NOT_SS          EQU  5
 LVDIN           EQU  5
 RA6             EQU  6
 OSC2            EQU  6
@@ -1294,16 +814,13 @@ INT0            EQU  0
 RB1             EQU  1
 INT1            EQU  1
 RB2             EQU  2
-CANTX           EQU  2
+INT2            EQU  2
 RB3             EQU  3
-CANRX           EQU  3
+CCP2A           EQU  3
 RB4             EQU  4
 RB5             EQU  5
-PGM             EQU  5
 RB6             EQU  6
-PGC             EQU  6
 RB7             EQU  7
-PGD             EQU  7
 
 ;----- PORTC ------------------------------------------------------------------
 RC0             EQU  0
@@ -1311,6 +828,7 @@ T1OSO           EQU  0
 T1CKI           EQU  0
 RC1             EQU  1
 T1OSI           EQU  1
+CCP2            EQU  1
 RC2             EQU  2
 CCP1            EQU  2
 RC3             EQU  3
@@ -1332,42 +850,30 @@ RX              EQU  7
 ;----- PORTD ------------------------------------------------------------------
 RD0             EQU  0
 PSP0            EQU  0
-C1INP           EQU  0
 RD1             EQU  1
 PSP1            EQU  1
-C1INM           EQU  1
 RD2             EQU  2
 PSP2            EQU  2
-C2INP           EQU  2
 RD3             EQU  3
 PSP3            EQU  3
-C2INM           EQU  3
 RD4             EQU  4
 PSP4            EQU  4
-ECCP1           EQU  4
-P1A             EQU  4
 RD5             EQU  5
 PSP5            EQU  5
-P1B             EQU  5
 RD6             EQU  6
 PSP6            EQU  6
-P1C             EQU  6
 RD7             EQU  7
 PSP7            EQU  7
-P1D             EQU  7
 
 ;----- PORTE ------------------------------------------------------------------
 RE0             EQU  0
 RD              EQU  0
-NOT_RD          EQU  0
 AN5             EQU  0
 RE1             EQU  1
 ;WR              EQU  1 *** Already defined by EECON.WR, also bit 1
-NOT_WR          EQU  1
 AN6             EQU  1
 RE2             EQU  2
 CS              EQU  2
-NOT_CS          EQU  2
 AN7             EQU  2
 
 ;==========================================================================
@@ -1387,18 +893,17 @@ AN7             EQU  2
 ;       Configuration Bits
 ;
 ;     Data Sheet    Include File                  Address
+;     CONFIG1L    = Configuration Byte 1L         300000h
 ;     CONFIG1H    = Configuration Byte 1H         300001h
 ;     CONFIG2L    = Configuration Byte 2L         300002h
 ;     CONFIG2H    = Configuration Byte 2H         300003h
 ;     CONFIG4L    = Configuration Byte 4L         300006h
-;     CONFIG5L    = Configuration Byte 5L         300008h
-;     CONFIG5H    = Configuration Byte 5H         300009h
-;     CONFIG6L    = Configuration Byte 6L         30000Ah
-;     CONFIG6H    = Configuration Byte 6H         30000Bh
-;     CONFIG7L    = Configuration Byte 7L         30000Ch
-;     CONFIG7H    = Configuration Byte 7H         30000Dh
 ;
 ;==========================================================================
+
+;Configuration Byte 1L Options
+_CP_ON_1L         EQU  H'00'	; Code Protect enable   
+_CP_OFF_1L        EQU  H'FF'
 
 ;Configuration Byte 1H Options
 _OSCS_ON_1H       EQU  H'DF'	; Oscillator Switch enable
@@ -1436,93 +941,22 @@ _WDTPS_2_2H       EQU  H'F3'
 _WDTPS_1_2H       EQU  H'F1'
 
 ;Configuration Byte 4L Options
-_DEBUG_ON_4L      EQU  H'7F'    ; Enabled
-_DEBUG_OFF_4L     EQU  H'FF'    ; Disabled
-
-_LVP_ON_4L        EQU  H'FF'    ; Enableda
-_LVP_OFF_4L       EQU  H'FB'    ; Disabled
-
 _STVR_ON_4L       EQU  H'FF'	; Stack over/underflow Reset enable
 _STVR_OFF_4L      EQU  H'FE'
 
-;Configuration Byte 5L Options
-_CP0_ON_5L           EQU  H'FE'    ; Enabled
-_CP0_OFF_5L          EQU  H'FF'    ; Disabled
-
-_CP1_ON_5L           EQU  H'FD'    ; Enabled
-_CP1_OFF_5L          EQU  H'FF'    ; Disabled
-
-_CP2_ON_5L           EQU  H'FB'    ; Enabled
-_CP2_OFF_5L          EQU  H'FF'    ; Disabled
-
-_CP3_ON_5L           EQU  H'F7'    ; Enabled
-_CP3_OFF_5L          EQU  H'FF'    ; Disabled
-
-;Configuration Byte 5H Options
-_CPB_ON_5H           EQU  H'BF'    ; Enabled
-_CPB_OFF_5H          EQU  H'FF'    ; Disabled
-
-_CPD_ON_5H           EQU  H'7F'    ; Enabled
-_CPD_OFF_5H          EQU  H'FF'    ; Disabled
-
-;Configuration Byte 6L Options
-_WRT0_ON_6L          EQU  H'FE'    ; Enabled
-_WRT0_OFF_6L         EQU  H'FF'    ; Disabled
-
-_WRT1_ON_6L          EQU  H'FD'    ; Enabled
-_WRT1_OFF_6L         EQU  H'FF'    ; Disabled
-
-_WRT2_ON_6L          EQU  H'FB'    ; Enabled
-_WRT2_OFF_6L         EQU  H'FF'    ; Disabled
-
-_WRT3_ON_6L          EQU  H'F7'    ; Enabled
-_WRT3_OFF_6L         EQU  H'FF'    ; Disabled
-
-;Configuration Byte 6H Options
-_WRTB_ON_6H          EQU  H'BF'    ; Enabled
-_WRTB_OFF_6H         EQU  H'FF'    ; Disabled
-
-_WRTC_ON_6H          EQU  H'DF'    ; Enabled
-_WRTC_OFF_6H         EQU  H'FF'    ; Disabled
-
-_WRTD_ON_6H          EQU  H'7F'    ; Enabled
-_WRTD_OFF_6H         EQU  H'FF'    ; Disabled
-
-;Configuration Byte 7L Options
-_EBTR0_ON_7L         EQU  H'FE'    ; Enabled
-_EBTR0_OFF_7L        EQU  H'FF'    ; Disabled
-
-_EBTR1_ON_7L         EQU  H'FD'    ; Enabled
-_EBTR1_OFF_7L        EQU  H'FF'    ; Disabled
-
-_EBTR2_ON_7L         EQU  H'FB'    ; Enabled
-_EBTR2_OFF_7L        EQU  H'FF'    ; Disabled
-
-_EBTR3_ON_7L         EQU  H'F7'    ; Enabled
-_EBTR3_OFF_7L        EQU  H'FF'    ; Disabled
-
-;Configuration Byte 7H Options
-_EBTRB_ON_7H         EQU  H'BF'    ; Enabled
-_EBTRB_OFF_7H        EQU  H'FF'    ; Disabled
-
 ; To use the Configuration Bits, place the following lines in your source code
 ;  in the following format, and change the configuration value to the desired 
-;  setting (such as _BOR_ON_2L).  These are currently commented out here
+;  setting (such as CP_OFF to CP_ON).  These are currently commented out here
 ;  and each __CONFIG line should have the preceding semicolon removed when
 ;  pasted into your source code.
 
 ;  The following is a assignment of address values for all of the configuration
 ;  registers for the purpose of table reads
+_CONFIG1L       EQU    H'300000'
 _CONFIG1H       EQU    H'300001'
 _CONFIG2L       EQU    H'300002'
 _CONFIG2H       EQU    H'300003'
 _CONFIG4L       EQU    H'300006'
-_CONFIG5L       EQU    H'300008'
-_CONFIG5H       EQU    H'300009'
-_CONFIG6L       EQU    H'30000A'
-_CONFIG6H       EQU    H'30000B'
-_CONFIG7L       EQU    H'30000C'
-_CONFIG7H       EQU    H'30000D'
 _DEVID1         EQU    H'3FFFFE'
 _DEVID2         EQU    H'3FFFFF'
 _IDLOC0         EQU    H'200000'
@@ -1533,6 +967,9 @@ _IDLOC4         EQU    H'200004'
 _IDLOC5         EQU    H'200005'
 _IDLOC6         EQU    H'200006'
 _IDLOC7         EQU    H'200007'
+
+;Program Configuration Register 1L
+;		__CONFIG    _CONFIG1L, _CP_OFF_1L
 
 ;Program Configuration Register 1H
 ;		__CONFIG    _CONFIG1H, _OSCS_OFF_1H & _RCIO_OSC_1H
