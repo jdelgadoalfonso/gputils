@@ -33,6 +33,8 @@ char *source_file_names[MAX_SOURCE_FILES];
 FILE *source_files[MAX_SOURCE_FILES];
 DirBlockInfo main_dir;
 
+int byte_addr;
+
 char directory_block_data[COD_BLOCK_SIZE];
 char * SymbolType4[154] = {
   "a_reg          ", "x_reg          ", "c_short        ", "c_long         ",
@@ -123,6 +125,8 @@ int main(int argc, char *argv[])
   Directory *dir;
 
   gp_init();
+
+  byte_addr = 0;
 
 #define DISPLAY_NOTHING 0
 #define DISPLAY_DIR     1
