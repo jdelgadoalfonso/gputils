@@ -35,7 +35,7 @@ stringtolong(char *string, int radix)
   char *endptr;
   int value;
   
-  value = strtoul(string, &endptr, radix);                           
+  value = strtol(string, &endptr, radix);                           
   if ((endptr == NULL) || (*endptr != '\0')) {
     char complaint[80];
 
