@@ -70,6 +70,7 @@ DECCHAR [0-9]
 	  		    exit(1);
 			  }
 			}
+"case"			{ return CASE; }
 "const"			{ return CONST_TYPE; }
 "begin"			{ return BEGIN_KEY; }
 "bit"			{ return BIT_SIZE; }
@@ -78,18 +79,24 @@ DECCHAR [0-9]
 "elsif"			{ return ELSIF; }
 "end"			{ return END; }
 "extern"		{ return EXTERN_STORAGE; }
+"for"			{ return FOR; }
 "function"		{ return FUNCTION_TOK; }
 "if"			{ return IF; }
+"in"			{ return IN; }
 "is"			{ return IS; }
 "loop"			{ return LOOP; }
 "module"		{ return MODULE; }
+"null"			{ return NULL_TOK; }
+"others"		{ return OTHERS; }
 "pragma"		{ return PRAGMA; }
 "procedure"		{ return PROCEDURE; }
 "public"		{ return PUBLIC_STORAGE; }
 "return"		{ return RETURN; }
 "then"			{ return THEN; }
+"to"			{ return TO; }
 "var"			{ return VAR_TYPE; }
 "volatile"		{ return VOLATILE_STORAGE; }
+"when"			{ return WHEN; }
 "while"			{ return WHILE; }
 "with"			{ return WITH; }
 \"[^;\n\"]+\"		{
@@ -109,6 +116,7 @@ DECCHAR [0-9]
 			  yylval.i = stringtolong(yytext, 10);
 			  return NUMBER;
 			}
+"=>"			OPERATOR(ARROW);
 "<<"			OPERATOR(LSH);
 ">>"			OPERATOR(RSH);
 ">="			OPERATOR(GREATER_EQUAL);

@@ -468,7 +468,7 @@ static void
 combine_output(void)
 {
   char command[BUFSIZ];
-  gp_linked_list *list = state.link;
+  gp_linked_list *list;
 
   /* only link if commanded */
   if ((state.compile_only == true) || (state.no_link == true))
@@ -505,11 +505,20 @@ combine_output(void)
     strcat(command, state.outfilename);
     strcat(command, " ");
   }
+
+  list = state.path;
+  while(list) {
+    strcat(command, "-I ");    
+    strcat(command, gp_list_get(list)); 
+    strcat(command, " ");
+    list = list->next;
+  }  
   
+  list = state.link;
   if (list == NULL) {
     gp_error("no files to link or archive");
   } else {
-    while(list != NULL) {
+    while(list) {
       strcat(command, gp_list_get(list)); 
       strcat(command, " ");
       list = list->next;

@@ -48,12 +48,18 @@ yyerror(char *message)
 
 int yylex(void);
 
+static tree *case_ident;
+
 %}
 
 /* Bison declarations */
 
 %union {
   int i;
+  struct {
+    tree *start;
+    tree *end;
+  } r;
   char *s;
   tree *t;
   enum node_type y;
@@ -62,12 +68,11 @@ int yylex(void);
 }
 
 /* keywords */
-%token <i> BEGIN_KEY, END, FUNCTION_TOK, IS, PRAGMA, PROCEDURE, WITH
-%token <i> IF, THEN, WHILE, ELSIF, ELSE, LOOP, RETURN
-%token <i> VAR_TYPE, CONST_TYPE 
-%token <i> BIT_SIZE, BYTE_SIZE 
-%token <i> EXTERN_STORAGE, PUBLIC_STORAGE, PRIVATE_STORAGE, VOLATILE_STORAGE
-%token <i> MODULE
+%token <i> CASE, CONST_TYPE, BEGIN_KEY, BIT_SIZE, BYTE_SIZE, ELSE, ELSIF
+%token <i> END, EXTERN_STORAGE, FOR, FUNCTION_TOK, IF, IN, IS, LOOP
+%token <i> MODULE, NULL_TOK, OTHERS, PRAGMA, PROCEDURE, PUBLIC_STORAGE,
+%token <i> RETURN, THEN, TO, VAR_TYPE, VOLATILE_STORAGE, WHEN
+%token <i> WHILE, WITH
 
 /* general */
 %token <s> ASM
@@ -77,7 +82,7 @@ int yylex(void);
 %token <i> ';'
 
 /* operators */
-%token <i> LSH, RSH
+%token <i> LSH, RSH, ARROW
 %token <i> GREATER_EQUAL, LESS_EQUAL, EQUAL, NOT_EQUAL, '<', '>'
 %token <i> '&', '|', '^'
 %token <i> LOGICAL_AND, LOGICAL_OR
@@ -100,7 +105,9 @@ int yylex(void);
 %type <z> decl_size
 %type <t> statement_block
 %type <t> statement
+%type <r> range
 %type <t> if_body
+%type <t> case_body
 %type <t> loop_statement
 %type <t> parameter_list
 
@@ -292,6 +299,11 @@ statement_block:
 	;
 
 statement:
+	NULL_TOK ';'
+	{
+	  $$ = mk_assembly(strdup("  nop"));
+	}
+	|
 	ASM ';'
 	{
 	  $$ = mk_assembly($1);
@@ -305,6 +317,30 @@ statement:
 	IF expr THEN statement_block if_body END IF ';'
 	{
 	  $$ = mk_cond($2, $4, $5);
+	}
+	|
+	CASE IDENT { case_ident = mk_symbol($2); } IS case_body END CASE ';'
+	{
+	  $$ = $5;
+	}
+	|
+	FOR IDENT IN range loop_statement
+	{
+	  tree *init;
+          tree *exit;
+          tree *increment;
+          
+          /* IDENT = range.start; */
+          init = mk_binop(op_eq, mk_symbol($2), $4.start);
+          
+          /* IDENT = IDENT + 1; */
+          increment = mk_binop(op_eq, mk_symbol($2), 
+                               mk_binop(op_add, mk_symbol($2), mk_constant(1)));
+          
+          /* while (IDENT <= range.end) then loop */
+          exit = mk_binop(op_lte, mk_symbol($2), $4.end);
+
+	  $$ = mk_loop(init, exit, increment, $5);
 	}
 	|
 	WHILE expr loop_statement
@@ -342,11 +378,38 @@ if_body:
 	}	
 	;
 
+case_body:
+	WHEN e0 ARROW statement_block
+	{
+	  /* last statement is elsif equivalent */
+	  $$ = mk_cond(mk_binop(op_eq, case_ident, $2), $4, NULL);
+	}
+	|
+	WHEN e0 ARROW statement_block case_body
+	{
+	  $$ = mk_cond(mk_binop(op_eq, case_ident, $2), $4, $5);
+	}
+	|
+	WHEN OTHERS ARROW statement_block
+	{
+	  /* last statement is else equivalent */
+	  $$ = mk_cond(NULL, $4, NULL);
+	}	
+	;
+
 loop_statement:
 	LOOP statement_block END LOOP ';'
 	{
 	  $$ = $2;
 	}
+	;
+
+range:
+	expr TO expr
+	{
+	  $$.start = $1;
+	  $$.end = $3;
+        }
 	;
 
 parameter_list:

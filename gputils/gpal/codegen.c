@@ -132,6 +132,7 @@ void
 codegen_assembly(tree *assembly)
 {
 
+  codegen_line_number(assembly);
   fprintf(state.output.f, "%s\n", assembly->value.assembly);
 
   return;

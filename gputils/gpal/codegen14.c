@@ -396,7 +396,7 @@ gen_binop_symbol(enum node_op op, char *name)
   case op_lte: 
     reg1 = codegen_get_temp();
     codegen_write_asm("movwf %s", reg1);
-    codegen_write_asm("movwf %s", name);
+    codegen_write_asm("movf %s, w", name);
     codegen_write_asm("subwf %s, w", reg1);
     codegen_write_asm("movf STATUS, w");
     codegen_write_asm("andlw 1");
