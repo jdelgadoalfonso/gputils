@@ -23,7 +23,6 @@ Boston, MA 02111-1307, USA.  */
 
 #include "libgputils.h"
 #include "gpal.h"
-#include "parse.h"
 #include "codegen.h"
 #include "codegen14.h"
 
@@ -97,15 +96,15 @@ gen_unop_expr(tree *expr)
 
   gen_expr(expr->value.unop.p0);
   switch (expr->value.unop.op) {
-  case '!':
+  case op_not:
     write_asm_line("xorlw 1"); 
     break;
-  case '+':
+  case op_add:
     break;
-  case '-':
+  case op_neg:
     write_asm_line("sublw 0"); 
     break;
-  case '~':
+  case op_com:
     write_asm_line("xorlw 0xff"); 
     break;
   default:
@@ -115,62 +114,62 @@ gen_unop_expr(tree *expr)
 }
 
 static void
-gen_binop_constant(int op, int value)
+gen_binop_constant(enum node_op op, int value)
 {
 
   switch (op) {
-  case '+':
+  case op_add:
     write_asm_line("addlw %#x", value);
     break;
-  case '-':
+  case op_sub:
     write_asm_line("sublw %#x", value); 
     break;
-  case '*':
-  case '/':
-  case '%':
+  case op_mult:
+  case op_div:
+  case op_mod:
     gp_error("unsupported operator");
     break;
-  case '&':
+  case op_and:
     write_asm_line("andlw %#x", value); 
     break;
-  case '|':
+  case op_or:
     write_asm_line("iorlw %#x", value); 
     break;
-  case '^':
+  case op_xor:
     write_asm_line("xorlw %#x", value); 
     break;
-  case LSH:
-  case RSH:
+  case op_lsh:
+  case op_rsh:
     gp_error("unsupported operator");
     break;
-  case EQUAL:
+  case op_eq:
     write_asm_line("xorlw %#x", value); 
     gen_boolean();
     write_asm_line("xorlw 1"); 
     break;
-  case NOT_EQUAL:
+  case op_ne:
     write_asm_line("xorlw %#x", value); 
     gen_boolean();
     break;
-  case '<':
+  case op_lt:
     write_asm_line("sublw %#x", value);
     write_asm_line("movf STATUS, w");
     write_asm_line("andlw 1");
     write_asm_line("xorlw 1");
     break;
-  case '>':
+  case op_gt:
     write_asm_line("sublw %#x", value); 
     write_asm_line("movf STATUS, w");
     write_asm_line("andlw 1");
     break;
-  case GREATER_EQUAL:
-  case LESS_EQUAL: 
+  case op_gte:
+  case op_lte: 
     gp_error("unsupported operator");
     break;
-  case LOGICAL_AND:
+  case op_land:
     write_asm_line("andlw %#x", value); 
     break;
-  case LOGICAL_OR:
+  case op_lor:
     write_asm_line("iorlw %#x", value); 
     break;
   default:
@@ -180,62 +179,62 @@ gen_binop_constant(int op, int value)
 }
 
 static void
-gen_binop_symbol(int op, char *name)
+gen_binop_symbol(enum node_op op, char *name)
 {
 
   switch (op) {
-  case '+':
+  case op_add:
     write_asm_line("addwf %s, w", name); 
     break;
-  case '-':
+  case op_sub:
     write_asm_line("subwf %s, w", name); 
     break;
-  case '*':
-  case '/':
-  case '%':
+  case op_mult:
+  case op_div:
+  case op_mod:
     gp_error("unsupported operator");
     break;
-  case '&':
+  case op_and:
     write_asm_line("andwf %s, w", name); 
     break;
-  case '|':
+  case op_or:
     write_asm_line("iorwf %s, w", name); 
     break;
-  case '^':
+  case op_xor:
     write_asm_line("xorwf %s, w", name); 
     break;
-  case LSH:
-  case RSH:
+  case op_lsh:
+  case op_rsh:
     gp_error("unsupported operator");
     break;
-  case EQUAL:
+  case op_eq:
     write_asm_line("xorwf %s, w", name); 
     gen_boolean();
     write_asm_line("xorlw 1"); 
     break;
-  case NOT_EQUAL:
+  case op_ne:
     write_asm_line("xorwf %s, w", name); 
     gen_boolean();
     break;
-  case '<':
+  case op_lt:
     write_asm_line("subwf %s, w", name); 
     write_asm_line("movf STATUS, w");
     write_asm_line("andlw 1");
     write_asm_line("xorlw 1");
     break;
-  case '>':
+  case op_gt:
     write_asm_line("subwf %s, w", name); 
     write_asm_line("movf STATUS, w");
     write_asm_line("andlw 1");
     break;
-  case GREATER_EQUAL:
-  case LESS_EQUAL: 
+  case op_gte:
+  case op_lte: 
     gp_error("unsupported operator");
     break;
-  case LOGICAL_AND:
+  case op_land:
     write_asm_line("andwf %s, w", name); 
     break;
-  case LOGICAL_OR:
+  case op_lor:
     write_asm_line("iorwf %s, w", name); 
     break;
   default:

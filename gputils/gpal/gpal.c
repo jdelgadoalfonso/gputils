@@ -24,19 +24,21 @@ Boston, MA 02111-1307, USA.  */
 #include "libgputils.h"
 #include "gpal.h"
 #include "scan.h"
+#include "tree.h"
 #include "codegen.h"
 
 struct gpal_state state;
 
 int yyparse(void);
 
-#define GET_OPTIONS "?I:achk:lo:p:Stqv"
+#define GET_OPTIONS "?I:acdhk:lo:p:Stqv"
 
 /* Used: acdDehiIlmopqrwv */
 static struct option longopts[] =
 {
   { "archive",     0, 0, 'a' },
   { "object",      0, 0, 'c' },
+  { "debug",       0, 0, 'd' },
   { "include",     1, 0, 'I' },
   { "help",        0, 0, 'h' },
   { "options",     1, 0, 'k' },
@@ -148,26 +150,21 @@ process_pragma(tree *expr)
   return;
 }
 
+static tree *last_node;
+
 void
 add_entity(tree *node)
 {
-  entity *new = malloc(sizeof(*new));
-  entity *list = NULL;
 
-  new->node = node;
-  new->next = NULL;
-
-  if (state.list == NULL) {
-    state.list = new;
+  if (state.root == NULL) {
+    state.root = node;
+    last_node = node;
   } else {
-    /* find the end of the list */
-    list = state.list;
-    while (list->next != NULL)
-      list = list->next;
-    
-    /* append new entity on the end of the list */
-    list->next = new;
+    node->prev = last_node;
+    last_node->next = node;
+    last_node = node;
   }
+
 }
 
 static void
@@ -177,6 +174,7 @@ show_usage(void)
   printf("Options: [defaults in brackets after descriptions]\n");
   printf("  -a, --archive                  Compile or assemble, then archive.\n");
   printf("  -c, --object                   Compile or assemble, but don't link.\n");
+  printf("  -d, --debug                    Output debug messages.\n");
   printf("  -h, --help                     Show this usage message.\n");
   printf("  -I DIR, --include DIR          Specify include directory.\n");
   printf("  -k \"OPT\", --options \"OPT\"      Extra link or lib options.\n");
@@ -213,6 +211,9 @@ process_args( int argc, char *argv[])
     case 'c':
       state.no_link = true;
       break;    
+    case 'd':
+      gp_debug_disable = 0;
+      break;
     case 'I':
       add_path(optarg);
       break;    
@@ -272,15 +273,24 @@ compile(char *base_name)
 {
   /* symbol table */
   state.global = push_symbol_table(state.global, 1);
+
+  init_nodes();
+  state.root = NULL;
   
-  /* FIXME: free the memory too */
-  state.list = NULL;
+  /* open and parse the source public file */
+  state.src = NULL;
+  open_src(state.basefilename, source_with);
+  if (state.src)
+    yyparse();
 
   /* open input file */
-  open_src(state.srcfilename, false, false);
-  
-  /* open the source public file */
-  open_src(state.basefilename, true, true);
+  open_src(state.srcfilename, source);
+
+  /* parse the input file */
+  yyparse();
+
+  /* optimize the intermediate code */
+  /* optimize(); */
 
   /* open output filename */
   strcpy(state.asmfilename, base_name);
@@ -291,12 +301,6 @@ compile(char *base_name)
     exit(1);
   }
 
-  /* parse the input file */
-  yyparse();
-
-  /* optimize the intermediate code */
-  /* optimize(); */
-
   /* write the assembly output */
   write_asm();
   fclose(state.output.f);
@@ -305,7 +309,7 @@ compile(char *base_name)
   state.global = pop_symbol_table(state.global);
 
   /* free all the memory */
-
+  free_nodes();
 
   return;
 }

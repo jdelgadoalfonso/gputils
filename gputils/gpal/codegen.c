@@ -23,7 +23,6 @@ Boston, MA 02111-1307, USA.  */
 
 #include "libgputils.h"
 #include "gpal.h"
-#include "parse.h"
 #include "codegen.h"
 #include "codegen14.h"
 
@@ -141,14 +140,12 @@ write_header(void)
 static void
 write_startup(void)
 {
-  entity *list = NULL;
   tree *current = NULL;
   tree *head;
 
-  list = state.list;
+  current = state.root;
 
-  while (list != NULL) {
-    current = list->node;
+  while (current != NULL) {
     if (current->tag == node_proc) {
       head = current->value.proc.head;
       assert(head != NULL);
@@ -161,7 +158,7 @@ write_startup(void)
         break;     
       }
     }
-    list = list->next;
+    current = current->next;
   }
 
 }
@@ -209,7 +206,7 @@ int list_length(tree *L)
   if (L == NULL) {
     return 0;
   } else {
-    return 1 + list_length(TAIL(L));
+    return 1 + list_length(LIST_TAIL(L));
   }
 }
 
@@ -257,7 +254,7 @@ write_expression(tree *statement)
           statement->line_number);
   
   if ((statement->tag != node_binop) || 
-      (statement->value.binop.op != '=')) {
+      (statement->value.binop.op != op_eq)) {
     gp_error("invalid expression");
     return;
   }
@@ -373,7 +370,7 @@ write_statements(tree *statements)
   list = statements;
   assert(list->tag == node_list);
   while(list) {
-    statement = HEAD(list);
+    statement = LIST_HEAD(list);
     switch(statement->tag) {
     case node_call:
       write_call(statement);
@@ -387,7 +384,7 @@ write_statements(tree *statements)
     default:
       write_expression(statement);
     }
-    list = TAIL(list);
+    list = LIST_TAIL(list);
   }
 
 }
@@ -403,12 +400,12 @@ write_decl(tree *decl, char *name)
   list = decl->value.decl.expr;
   assert(list->tag == node_list);
 
-  for (; list; list = TAIL(list)) {
-    symbol = HEAD(list);
+  for (; list; list = LIST_TAIL(list)) {
+    symbol = LIST_HEAD(list);
     assert(symbol->tag == node_symbol);
     sprintf(alias, "%s_%s", name, symbol->value.symbol);
     add_global(symbol->value.symbol, alias, symbol);
-    if (decl->value.decl.type == VAR_TYPE) {
+    if (decl->value.decl.type == type_var) {
       fprintf(state.output.f, "%s res 1\n", alias);
     }
   }
@@ -418,7 +415,6 @@ write_decl(tree *decl, char *name)
 static void
 write_declarations(void)
 {
-  entity *entity_list = NULL;
   tree *current = NULL;
   int first_time = 1;
   tree *list;  
@@ -426,33 +422,32 @@ write_declarations(void)
   tree *lhs;
   tree *rhs;
 
-  entity_list = state.list;
+  current = state.root;
 
-  while (entity_list != NULL) {
-    current = entity_list->node;
+  while (current != NULL) {
     if ((current->tag == node_decl) && 
-        (current->value.decl.storage != EXTERN_STORAGE)) {
-      if ((current->value.decl.type == CONST_TYPE) &&
+        (current->value.decl.storage != storage_extern)) {
+      if ((current->value.decl.type == type_const) &&
           (current->value.decl.storage != 0)) {
         gp_error("constants can't be public or volatile");
       } 
       /* FIXME: only bytes are supported so far */
-      assert(current->value.decl.size == BYTE_SIZE);
+      assert(current->value.decl.size == size_byte);
       if (first_time) {
         fprintf(state.output.f, "; declarations \n");
         fprintf(state.output.f, "  udata\n");
         first_time = 0;      
       }
-      for (list = current->value.decl.expr; list; list = TAIL(list)) {
-        symbol = HEAD(list);
-        if (current->value.decl.type == VAR_TYPE) {
+      for (list = current->value.decl.expr; list; list = LIST_TAIL(list)) {
+        symbol = LIST_HEAD(list);
+        if (current->value.decl.type == type_var) {
           assert(symbol->tag == node_symbol);
           fprintf(state.output.f, "%s res 1\n", symbol->value.symbol);
-          if (current->value.decl.storage == PUBLIC_STORAGE) {
+          if (current->value.decl.storage == storage_public) {
             fprintf(state.output.f, "  global %s\n", symbol->value.symbol);
           }
           add_global(symbol->value.symbol, symbol->value.symbol, current);
-        } else if (current->value.decl.type == CONST_TYPE) {
+        } else if (current->value.decl.type == type_const) {
           assert(symbol->tag == node_binop);
           lhs = symbol->value.binop.p0;
           assert(lhs->tag == node_symbol);
@@ -462,7 +457,7 @@ write_declarations(void)
         }
       }
     }
-    entity_list = entity_list->next;
+    current = current->next;
   }
 
   if (!first_time)
@@ -493,7 +488,7 @@ write_procedure(tree *procedure, int is_func)
     body = procedure->value.proc.body;
   }
 
-  if (storage == EXTERN_STORAGE)
+  if (storage == storage_extern)
     return;
 
   assert(head->tag == node_head);  
@@ -515,26 +510,24 @@ write_procedure(tree *procedure, int is_func)
     /* the procedure or function has arguments */ 
     if (args != NULL) {
       assert(args->tag == node_list);
-      for (; args; args = TAIL(args)) {
-        argument = HEAD(args);
+      for (; args; args = LIST_TAIL(args)) {
+        argument = LIST_HEAD(args);
         assert(argument->tag == node_decl);
         assert(argument->value.decl.type == 0);
-        assert(argument->value.decl.storage == 0);
         /* FIXME: only bytes are supported so far */
-        assert(argument->value.decl.size == BYTE_SIZE);
+        assert(argument->value.decl.size == size_byte);
         write_decl(argument, name);
       }  
     }
     /* the procedure or function has local variables */ 
     if (decl != NULL) {
       assert(decl->tag == node_list);
-      for (; decl; decl = TAIL(decl)) {
-        argument = HEAD(decl);
+      for (; decl; decl = LIST_TAIL(decl)) {
+        argument = LIST_HEAD(decl);
         assert(argument->tag == node_decl);
-        assert(argument->value.decl.storage == 0);
         /* FIXME: only bytes are supported so far */
-        assert(argument->value.decl.size == BYTE_SIZE);
-        if (argument->value.decl.type == VAR_TYPE)
+        assert(argument->value.decl.size == size_byte);
+        if (argument->value.decl.type == type_var)
           write_decl(argument, name);
 
       }  
@@ -547,7 +540,7 @@ write_procedure(tree *procedure, int is_func)
   fprintf(state.output.f, ".code_%s code\n", name);
   add_global(name, name, procedure);
   write_label(name);
-  if (storage == PUBLIC_STORAGE)
+  if (storage == storage_public)
     fprintf(state.output.f, "  global %s\n", name);
   max_temp_number = 0;
   write_statements(statements);
@@ -589,12 +582,12 @@ extern_args(char *main_name, tree *list)
   tree *symbol;
 
   while (list) {
-    decl = HEAD(list);
+    decl = LIST_HEAD(list);
     assert(decl->tag == node_decl);
     symbol = decl->value.decl.expr;
     assert(symbol->tag == node_symbol);
     extern_name(main_name, symbol->value.symbol, symbol);
-    list = TAIL(list);
+    list = LIST_TAIL(list);
   }
 
 }
@@ -602,7 +595,6 @@ extern_args(char *main_name, tree *list)
 static void
 write_externs(void)
 {
-  entity *list = NULL;
   tree *current = NULL;
   char *name;
   tree *args = NULL;
@@ -610,9 +602,8 @@ write_externs(void)
   gp_boolean first_time = true;
   int storage;
 
-  list = state.list;
-  while (list != NULL) {
-    current = list->node;
+  current = state.root;
+  while (current != NULL) {
     /* CLEAN THIS UP !! */
     switch(current->tag) {
     case node_decl:
@@ -627,14 +618,14 @@ write_externs(void)
     default:
       assert(0);
     }   
-    if (storage == EXTERN_STORAGE) {
+    if (storage == storage_extern) {
       if (first_time == true)  {
         fprintf(state.output.f, "; external symbols\n");
         first_time = false;
       }
       switch(current->tag) {
       case node_decl:
-        symbol = HEAD(current->value.decl.expr);
+        symbol = LIST_HEAD(current->value.decl.expr);
         extern_name(symbol->value.symbol, NULL, symbol);
         break;
       case node_func:
@@ -653,7 +644,7 @@ write_externs(void)
         assert(0);
       }
     }
-    list = list->next;
+    current = current->next;
   }
 
   if (first_time == false)
@@ -665,7 +656,6 @@ write_externs(void)
 void
 write_asm(void)
 {
-  entity *list = NULL;
   tree *current = NULL;
 
   write_header();
@@ -674,9 +664,8 @@ write_asm(void)
   write_externs();
 
   /* write out all the source */
-  list = state.list;
-  while (list != NULL) {
-    current = list->node;
+  current = state.root;
+  while (current != NULL) {
     switch(current->tag) {
     case node_decl:
       /* do nothing */
@@ -690,7 +679,7 @@ write_asm(void)
     default:
       assert(0);
     }
-    list = list->next;
+    current = current->next;
   }
 
   write_footer();  
