@@ -114,11 +114,6 @@ line:
 	|
 	decl
 	{
-	  if (state.src->type == source_with) {
-            $1->value.decl.storage = storage_public;
-	  } else if (state.src->type == with) {
-            $1->value.decl.storage = storage_extern;
-          }
 	  add_entity($1);
         }
 	|
@@ -221,7 +216,14 @@ decl_block:
 decl:
 	decl_type decl_size parameter_list ';'
 	{ 
-	  $$ = mk_decl($1, $2, storage_private, $3);
+	  if (state.src->type == source_with) {
+	    $$ = mk_decl_prot($1, $2, storage_public, $3);
+	  } else if (state.src->type == with) {
+	    $$ = mk_decl_prot($1, $2, storage_extern, $3);
+	  } else {
+	    /* should only get here from inside a function or procedure */
+	    $$ = mk_decl($1, $2, storage_private, $3);
+	  }
         }
 	;
 
