@@ -1,5 +1,5 @@
-#ifndef BISON_Y_TAB_H
-# define BISON_Y_TAB_H
+#ifndef BISON_PARSE_H
+# define BISON_PARSE_H
 
 #ifndef YYSTYPE
 typedef union {
@@ -47,11 +47,13 @@ typedef union {
 # define	TBL_PRE_INC	291
 # define	CONCAT	292
 # define	VAR	293
-# define	VARLAB_BEGIN	294
-# define	VAR_BEGIN	295
-# define	VAR_END	296
+# define	DEBUG_FILE	294
+# define	DEBUG_LINE	295
+# define	VARLAB_BEGIN	296
+# define	VAR_BEGIN	297
+# define	VAR_END	298
 
 
 extern YYSTYPE yylval;
 
-#endif /* not BISON_Y_TAB_H */
+#endif /* not BISON_PARSE_H */

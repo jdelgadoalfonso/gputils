@@ -166,7 +166,7 @@ add_equ(char *name, int value)
     annotate_symbol(sym, var);
     var->alias = strdup(name);
     var->tag = sym_equ;
-    var->storage = storage_unknown;
+    var->storage = storage_extern;  /* extern so banksel is generated */
     var->type = prim_type;
     var->is_init = true;
     var->value = value;

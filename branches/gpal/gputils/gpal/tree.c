@@ -37,10 +37,6 @@ static tree_block *head_block;
 static tree_block *current_block;
 static unsigned int next_node;
 
-/* If a node is constructed while parser not running use these values. */
-int file_id = 0;
-int line_number = 0;
-
 static tree_block *
 create_block(void)
 {
