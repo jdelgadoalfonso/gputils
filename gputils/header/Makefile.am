@@ -3,7 +3,6 @@
 pkgdatadir = @GPUTILS_HEADER_PATH@
 
 HEADER_FILES =\
-	coff.inc \
 	mcp250xx.inc \
 	memory.inc \
 	migrate.inc \

@@ -1,9 +1,12 @@
-2004-10-02 Craig Franklin <craigfranklin@users.sourceforge.net>
-  * Fixed error in disassembly of 18xx instuctions.
+2004-10-03 Craig Franklin <craigfranklin@users.sourceforge.net>
+  * Fixed stop location error in directory map of COD files.
 
-2004-09-26 Craig Franklin <craigfranklin@users.sourceforge.net>
-  * Added directives to gpasm for directly modifying COFF symbol tables.
-  * Changed the gpasm COFF debug directives to .file, .eof, and .line.  
+2004-09-28 Craig Franklin <craigfranklin@users.sourceforge.net>
+  * Added time and date to COD files.
+  * Fixed error in gpvc time reporting.
+
+2004-09-25 Craig Franklin <craigfranklin@users.sourceforge.net>
+  * Changed to byte addressing for 18xx cod files.
 
 2004-09-24 Craig Franklin <craigfranklin@users.sourceforge.net>
   * gputils 0.12.4 Released.
@@ -398,7 +401,7 @@
   * Fixed errors when using escape characters in strings.
 
 2003-02-17 Craig Franklin <craigfranklin@users.sourceforge.net>
-  * Added auxiliary coff symbols.
+  * Added auxilary coff symbols.
 
 2003-02-16 Craig Franklin <craigfranklin@users.sourceforge.net>
   * Added pointers in object files to simplify linking operations.

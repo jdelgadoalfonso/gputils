@@ -217,7 +217,7 @@ _gp_coffgen_write_linenum(gp_section_type *section, FILE *fp)
   return;
 }
 
-/* write the auxiliary symbols */
+/* write the auxilary symbols */
 static void 
 _gp_coffgen_write_auxsymbols(gp_aux_type *aux, char *table, FILE *fp) 
 {
@@ -237,7 +237,7 @@ _gp_coffgen_write_auxsymbols(gp_aux_type *aux, char *table, FILE *fp)
       gp_fputl16(0, fp);
       break;
     case AUX_SCN:
-      /* write section auxiliary symbol */
+      /* write section auxilary symbol */
       gp_fputl32(aux->_aux_symbol._aux_scn.length, fp);
       gp_fputl16(aux->_aux_symbol._aux_scn.nreloc, fp);
       gp_fputl16(aux->_aux_symbol._aux_scn.nlineno, fp);

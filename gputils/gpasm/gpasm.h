@@ -43,8 +43,7 @@ enum gpasmValTypes {
   gvt_address,
   gvt_extern,
   gvt_global,
-  gvt_static,
-  gvt_debug
+  gvt_static
 };
 
 enum state_types { 
@@ -65,9 +64,6 @@ enum outfile {
 
 enum file_types {
   ft_src,
-  ft_hex,
-  ft_lst,
-  ft_cod,
   ft_other
 };
 
@@ -175,7 +171,6 @@ extern struct gpasm_state {
     char title_name[80];	/*   given in TITLE directive */
     char subtitle_name[80];	/*   given in SUBTITLE directive */
     int tabstop;		/*   tab-stop distance */
-    struct file_context *fc;    /*   Position in the file context stack */
   } lst;
   struct {			/* Symbol file state: */
     FILE *f;			/*   Symbol file output */
