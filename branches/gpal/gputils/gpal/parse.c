@@ -64,6 +64,7 @@ Boston, MA 02111-1307, USA.  */
 
 #include "libgputils.h"
 #include "gpal.h"
+#include "scan.h"
 
 void yyerror(char *message)
 {
@@ -76,7 +77,7 @@ void yyerror(char *message)
 int yylex(void);
 
 
-#line 42 "parse.y"
+#line 43 "parse.y"
 #ifndef YYSTYPE
 typedef union {
   int i;
@@ -185,15 +186,15 @@ static const short yyrhs[] =
 /* YYRLINE[YYN] -- source line where rule number YYN was defined. */
 static const short yyrline[] =
 {
-       0,    93,    95,    97,   101,   106,   111,   116,   121,   126,
-     131,   136,   141,   148,   153,   160,   165,   172,   179,   184,
-     191,   196,   203,   208,   215,   220,   227,   232,   239,   244,
-     249,   256,   261,   268,   273,   278,   283,   288,   295,   301,
-     306,   314,   321,   326,   333,   335,   342,   344,   351,   353,
-     355,   362,   362,   364,   366,   373,   373,   373,   375,   377,
-     384,   384,   384,   384,   384,   384,   386,   388,   395,   395,
-     397,   399,   406,   406,   408,   410,   417,   417,   417,   419,
-     421,   428,   428,   428,   428,   430,   435,   441,   447,   452
+       0,    94,    96,    98,   102,   107,   112,   117,   122,   127,
+     132,   137,   142,   149,   154,   161,   166,   173,   180,   185,
+     192,   197,   204,   209,   216,   221,   228,   233,   240,   245,
+     250,   257,   262,   269,   274,   279,   284,   289,   296,   302,
+     307,   315,   322,   327,   334,   336,   343,   345,   352,   354,
+     356,   363,   363,   365,   367,   374,   374,   374,   376,   378,
+     385,   385,   385,   385,   385,   385,   387,   389,   396,   396,
+     398,   400,   407,   407,   409,   411,   418,   418,   418,   420,
+     422,   429,   429,   429,   429,   431,   436,   442,   448,   453
 };
 #endif
 
@@ -1067,329 +1068,329 @@ yyreduce:
   switch (yyn) {
 
 case 4:
-#line 103 "parse.y"
+#line 104 "parse.y"
 {
-	
+	  process_pragma(yyvsp[-1].t);
 	}
     break;
 case 5:
-#line 108 "parse.y"
+#line 109 "parse.y"
 {
-
+	  open_src(yyvsp[-1].s, 1);
 	}
     break;
 case 6:
-#line 113 "parse.y"
+#line 114 "parse.y"
 {
 	  add_entity(yyvsp[0].t);
         }
     break;
 case 7:
-#line 118 "parse.y"
+#line 119 "parse.y"
 { 
 	  add_entity(mk_proc(yyvsp[-3].t, PRIVATE_STORAGE, yyvsp[-2].t));
      	}
     break;
 case 8:
-#line 123 "parse.y"
+#line 124 "parse.y"
 { 
           add_entity(mk_proc(yyvsp[-3].t, PUBLIC_STORAGE, yyvsp[-2].t));
      	}
     break;
 case 9:
-#line 128 "parse.y"
+#line 129 "parse.y"
 { 
 	  add_entity(mk_proc(yyvsp[-1].t, EXTERN_STORAGE, NULL));
      	}
     break;
 case 10:
-#line 133 "parse.y"
+#line 134 "parse.y"
 { 
 	  add_entity(mk_func(yyvsp[-5].t, PRIVATE_STORAGE, yyvsp[-3].i, yyvsp[-2].t));
      	}
     break;
 case 11:
-#line 138 "parse.y"
+#line 139 "parse.y"
 { 
 	  add_entity(mk_func(yyvsp[-5].t, PUBLIC_STORAGE, yyvsp[-3].i, yyvsp[-2].t));
      	}
     break;
 case 12:
-#line 143 "parse.y"
+#line 144 "parse.y"
 { 
 	  add_entity(mk_func(yyvsp[-3].t, EXTERN_STORAGE, yyvsp[-1].i, NULL));
      	}
     break;
 case 13:
-#line 150 "parse.y"
+#line 151 "parse.y"
 {
  	  yyval.t = mk_head(yyvsp[0].s, NULL);
      	}
     break;
 case 14:
-#line 155 "parse.y"
+#line 156 "parse.y"
 {
  	  yyval.t = mk_head(yyvsp[-3].s, yyvsp[-1].t);
      	}
     break;
 case 15:
-#line 162 "parse.y"
+#line 163 "parse.y"
 {
 	  yyval.t = mk_list(yyvsp[0].t, NULL);
 	}
     break;
 case 16:
-#line 167 "parse.y"
+#line 168 "parse.y"
 {
 	  yyval.t = mk_list(yyvsp[-2].t, yyvsp[0].t);
 	}
     break;
 case 17:
-#line 174 "parse.y"
+#line 175 "parse.y"
 {	  
 	  yyval.t = mk_decl(0, yyvsp[-1].i, 0, mk_symbol(yyvsp[0].s));
         }
     break;
 case 18:
-#line 181 "parse.y"
+#line 182 "parse.y"
 {
  	  yyval.t = mk_body(yyvsp[-3].t, yyvsp[-1].t);
      	}
     break;
 case 19:
-#line 186 "parse.y"
+#line 187 "parse.y"
 {
  	  yyval.t = mk_body(NULL, yyvsp[-1].t);
      	}
     break;
 case 20:
-#line 193 "parse.y"
+#line 194 "parse.y"
 {
 	  yyval.t = mk_list(yyvsp[0].t, NULL);
 	}
     break;
 case 21:
-#line 198 "parse.y"
+#line 199 "parse.y"
 {
 	  yyval.t = mk_list(yyvsp[-1].t, yyvsp[0].t);
 	}
     break;
 case 22:
-#line 205 "parse.y"
+#line 206 "parse.y"
 { 
 	  yyval.t = mk_decl(yyvsp[-3].i, yyvsp[-2].i, 0, yyvsp[-1].t);
         }
     break;
 case 23:
-#line 210 "parse.y"
+#line 211 "parse.y"
 {
 	  yyval.t = mk_decl(yyvsp[-3].i, yyvsp[-2].i, yyvsp[-4].i, yyvsp[-1].t);
         }
     break;
 case 24:
-#line 217 "parse.y"
+#line 218 "parse.y"
 {
 	  yyval.i = CONST_TYPE;
 	}
     break;
 case 25:
-#line 222 "parse.y"
+#line 223 "parse.y"
 {
 	  yyval.i = VAR_TYPE;
 	}
     break;
 case 26:
-#line 229 "parse.y"
+#line 230 "parse.y"
 {
 	  yyval.i = BIT_SIZE;
 	}
     break;
 case 27:
-#line 234 "parse.y"
+#line 235 "parse.y"
 {
 	  yyval.i = BYTE_SIZE;
 	}
     break;
 case 28:
-#line 241 "parse.y"
+#line 242 "parse.y"
 {
 	  yyval.i = EXTERN_STORAGE;
 	}
     break;
 case 29:
-#line 246 "parse.y"
+#line 247 "parse.y"
 {
 	  yyval.i = PUBLIC_STORAGE;
 	}
     break;
 case 30:
-#line 251 "parse.y"
+#line 252 "parse.y"
 {
 	  yyval.i = VOLATILE_STORAGE;
 	}
     break;
 case 31:
-#line 258 "parse.y"
+#line 259 "parse.y"
 {
 	  yyval.t = mk_list(yyvsp[0].t, NULL);
 	}
     break;
 case 32:
-#line 263 "parse.y"
+#line 264 "parse.y"
 {
 	  yyval.t = mk_list(yyvsp[-1].t, yyvsp[0].t);
 	}
     break;
 case 33:
-#line 270 "parse.y"
+#line 271 "parse.y"
 {
 	  yyval.t = mk_cond(yyvsp[-5].t, yyvsp[-3].t, NULL);
 	}
     break;
 case 34:
-#line 275 "parse.y"
+#line 276 "parse.y"
 {
 	  yyval.t = mk_cond(yyvsp[-6].t, yyvsp[-4].t, yyvsp[-3].t);
 	}
     break;
 case 35:
-#line 280 "parse.y"
+#line 281 "parse.y"
 {
 	  yyval.t= mk_loop(NULL, yyvsp[-1].t, NULL, yyvsp[0].t);	
 	}
     break;
 case 36:
-#line 285 "parse.y"
+#line 286 "parse.y"
 {
 	  yyval.t= mk_loop(NULL, NULL, NULL, yyvsp[0].t);
 	}
     break;
 case 37:
-#line 290 "parse.y"
+#line 291 "parse.y"
 {
 	  yyval.t = yyvsp[-1].t;
 	}
     break;
 case 38:
-#line 297 "parse.y"
+#line 298 "parse.y"
 {
 	  /* last statement is elsif */
 	  yyval.t = mk_cond(yyvsp[-2].t, yyvsp[0].t, NULL);
 	}
     break;
 case 39:
-#line 303 "parse.y"
+#line 304 "parse.y"
 {
 	  yyval.t = mk_cond(yyvsp[-3].t, yyvsp[-1].t, yyvsp[0].t);
 	}
     break;
 case 40:
-#line 308 "parse.y"
+#line 309 "parse.y"
 {
 	  /* last statement is else */
 	  yyval.t = mk_cond(NULL, yyvsp[0].t, NULL);
 	}
     break;
 case 41:
-#line 316 "parse.y"
+#line 317 "parse.y"
 {
 	  yyval.t = yyvsp[-3].t;
 	}
     break;
 case 42:
-#line 323 "parse.y"
+#line 324 "parse.y"
 {
 	  yyval.t = mk_list(yyvsp[0].t, NULL);
 	}
     break;
 case 43:
-#line 328 "parse.y"
+#line 329 "parse.y"
 {
 	  yyval.t = mk_list(yyvsp[-2].t, yyvsp[0].t);
 	}
     break;
 case 45:
-#line 337 "parse.y"
+#line 338 "parse.y"
 {
 	  yyval.t = mk_string(yyvsp[0].s);
         }
     break;
 case 47:
-#line 346 "parse.y"
+#line 347 "parse.y"
 {
 	  yyval.t = mk_binop(yyvsp[-1].i, yyvsp[-2].t, yyvsp[0].t);
 	}
     break;
 case 50:
-#line 357 "parse.y"
+#line 358 "parse.y"
 {
 	  yyval.t = mk_binop(yyvsp[-1].i, yyvsp[-2].t, yyvsp[0].t);
 	}
     break;
 case 54:
-#line 368 "parse.y"
+#line 369 "parse.y"
 {
 	  yyval.t = mk_binop(yyvsp[-1].i, yyvsp[-2].t, yyvsp[0].t);
 	}
     break;
 case 59:
-#line 379 "parse.y"
+#line 380 "parse.y"
 {
 	  yyval.t = mk_binop(yyvsp[-1].i, yyvsp[-2].t, yyvsp[0].t);
 	}
     break;
 case 67:
-#line 390 "parse.y"
+#line 391 "parse.y"
 {
 	  yyval.t = mk_binop(yyvsp[-1].i, yyvsp[-2].t, yyvsp[0].t);
 	}
     break;
 case 71:
-#line 401 "parse.y"
+#line 402 "parse.y"
 {
 	  yyval.t = mk_binop(yyvsp[-1].i, yyvsp[-2].t, yyvsp[0].t);
 	}
     break;
 case 75:
-#line 412 "parse.y"
+#line 413 "parse.y"
 {
 	  yyval.t = mk_binop(yyvsp[-1].i, yyvsp[-2].t, yyvsp[0].t);
 	}
     break;
 case 80:
-#line 423 "parse.y"
+#line 424 "parse.y"
 {
 	  yyval.t = mk_unop(yyvsp[-1].i, yyvsp[0].t);
 	}
     break;
 case 85:
-#line 432 "parse.y"
+#line 433 "parse.y"
 {
 	  yyval.t = mk_symbol(yyvsp[0].s);
         }
     break;
 case 86:
-#line 437 "parse.y"
+#line 438 "parse.y"
 {
 	  /* function or procedure call */
 	  yyval.t = mk_call(yyvsp[-2].s, NULL);
 	}
     break;
 case 87:
-#line 443 "parse.y"
+#line 444 "parse.y"
 {
 	  /* function or procedure call with arguments */
 	  yyval.t = mk_call(yyvsp[-3].s, yyvsp[-1].t);
 	}
     break;
 case 88:
-#line 449 "parse.y"
+#line 450 "parse.y"
 {
 	  yyval.t = mk_constant(yyvsp[0].i);
 	}
     break;
 case 89:
-#line 454 "parse.y"
+#line 455 "parse.y"
 {
 	  yyval.t = yyvsp[-1].t;
 	}
@@ -1627,5 +1628,5 @@ yyreturn:
 #endif
   return yyresult;
 }
-#line 459 "parse.y"
+#line 460 "parse.y"
 

@@ -25,8 +25,11 @@ Boston, MA 02111-1307, USA.  */
 struct variable {
   char *alias;
   tree *node;
-  gp_boolean is_public;                  /* true if public symbol */
-  gp_boolean is_external;                /* true if defined elsewere */
+  gp_boolean is_constant;		/* true if constant symbol */
+  gp_boolean is_public;			/* true if public symbol */
+  gp_boolean is_external;		/* true if defined elsewere */
+  gp_boolean is_equ;			/* true if processor header equate */
+  int value;				/* value if constant symbol */
 };
 
 void add_global(char *name, char *alias, tree *object);
