@@ -27,8 +27,8 @@ Boston, MA 02111-1307, USA.  */
 
 #include "libgputils.h"
 #include "gpal.h"
-#include "analyze.h"
 #include "symbol.h"
+#include "analyze.h"
 
 struct variable *
 add_global(char *name, char *alias, tree *node)
@@ -101,6 +101,16 @@ add_equ(char *name, int value)
 {
   struct symbol *sym;
   struct variable *var;
+  struct symbol *prim;
+  struct type *prim_type = NULL;
+
+  prim = get_symbol(state.type, "uint8");
+  if (prim == NULL) {
+    assert(0);
+  } else {
+    prim_type = get_symbol_annotation(prim);
+    assert(prim_type != NULL);
+  }
 
   sym = get_symbol(state.top, name);
   if (sym == NULL) {
@@ -110,7 +120,7 @@ add_equ(char *name, int value)
     var->alias = strdup(name);
     var->tag = sym_equ;
     var->class = storage_unknown;
-    var->type = NULL;
+    var->type = prim_type;
     var->is_init = true;
     var->value = value;
     var->file_id = state.src->file_id;
@@ -143,7 +153,7 @@ add_global_symbol(char *name,
   struct variable *var;
 
   if (prefix)
-    sprintf(buffer, "%s_%s", prefix, name);
+    sprintf(buffer, "_%s_%s", prefix, name);
   else
     sprintf(buffer, "%s", name);
 
@@ -162,8 +172,8 @@ add_global_symbol(char *name,
   return var;
 }
 
-void
-add_type_prim(char *name, int size, int bitsize)
+static void
+add_type_prim(char *name, enum size_tag size)
 {
   struct symbol *sym;
   struct type *new;
@@ -175,8 +185,7 @@ add_type_prim(char *name, int size, int bitsize)
     annotate_symbol(sym, new);
     new->tag = type_prim;
     new->size = size;
-    new->bitsize = bitsize;
-    new->nelts = 1;
+    new->nelts = 0;
     new->start = 0;
     new->end = 0;
     new->prim = NULL;
@@ -214,8 +223,7 @@ add_type_array(char *name, int start, int end, char *type)
     new = malloc(sizeof(*new));
     annotate_symbol(sym, new);
     new->tag = type_array;
-    new->size = 0;
-    new->bitsize = 0;
+    new->size = size_unknown;
     new->nelts = end - start + 1;
     new->start = start;
     new->end = end;
@@ -235,7 +243,7 @@ add_type_enum(char *name)
   struct symbol *prim;
   struct type *prim_type = NULL;
 
-  prim = get_symbol(state.type, "byte");
+  prim = get_symbol(state.type, "uint8");
   if (prim == NULL) {
     assert(0);
   } else {
@@ -249,8 +257,7 @@ add_type_enum(char *name)
     new = malloc(sizeof(*new));
     annotate_symbol(sym, new);
     new->tag = type_enum;
-    new->size = 0;
-    new->bitsize = 0;
+    new->size = size_unknown;
     new->nelts = 0;
     new->start = 0;
     new->end = 0;
@@ -285,8 +292,7 @@ add_type_alias(char *name, char *type)
     new = malloc(sizeof(*new));
     annotate_symbol(sym, new);
     new->tag = type_alias;
-    new->size = 0;
-    new->bitsize = 0;
+    new->size = size_unknown;
     new->nelts = 0;
     new->start = 0;
     new->end = 0;
@@ -312,6 +318,74 @@ get_type(char *name)
   return type;
 }
 
+/* determine the size of a primative in bytes */
+
+int
+prim_size(enum size_tag size)
+{
+  int byte_size = 0;
+
+  switch (size) {
+  case size_bit:
+    byte_size = 1;
+    break;
+  case size_uint8:
+    byte_size = 1;
+    break;
+  case size_int8:
+    byte_size = 1;
+    break;
+  case size_uint16:
+    byte_size = 2;
+    break;
+  case size_int16:
+    byte_size = 2;
+    break;
+  case size_uint24:
+    byte_size = 3;
+    break;
+  case size_int24:
+    byte_size = 3;
+    break;
+  case size_uint32:
+    byte_size = 4;
+    break;
+  case size_int32:
+    byte_size = 4;
+    break;
+  case size_float:
+    byte_size = 4;
+    break;
+  default:
+    assert(0);
+  }
+
+  return byte_size;
+}
+
+/* determine the primative size */
+
+enum size_tag
+prim_type(struct type *type)
+{
+  enum size_tag size = size_unknown;
+
+  switch (type->tag) {
+  case type_prim:
+    size = type->size;
+    break;
+  case type_array:
+  case type_enum:
+  case type_alias:
+    size = type->prim->size;
+    break;
+  default:
+    assert(0);
+  }
+
+  return size;
+}
+
 /* determine the size of a type in bytes */
 
 int
@@ -321,10 +395,10 @@ type_size(struct type *type)
 
   switch (type->tag) {
   case type_prim:
-    size = type->size + type->bitsize;
+    size = prim_size(type->size);
     break;
   case type_array:
-    size = type->nelts * type_size(type->prim);
+    size = type->nelts * prim_size(type->size);
     break;
   case type_enum:
     size = type_size(type->prim);
@@ -342,11 +416,16 @@ type_size(struct type *type)
 void
 add_type_prims(void)
 {
-  add_type_prim("bit",   0, 1);
-  add_type_prim("byte",  1, 0);
-  add_type_prim("word",  2, 0);
-  add_type_prim("long",  3, 0);
-  add_type_prim("float", 3, 0);
+  add_type_prim("bit",    size_bit);
+  add_type_prim("uint8",  size_uint8);
+  add_type_prim("int8",   size_int8);
+  add_type_prim("uint16", size_uint16);
+  add_type_prim("int16",  size_int16);
+  add_type_prim("uint24", size_uint24);
+  add_type_prim("int24",  size_int24);
+  add_type_prim("uint32", size_uint32);
+  add_type_prim("int32",  size_int32);
+  add_type_prim("float",  size_float);
 
   return;
 }

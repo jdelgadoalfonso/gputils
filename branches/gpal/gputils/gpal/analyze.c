@@ -23,11 +23,10 @@ Boston, MA 02111-1307, USA.  */
 
 #include "libgputils.h"
 #include "gpal.h"
+#include "symbol.h"
 #include "analyze.h"
 #include "codegen.h"
-#include "codegen14.h"
 #include "scan.h"
-#include "symbol.h"
 
 #ifdef STDC_HEADERS
 #include <stdarg.h>
@@ -41,6 +40,11 @@ static gp_linked_list *last_link;
 
 static gp_boolean generating_function;
 static gp_boolean found_return;
+static enum size_tag scan_size;
+
+#define RETURN_STACK_SIZE 8
+static enum size_tag return_stack[RETURN_STACK_SIZE];
+static int return_stack_index;  /* next available stack location */
 
 /* create a linked list of all the data memory used */
 
@@ -328,17 +332,31 @@ maybe_evaluate(tree *p)
 }
 
 static int
-test_symbol(tree *node, char *name)
+test_symbol(tree *node, char *name, enum size_tag size)
 {
-  struct symbol *sym;
+  struct variable *var;
 
-  /* FIXME: need to test symbol type too.  Can't use procedure name in 
-     and expression. */
-
-  sym = get_symbol(state.top, name);
-  if (sym == NULL) {
+  var = get_global(name);
+  if (var == NULL) {
     analyze_error(node, "unknown symbol \"%s\"", name);
     return 1;
+  }
+
+  /* If it is not an unchecked conversion, verify the types match */
+  if ((size != size_unknown) && 
+      (var->type) &&
+      (prim_type(var->type) != size)) {
+    analyze_error(node, "type mismatch in symbol \"%s\"", name);
+    return 1;
+  }
+
+  /* Save the size for scanning expressions with an unknown type */
+  if ((size == size_unknown) && (var->type)) {     
+    enum size_tag temp_size = prim_type(var->type);
+
+    if (temp_size != size_unknown) {
+      scan_size = temp_size;
+    }
   }
 
   return 0;
@@ -346,40 +364,35 @@ test_symbol(tree *node, char *name)
 
 /* scan the tree and make sure all of the symbols are valid */
 
-static void
-scan_tree(tree *expr)
+static int
+scan_tree(tree *expr, enum size_tag size)
 {
 
   if (expr == NULL)
-    return;
+    return 1;
 
   switch (expr->tag) {
   case node_arg:
-    test_symbol(expr, ARG_NAME(expr));
-    break;
+    return test_symbol(expr, ARG_NAME(expr), size);
   case node_binop:
-    scan_tree(BINOP_LEFT(expr));
-    scan_tree(BINOP_RIGHT(expr));
-    break;
+    return scan_tree(BINOP_LEFT(expr), size) ||
+           scan_tree(BINOP_RIGHT(expr), size);
   case node_call:
-    test_symbol(expr, CALL_NAME(expr));
-    break;
+    return test_symbol(expr, CALL_NAME(expr), size);
   case node_constant:
-    break;
+    return 0;
   case node_unop:
-    scan_tree(BINOP_RIGHT(expr));
-    break;
+    return scan_tree(BINOP_RIGHT(expr), size);
   case node_symbol:
-    test_symbol(expr, SYM_NAME(expr));
-    break;
+    return test_symbol(expr, SYM_NAME(expr), size);
   default:
-    print_node(expr, 0);
     assert(0);
   }
 
+  return 1;
 }
 
-static int
+int
 analyze_check_array(tree *symbol, struct variable *var)
 {
   int offset;
@@ -398,47 +411,6 @@ analyze_check_array(tree *symbol, struct variable *var)
   return offset;
 }
 
-/* If a symbol has an offset, use this function to fetch the value and put
-   it in w. */
-
-void
-analyze_get_array(tree *symbol, struct variable *var)
-{
-  int offset;
-  int element_size;
-
-  if ((var) && (var->type) && (var->type->tag == type_array)) {
-    if (can_evaluate(SYM_OFST(symbol), false)) {
-      /* direct access */
-      offset = analyze_check_array(symbol, var);
-      if (var->class == storage_extern) {
-        codegen_banksel(var->alias);
-        gen_get_mem_offset(var->alias, offset);
-        codegen_banksel(LOCAL_DATA_LABEL);
-      } else {
-        gen_get_mem_offset(var->alias, offset);
-      }
-    } else {
-      /* indirect access */
-      gen_expr(SYM_OFST(symbol));
-      element_size = type_size(var->type->prim);
-      if (element_size != 1) {
-        /* scale the offset by the element size */
-        gen_binop_constant(op_mult, element_size);
-      }
-      codegen_write_asm("addlw %s", var->alias); 
-      if (var->class == storage_extern) {
-        codegen_bankisel(var->alias);
-      }
-      gen_get_mem("FSR");          
-    }
-  } else {
-    analyze_error(symbol, "symbol \"%s\" is not an array", SYM_NAME(symbol));
-  }
-
-  return;
-}
-
 static tree *
 arg_to_symbol(tree *arg)
 {
@@ -449,6 +421,29 @@ arg_to_symbol(tree *arg)
   symbol->line_number = arg->line_number;
 
   return symbol;
+}
+
+static void
+push_return_stack(tree *func, enum size_tag size)
+{
+  if (return_stack_index < RETURN_STACK_SIZE) {
+    return_stack[return_stack_index++] = size;
+  } else {
+    analyze_error(func, "too many nested function calls");
+  }
+}
+
+static enum size_tag
+pop_return_stack(tree *ret)
+{
+  return_stack_index--;
+  
+  if (return_stack_index < 0) {
+    analyze_error(ret, "no function to return from");  
+    return size_unknown;
+  }
+
+  return return_stack[return_stack_index];
 }
 
 void
@@ -476,6 +471,7 @@ analyze_call(tree *call, gp_boolean in_expr)
         analyze_error(call, "functions can only be called in expressions");
         return;
       }
+      push_return_stack(call, prim_type(get_type(FUNC_RET(var->node))));
     } else {
       analyze_error(call, "name in the call is not a function or procedure");
       return;
@@ -489,7 +485,6 @@ analyze_call(tree *call, gp_boolean in_expr)
   def_args = HEAD_ARGS(head);
 
   if (list_length(call_args) != list_length(def_args)) {
-    /* FIXME: should also check argument type */
     analyze_error(call, "incorrect number of arguments in call");
     return;
   }
@@ -539,19 +534,57 @@ analyze_call(tree *call, gp_boolean in_expr)
   return;
 }
 
+static int
+analyze_test(tree *test, char *end_label)
+{
+  enum size_tag size;
+
+  scan_size = size_unknown;
+
+  /* Scan first to check for valid symbols and to determine what the
+     default size is. */
+  if (scan_tree(test, size_unknown)) {
+    return 1;
+  }
+  
+  size = scan_size;
+
+  /* check the symbol sizes */
+  if (scan_tree(test, size)) {
+    return 1;
+  }
+ 
+  codegen_test(test, end_label, size);
+
+  return 0;
+}
+
 void
-analyze_cond(tree *cond)
+analyze_cond(tree *cond, char *last_label)
 {
   char *end_label = NULL;
+  char *local_label = NULL;
+
+  if (last_label) {
+    local_label = last_label;
+  } else {
+    local_label = codegen_next_label();
+  }
 
   /* else doesn't have a condition */
   if (COND_TEST(cond)) {
     end_label = codegen_next_label();
-    codegen_test(COND_TEST(cond), end_label);
+    if (analyze_test(COND_TEST(cond), end_label))
+      return;
   }
   
   /* write the body of the code */
   analyze_statements(COND_BODY(cond));
+
+  /* executed one clause so jump to the end */
+  if (COND_NEXT(cond)) {
+    codegen_jump(local_label);
+  }
   
   /* if there is a condition generate a label at the end of the body */
   if (COND_TEST(cond)) {
@@ -561,8 +594,16 @@ analyze_cond(tree *cond)
   }
   
   /* generate next conditional block, if there is one */
-  if(COND_NEXT(cond))
-    analyze_cond(COND_NEXT(cond));
+  if (COND_NEXT(cond)) {
+    analyze_cond(COND_NEXT(cond), local_label);
+  }
+
+  /* this is the top level cond block so write the last label */
+  if (last_label == NULL) {
+    codegen_write_label(local_label);
+    if (local_label)
+      free(local_label);
+  }
 
   return;
 }
@@ -583,7 +624,8 @@ analyze_loop(tree *loop)
   /* write the exit statements */
   if (LOOP_EXIT(loop)) {
     end_label = codegen_next_label();
-    codegen_test(LOOP_EXIT(loop), end_label);
+    if (analyze_test(LOOP_EXIT(loop), end_label))
+      return;
   }
 
   /* write the loop body */
@@ -612,15 +654,15 @@ analyze_expr(tree *expr)
   tree *left;
   tree *right;
   struct variable *var;
-  gp_boolean is_direct = true;
+  enum size_tag size;
+  gp_boolean constant_offset = true;
   int offset = 0;
-  int element_size;
 
   if ((expr->tag != node_binop) || (BINOP_OP(expr) != op_eq)) {
     analyze_error(expr, "expression is missing \"=\"");
     return;
   }
-  
+
   left = BINOP_LEFT(expr);
   right = BINOP_RIGHT(expr);
  
@@ -628,78 +670,61 @@ analyze_expr(tree *expr)
     analyze_error(expr, "invalid lvalue in assignment");
     return;
   }
-
-  /* verify all symbols in the expression are in the symbol table */
-  test_symbol(left, SYM_NAME(left));
-  scan_tree(right);
-
-  /* fetch the symbol's alias */
+  
   var = get_global(SYM_NAME(left));
-  assert(var != NULL);
+  if (var == NULL) {
+    analyze_error(left, "unknown symbol \"%s\"", SYM_NAME(left));  
+    return;
+  }
+
+  /* fetch the symbols primative type */
   assert(var->type != NULL);
+  size = prim_type(var->type);
+
+  /* Verify all symbols in the expression are in the symbol table and
+     that they are the same type as the lvalue. */
+  if (scan_tree(right, size))
+    return;
 
   /* calculate the offset for indirect accesses if necessary */
   if (SYM_OFST(left)) {
     if (var->type->tag == type_array) {
       if (can_evaluate(SYM_OFST(left), false)) {
         /* direct access with an offset */
-        is_direct = true;
+        constant_offset = true;
         offset = analyze_check_array(left, var);
       } else {
         /* indirect access */
-        is_direct = false;
-        codegen_expr(SYM_OFST(left));
-        element_size = type_size(var->type->prim);
-        if (element_size != 1) {
-          /* scale the offset by the element size */
-          /* FIXME: incorrect, temp regs will be messed up */
-          gen_binop_constant(op_mult, element_size);
-        }
-        codegen_write_asm("addlw %s", var->alias); 
-        gen_put_mem("FSR");
+        constant_offset = false;
+        codegen_indirect(var, SYM_OFST(left));
       }
     } else {
       analyze_error(left, "lvalue \"%s\" is not an array", SYM_NAME(left));
+      return;
     }
   }
 
   /* write the expression */
-  codegen_expr(right);
+  codegen_expr(right, size);
 
   /* put the result in memory */
-  if (SYM_OFST(left)) {
-    if (is_direct) {
-      if (var->class == storage_extern) {
-        codegen_banksel(var->alias);
-        gen_put_mem_offset(var->alias, offset);
-        codegen_banksel(LOCAL_DATA_LABEL);
-      } else {
-        gen_put_mem_offset(var->alias, offset);
-      }    
-    } else {
-      codegen_bankisel(var->alias);
-      gen_put_mem("INDF");
-    }
-  } else {
-    if (var->class == storage_extern) {
-      codegen_put_mem(var, true);
-      codegen_banksel(LOCAL_DATA_LABEL);
-    } else {
-      codegen_put_mem(var, false);
-    }
-  }
+  codegen_store(var, constant_offset, offset, SYM_OFST(left));
 
 }
 
 static void
 analyze_return(tree *ret)
 {
+  enum size_tag return_size;
   
   found_return = true;
-  
+ 
   if (generating_function) {
-    scan_tree(ret->value.ret);
-    codegen_expr(ret->value.ret);
+    return_size = pop_return_stack(ret);
+    
+    if (scan_tree(ret->value.ret, return_size))
+      return;
+    codegen_expr(ret->value.ret, return_size);
     codegen_write_asm("return");
   } else {
     analyze_error(ret, "returns can only appear in a function body");
@@ -730,7 +755,7 @@ analyze_statements(tree *statement)
       analyze_call(statement, false);
       break;
     case node_cond:
-      analyze_cond(statement);  
+      analyze_cond(statement, NULL);  
       break;
     case node_loop:
       analyze_loop(statement);
@@ -810,7 +835,7 @@ analyze_procedure(tree *procedure, gp_boolean is_func)
   /* write the procedure to the assembly file */
   codegen_init_proc(proc_name, var->class, is_func);
   if (var->class == storage_public) {
-    codegen_banksel(LOCAL_DATA_LABEL);
+    codegen_write_asm("banksel %s", LOCAL_DATA_LABEL);
   }
   analyze_statements(statements);
   codegen_finish_proc(!generating_function);
@@ -862,6 +887,7 @@ analyze_select_processor(tree *expr, char *name)
     if (found) {
       if (state.processor == no_processor) {
         state.processor = found->tag;
+        state.class = gp_processor_class(state.processor);
         state.processor_info = found;
         sprintf(file_name, "%s.inc", found->names[1]);
         if (state.read_header) {
@@ -877,8 +903,8 @@ analyze_select_processor(tree *expr, char *name)
     /* load the instruction sets if necessary */
     if ((state.processor_chosen == false) && 
         (state.processor != no_processor)) {
-      /* FIXME select the correct code generator */
       state.processor_chosen = true;
+      codegen_select(expr);
     }
   }
 }
@@ -1240,6 +1266,7 @@ analyze(void)
 
   /* FIXME: manage memory better or at least try */
   data_memory = NULL;
+  return_stack_index = 0;
   generating_function = false;
 
   /* add all procedures and data to the global symbol table */

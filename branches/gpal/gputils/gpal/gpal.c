@@ -23,9 +23,9 @@ Boston, MA 02111-1307, USA.  */
 
 #include "libgputils.h"
 #include "gpal.h"
+#include "symbol.h"
 #include "scan.h"
 #include "analyze.h"
-#include "symbol.h"
 
 struct gpal_state state;
 
@@ -561,6 +561,7 @@ init(void)
   state.link = NULL;
   state.cmd_processor = false;
   state.processor = no_processor;
+  state.class = PROC_CLASS_GENERIC;
   state.processor_chosen = false;
   state.outfilename = NULL;
 
