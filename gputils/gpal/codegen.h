@@ -25,7 +25,10 @@ Boston, MA 02111-1307, USA.  */
 #define LOCAL_DATA_LABEL "_local_data"
 #define WORKING_LABEL "_working_data"
 
+extern int codegen_bytes;
+
 void codegen_write_asm(const char *format, ...);
+void codegen_write_comment(const char *format, ...);
 char *codegen_next_label(void);
 void codegen_write_label(char *label);
 

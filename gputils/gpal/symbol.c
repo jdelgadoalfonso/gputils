@@ -331,6 +331,9 @@ prim_size(enum size_tag size)
   int byte_size = 0;
 
   switch (size) {
+  case size_unknown:
+    assert(0);
+    break;
   case size_bit:
     byte_size = 1;
     break;

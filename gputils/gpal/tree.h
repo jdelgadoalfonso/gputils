@@ -50,6 +50,7 @@ enum node_tag {
 
 enum node_op { 
   op_unknown,  /* unknown operation */
+  /* valid during all phases of compilation */
   op_add,      /* add */
   op_sub,      /* subtract */
   op_mult,     /* multiply */
@@ -67,10 +68,16 @@ enum node_op {
   op_lor,      /* logical or */
   op_eq,       /* branch if equal */
   op_ne,       /* branch if not equal */
-  op_gt,       /* branch if greater than */
   op_lt,       /* branch if less than */
+  op_lte,      /* branch if less than or equal */
+  /* valid only during parse */
+  op_gt,       /* branch if greater than */
   op_gte,      /* branch if greater than or equal */
-  op_lte       /* branch if less than or equal */
+  /* valid only during code generation */
+  op_incf,     /* increment memory */
+  op_decf      /* decrement memory */
+
+  /* add assign ops from gpasm/scan.l */
 };
 
 enum node_key { 
