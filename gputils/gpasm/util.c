@@ -209,7 +209,6 @@ void set_global(char *name,
   case gvt_global:
   case gvt_static:
   case gvt_address:
-  case gvt_debug:
     state.obj.symbol_num++;
     break;
   default:

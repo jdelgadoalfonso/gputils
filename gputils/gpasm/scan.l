@@ -214,9 +214,15 @@ processor	     	 {
 			   yylval.s = strdup(yytext);
 			   return IDENTIFIER;
 			 }
-"."line			 {
-			   yylval.s = strdup(yytext);
+^#file			 {
+			   return DEBUG_FILE;
+			 }
+^#line			 {
+			   force_decimal = 1;
 			   return DEBUG_LINE;
+			 }
+^#eof			 {
+			   coff_add_eofsym();
 			 }
 ^{IDENT}#v\(             {
 			   char *symbol;
