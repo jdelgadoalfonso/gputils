@@ -5,14 +5,16 @@ bin_PROGRAMS = gpal
 CPPFLAGS = @CPPFLAGS@ -I${top_srcdir}/libgputils -I${top_srcdir}/include -DGPASM_HEADER_PATH=\"@GPASM_HEADER_PATH@\"
 
 gpal_SOURCES=\
+	parse.y \
 	analyze.c \
 	codegen.c \
 	codegen14.c \
 	gpal.c \
-	parse.y \
+	optimize.c \
 	scan.l \
 	symbol.c \
 	tree.c \
+	optimize.h \
 	analyze.h \
 	codegen.h \
 	codegen14.h \

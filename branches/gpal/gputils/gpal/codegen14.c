@@ -46,6 +46,7 @@ load_constant14(int value, enum size_tag size)
     return;
   }
 
+  /* FIXME: use codegen_bytes */
   num_bytes = prim_size(size);
 
   switch (num_bytes) {
@@ -241,6 +242,7 @@ static void
 gen_boolean(enum size_tag size)
 {
   int num_bytes;
+  int i;
 
   if ((size == size_uint8) || (size == size_uint8)) {
     codegen_write_asm("btfss STATUS, Z");
@@ -252,31 +254,34 @@ gen_boolean(enum size_tag size)
 
   codegen_write_asm("movf %s, w", WORKING_LABEL);
 
-  switch (num_bytes) {
-  case 4:
-    codegen_write_asm("iorwf %s + 3, w", WORKING_LABEL);
-    /* fall through */
-  case 3:
-    codegen_write_asm("iorwf %s + 2, w", WORKING_LABEL);
-    /* fall through */
-  case 2:
-    codegen_write_asm("iorwf %s + 1, w", WORKING_LABEL);
+  for (i = 1; i < num_bytes; i++) {
+    codegen_write_asm("iorwf %s + %i, w", WORKING_LABEL, i);
   }
 
   codegen_write_asm("btfss STATUS, Z");
   codegen_write_asm("movlw 1");
-  codegen_write_asm("movwf %s", WORKING_LABEL);
 
-  codegen_write_asm("movlw 0");
+}
+
+/* move w to the working register */
+
+static void
+move_to_working(enum size_tag size)
+{
+  int num_bytes;
+
+  num_bytes = prim_size(size);
+
   switch (num_bytes) {
   case 4:
-    codegen_write_asm("movwf %s + 3", WORKING_LABEL);
+    codegen_write_asm("clrf %s + 3", WORKING_LABEL);
     /* fall through */
   case 3:
-    codegen_write_asm("movwf %s + 2", WORKING_LABEL);
+    codegen_write_asm("clrf %s + 2", WORKING_LABEL);
     /* fall through */
   case 2:
-    codegen_write_asm("movwf %s + 1", WORKING_LABEL);
+    codegen_write_asm("clrf %s + 1", WORKING_LABEL);
+    codegen_write_asm("movwf %s", WORKING_LABEL);
   }
 
 }
@@ -420,167 +425,6 @@ do_sub(enum size_tag size, gp_boolean is_const, int value, char *name)
   default:
     assert(0);
   }
-
-}
-
-static void
-do_mult(enum size_tag size, gp_boolean is_const, int value, char *name)
-{
-  char *reg1 = NULL;
-  char *label1 = NULL;
-
-  switch (size) {
-  case size_bit:
-    assert(0);
-    break;
-  case size_uint8:
-  case size_uint16:
-  case size_uint24:
-  case size_uint32:
-    reg1 = codegen_get_temp(size);
-    label1 = codegen_next_label();
-    store_file14(reg1, size, 0, false);
-    load_constant14(0, size);
-    codegen_write_label(label1);
-    do_add(size, is_const, value, name);
-    if ((size == size_uint8) || (size == size_uint8)) {
-      codegen_write_asm("decfsz %s, f", reg1);
-    } else {
-      /* FIXME: need multibyte decfsz */
-    
-    }
-    codegen_write_asm("goto %s", label1);
-    break;
-  case size_int8:
-  case size_int16:
-  case size_int24:
-  case size_int32:
-  case size_float:
-  default:
-    assert(0);
-  }
-
-  if (reg1)
-    free(reg1);
-
-  if (label1)
-    free(label1);
-}
-
-static void
-do_div(enum size_tag size, gp_boolean is_const, int value, char *name)
-{
-  char *reg1 = NULL;
-  char *reg2 = NULL;
-  char *label1 = NULL;
-  char *label2 = NULL;
-
-  switch (size) {
-  case size_bit:
-    assert(0);
-    break;
-  case size_uint8:
-    reg1 = codegen_get_temp(size);
-    reg2 = codegen_get_temp(size);
-    label1 = codegen_next_label();
-    label2 = codegen_next_label();
-    codegen_write_asm("movwf %s", reg1);    /* store the divisor in temp*/
-    if (is_const) {
-      codegen_write_asm("movlw %#x", value);
-    } else {
-      codegen_write_asm("movf %s, w", name);
-    }    
-    codegen_write_asm("movwf %s", reg2);    /* store the dividend */
-    codegen_write_asm("movf %s, w", reg1);  /* move the divisor into w */
-    codegen_write_asm("clrf %s", reg1);     /* clear the result */
-    codegen_write_label(label1);
-    codegen_write_asm("subwf %s, f", reg2); /* sub the divisor from the dividend */
-    codegen_write_asm("btfsc STATUS, C");
-    codegen_write_asm("goto %s", label2);
-    codegen_write_asm("incf %s, f", reg1);  /* increment the result */
-    codegen_write_asm("goto %s", label1);
-    codegen_write_label(label2);
-    codegen_write_asm("movf %s, w", reg1);  /* move the result into w */
-    break;
-  case size_int8:
-  case size_uint16:
-  case size_int16:
-  case size_uint24:
-  case size_int24:
-  case size_uint32:
-  case size_int32:
-  case size_float:
-  default:
-    assert(0);
-  }
-
-  if (reg1)
-    free(reg1);
-
-  if (reg2)
-    free(reg2);
-
-  if (label1)
-    free(label1);
-
-  if (label2)
-    free(label2);
-
-}
-
-static void
-do_mod(enum size_tag size, gp_boolean is_const, int value, char *name)
-{
-  char *reg1 = NULL;
-  char *reg2 = NULL;
-  char *label1 = NULL;
-  char *label2 = NULL;
-
-  switch (size) {
-  case size_bit:
-    assert(0);
-    break;
-  case size_uint8:
-    reg1 = codegen_get_temp(size);
-    reg2 = codegen_get_temp(size);
-    label1 = codegen_next_label();
-    codegen_write_asm("movwf %s", reg1);    /* store the divisor in temp*/
-    if (is_const) {
-      codegen_write_asm("movlw %#x", value);
-    } else {
-      codegen_write_asm("movf %s, w", name);
-    } 
-    codegen_write_asm("movwf %s", reg2);    /* store the dividend */
-    codegen_write_asm("movf %s, w", reg1);  /* move the divisor into w */
-    codegen_write_label(label1);
-    codegen_write_asm("subwf %s, f", reg2); /* sub the divisor from the dividend */
-    codegen_write_asm("btfss STATUS, C");
-    codegen_write_asm("goto %s", label1);
-    codegen_write_asm("addwf %s, w", reg2); /* move the modulus into w */
-    break;
-  case size_int8:
-  case size_uint16:
-  case size_int16:
-  case size_uint24:
-  case size_int24:
-  case size_uint32:
-  case size_int32:
-  case size_float:
-  default:
-    assert(0);
-  }
-
-  if (reg1)
-    free(reg1);
-
-  if (reg2)
-    free(reg2);
-
-  if (label1)
-    free(label1);
-
-  if (label2)
-    free(label2);
 
 }
 
@@ -855,8 +699,26 @@ do_com(enum size_tag size, gp_boolean is_const, int value, char *name)
 /****************************************************************************/
 
 static void
+left_shift(enum size_tag size)
+{
+  int i;
+  int num_bytes;
+
+  num_bytes = prim_size(size);
+
+  for (i = 0; i < num_bytes; i++) {
+    if (i == 0) {
+      codegen_write_asm("bcf STATUS, C");
+    }
+    codegen_write_asm("rlf %s + %i, f", WORKING_LABEL, i);
+  }
+
+}
+
+static void
 do_lsh(enum size_tag size, gp_boolean is_const, int value, char *name)
 {
+  int i;
   char *reg1 = NULL;
   char *reg2 = NULL;
   char *label1 = NULL;
@@ -869,26 +731,38 @@ do_lsh(enum size_tag size, gp_boolean is_const, int value, char *name)
   case size_uint8:
   case size_int8:
     reg1 = codegen_get_temp(size);
-    reg2 = codegen_get_temp(size);
-    label1 = codegen_next_label();
-    label2 = codegen_next_label();
-    codegen_write_asm("movwf %s", reg2);    /* store the number of shifts in temp*/
     if (is_const) {
-      codegen_write_asm("movlw %#x", value);
+      if (value > 3) {
+        codegen_write_asm("andlw 0x0f");
+        codegen_write_asm("movwf %s", reg1);
+        codegen_write_asm("swapf %s, f", reg1);
+        value -= 4;
+      } else {
+        codegen_write_asm("movwf %s", reg1);
+      }
+      for (i = 0; i < value; i++) {
+        codegen_write_asm("bcf STATUS, C");
+        codegen_write_asm("rlf %, f", reg1, i);    
+      }
+      codegen_write_asm("movf %s, w", reg1);  /* move the result into w */
     } else {
-      codegen_write_asm("movwf %s", name);
+      reg2 = codegen_get_temp(size);
+      label1 = codegen_next_label();
+      label2 = codegen_next_label();
+
+      codegen_write_asm("movwf %s", reg1);
+      codegen_write_asm("movf %s, w", name);
+      codegen_write_asm("movwf %s", reg2);
+      codegen_write_label(label1);
+      codegen_write_asm("btfsc STATUS, Z");
+      codegen_write_asm("goto %s", label2);
+      codegen_write_asm("bcf STATUS, C");
+      codegen_write_asm("rlf %s, f", reg1);
+      codegen_write_asm("decf %s, f", reg2);
+      codegen_write_asm("goto %s", label1);
+      codegen_write_label(label2);
+      codegen_write_asm("movf %s, w", reg1);  /* move the result into w */
     }
-    codegen_write_asm("movwf %s", reg1);    /* store the number to be shifted */
-    codegen_write_asm("movf %s", reg2);     /* test number of shifts */
-    codegen_write_asm("btfsc STATUS, Z");
-    codegen_write_asm("goto %s", label2);
-    codegen_write_label(label1);
-    codegen_write_asm("bcf STATUS, C");
-    codegen_write_asm("rlf %s, f", reg1); 
-    codegen_write_asm("decfsz %s", reg2);
-    codegen_write_asm("goto %s", label1);
-    codegen_write_label(label2);
-    codegen_write_asm("movf %s, w", reg1);  /* move the result into w */
     break;
   case size_uint16:
   case size_int16:
@@ -896,6 +770,26 @@ do_lsh(enum size_tag size, gp_boolean is_const, int value, char *name)
   case size_int24:
   case size_uint32:
   case size_int32:
+    reg1 = codegen_get_temp(size_uint8);
+    label1 = codegen_next_label();
+    label2 = codegen_next_label();
+    if (is_const) {
+      codegen_write_asm("movlw %#x", value);
+      codegen_write_asm("addlw 0", value);
+    } else {
+      /* never can shift more than 31 so read the bottom byte only */
+      codegen_write_asm("movf %s, w", name);
+    }
+    codegen_write_asm("movwf %s", reg1);
+    codegen_write_label(label1);
+    codegen_write_asm("btfsc STATUS, Z");
+    codegen_write_asm("goto %s", label2);
+    codegen_write_asm("bcf STATUS, C");
+    left_shift(size);
+    codegen_write_asm("decf %s, f", reg1);
+    codegen_write_asm("goto %s", label1);
+    codegen_write_label(label2);
+    break;
   case size_float:
   default:
     assert(0);
@@ -916,8 +810,31 @@ do_lsh(enum size_tag size, gp_boolean is_const, int value, char *name)
 }
 
 static void
+right_shift(enum size_tag size, gp_boolean is_signed)
+{
+  int i;
+  int num_bytes;
+
+  num_bytes = prim_size(size);
+
+  i = num_bytes - 1;
+
+  if (is_signed) {
+    /* put the sign in the carry */
+    codegen_write_asm("rlf %s + %i, w", WORKING_LABEL, i);
+  }
+
+  for ( ; i >= 0 ; i--) {
+    codegen_write_asm("rrf %s + %i, f", WORKING_LABEL, i);
+  }
+
+}
+
+static void
 do_rsh(enum size_tag size, gp_boolean is_const, int value, char *name)
 {
+  int i;
+  gp_boolean is_signed = false;
   char *reg1 = NULL;
   char *reg2 = NULL;
   char *label1 = NULL;
@@ -927,36 +844,75 @@ do_rsh(enum size_tag size, gp_boolean is_const, int value, char *name)
   case size_bit:
     assert(0);
     break;
-  case size_uint8:
   case size_int8:
+    is_signed = true;
+    /* fall through */
+  case size_uint8:
     reg1 = codegen_get_temp(size);
-    reg2 = codegen_get_temp(size);
+    if (is_const) {
+      codegen_write_asm("movwf %s", reg1);
+      for (i = 0; i < value; i++) {
+        if (is_signed) {
+          /* put the sign in the carry */
+          codegen_write_asm("rlf %s, w", reg1);
+        } else {
+          codegen_write_asm("bcf STATUS, C");
+        }
+        codegen_write_asm("rrf %s, f", reg1, i);    
+      }
+      codegen_write_asm("movf %s, w", reg1);  /* move the result into w */
+    } else {
+      reg2 = codegen_get_temp(size);
+      label1 = codegen_next_label();
+      label2 = codegen_next_label();
+
+      codegen_write_asm("movwf %s", reg1);
+      codegen_write_asm("movf %s, w", name);
+      codegen_write_asm("movwf %s", reg2);
+      codegen_write_label(label1);
+      codegen_write_asm("btfsc STATUS, Z");
+      codegen_write_asm("goto %s", label2);
+      if (is_signed) {
+        /* put the sign in the carry */
+        codegen_write_asm("rlf %s, w", reg1);
+      } else {
+        codegen_write_asm("bcf STATUS, C");
+      }
+      codegen_write_asm("rrf %s, f", reg1);
+      codegen_write_asm("decf %s, f", reg2);
+      codegen_write_asm("goto %s", label1);
+      codegen_write_label(label2);
+      codegen_write_asm("movf %s, w", reg1);  /* move the result into w */
+    }
+    break;
+  case size_int16:
+  case size_int24:
+  case size_int32:
+    is_signed = true;
+    /* fall through */
+  case size_uint16:
+  case size_uint24:
+  case size_uint32:
+    reg1 = codegen_get_temp(size_uint8);
     label1 = codegen_next_label();
     label2 = codegen_next_label();
-    codegen_write_asm("movwf %s", reg2);    /* store the number of shifts in temp*/
     if (is_const) {
       codegen_write_asm("movlw %#x", value);
+      codegen_write_asm("addlw 0", value);
     } else {
-      codegen_write_asm("movwf %s", name);
+      /* never can shift more than 31 so read the bottom byte only */
+      codegen_write_asm("movf %s, w", name);
     }
-    codegen_write_asm("movwf %s", reg1);    /* store the number to be shifted */
-    codegen_write_asm("movf %s", reg2);     /* test number of shifts */
+    codegen_write_asm("movwf %s", reg1);
+    codegen_write_label(label1);
     codegen_write_asm("btfsc STATUS, Z");
     codegen_write_asm("goto %s", label2);
-    codegen_write_label(label1);
     codegen_write_asm("bcf STATUS, C");
-    codegen_write_asm("rrf %s, f", reg1); 
-    codegen_write_asm("decfsz %s", reg2);
+    right_shift(size, is_signed);
+    codegen_write_asm("decf %s, f", reg1);
     codegen_write_asm("goto %s", label1);
     codegen_write_label(label2);
-    codegen_write_asm("movf %s, w", reg1);  /* move the result into w */
     break;
-  case size_uint16:
-  case size_int16:
-  case size_uint24:
-  case size_int24:
-  case size_uint32:
-  case size_int32:
   case size_float:
   default:
     assert(0);
@@ -998,7 +954,8 @@ do_eq(enum size_tag size, gp_boolean is_const, int value, char *name)
   case size_int32:
     do_xor(size, is_const, value, name);    
     gen_boolean(size);
-    do_xor(size, true, 1, NULL);    
+    codegen_write_asm("xorlw 1");
+    move_to_working(size);
     break;
   case size_float:
   default:
@@ -1025,12 +982,79 @@ do_ne(enum size_tag size, gp_boolean is_const, int value, char *name)
   case size_int32:
     do_xor(size, is_const, value, name);    
     gen_boolean(size);
+    move_to_working(size);
     break;
   case size_float:
   default:
     assert(0);
   }
 
+}
+
+static void
+offset_working(enum size_tag size)
+{
+  int num_bytes;
+
+  num_bytes = prim_size(size);
+
+  switch (num_bytes) {
+  case 4:
+    codegen_write_asm("movlw 0x80");
+    codegen_write_asm("xorwf %s + 3, f", WORKING_LABEL);
+    break;
+  case 3:
+    codegen_write_asm("movlw 0x80");
+    codegen_write_asm("xorwf %s + 2, f", WORKING_LABEL);
+    break;
+  case 2:
+    codegen_write_asm("movlw 0x80");
+    codegen_write_asm("xorwf %s + 1, f", WORKING_LABEL);
+    break;
+  case 1:
+    codegen_write_asm("xorlw 0x80");
+    break;
+
+  }
+
+}
+
+static void
+offset_reg(char *name, enum size_tag size)
+{
+  int num_bytes;
+
+  num_bytes = prim_size(size);
+  codegen_write_asm("movlw 0x80");
+  codegen_write_asm("xorwf %s + %i, f", name, num_bytes - 1);
+
+}
+
+static int
+offset_constant(int number, enum size_tag size)
+{
+  int result = 0;
+  int num_bytes;
+
+  num_bytes = prim_size(size);
+
+  switch (num_bytes) {
+  case 4:
+    result = number ^ 0x800000;
+    break;
+  case 3:
+    result = number ^ 0x800000;
+    break;
+  case 2:
+    result = number ^ 0x8000;
+    break;
+  case 1:
+    result = number ^ 0x80;
+    break;
+
+  }
+
+  return result;
 }
 
 static void
@@ -1042,117 +1066,135 @@ do_lt(enum size_tag size, gp_boolean is_const, int value, char *name)
     assert(0);
     break;
   case size_uint8:
+  case size_uint16:
+  case size_uint24:
+  case size_uint32:
     do_sub(size, is_const, value, name);    
     codegen_write_asm("movf STATUS, w");
     codegen_write_asm("andlw 1");
-    codegen_write_asm("xorlw 1");
+    move_to_working(size);
     break;
-  case size_uint16:
-  case size_uint24:
-  case size_uint32:
-
   case size_int8:
-  case size_int16:
-  case size_int24:
-  case size_int32:
-  case size_float:
-  default:
-    assert(0);
-  }
-
-}
-
-static void
-do_gt(enum size_tag size, gp_boolean is_const, int value, char *name)
-{
-
-  switch (size) {
-  case size_bit:
-    assert(0);
-    break;
-  case size_uint8:
-    if (is_const) {
-      codegen_write_asm("sublw %#x", value);
-    } else {
-      codegen_write_asm("subwf %s, w", name);
-    }
+    offset_working(size);
+    do_sub(size, is_const, value, name);    
+    /* offset the input */
+    codegen_write_asm("andlw 0x80");
     codegen_write_asm("movf STATUS, w");
     codegen_write_asm("andlw 1");
     break;
-  case size_int8:
-  case size_uint16:
   case size_int16:
-  case size_uint24:
   case size_int24:
-  case size_uint32:
   case size_int32:
-  case size_float:
-  default:
-    assert(0);
-  }
-
-}
-
-static void
-do_gte(enum size_tag size, gp_boolean is_const, int value, char *name)
-{
-  char *reg1 = NULL;
-
-  switch (size) {
-  case size_bit:
-    assert(0);
-    break;
-  case size_uint8:
-    reg1 = codegen_get_temp(size);
-    codegen_write_asm("movwf %s", reg1);
+    offset_working(size);
     if (is_const) {
-      codegen_write_asm("movlw %#x", value);
+      value = offset_constant(value, size);
     } else {
-      codegen_write_asm("movf %s, w", name);
+      offset_reg(name, size);
     }
-    codegen_write_asm("subwf %s, w", reg1);
+    do_sub(size, is_const, value, name);    
     codegen_write_asm("movf STATUS, w");
     codegen_write_asm("andlw 1");
-    codegen_write_asm("xorlw 1");
+    move_to_working(size);
+    if (!is_const) {
+      /* restore name to original value */
+      offset_reg(name, size);
+    }
     break;
-  case size_int8:
-  case size_uint16:
-  case size_int16:
-  case size_uint24:
-  case size_int24:
-  case size_uint32:
-  case size_int32:
   case size_float:
   default:
     assert(0);
   }
-
-  if (reg1)
-    free(reg1);
 
 }
 
 static void
 do_lte(enum size_tag size, gp_boolean is_const, int value, char *name)
 {
-  char *reg1 = NULL;
 
   switch (size) {
   case size_bit:
     assert(0);
     break;
   case size_uint8:
-    reg1 = codegen_get_temp(size);
-    codegen_write_asm("movwf %s", reg1);
-    if (is_const) {
-      codegen_write_asm("movlw %#x", value);
-    } else {
-      codegen_write_asm("movf %s, w", name);
-    }    
-    codegen_write_asm("subwf %s, w", reg1);
+  case size_uint16:
+  case size_uint24:
+  case size_uint32:
+    do_sub(size, is_const, value, name);    
     codegen_write_asm("movf STATUS, w");
-    codegen_write_asm("andlw 1");
+    codegen_write_asm("andlw 5");
+    codegen_write_asm("btfss STATUS, Z");
+    codegen_write_asm("movlw 1");
+    move_to_working(size);
     break;
+  case size_int8:
+    offset_working(size);
+    do_sub(size, is_const, value, name);    
+    /* offset the input */
+    codegen_write_asm("addlw 0x80");
+    codegen_write_asm("movf STATUS, w");
+    codegen_write_asm("andlw 5");
+    codegen_write_asm("btfss STATUS, Z");
+    codegen_write_asm("movlw 1");
+    break;
+  case size_int16:
+  case size_int24:
+  case size_int32:
+    offset_working(size);
+    if (is_const) {
+      value = offset_constant(value, size);
+    } else {
+      offset_reg(name, size);
+    }
+    do_sub(size, is_const, value, name);    
+    codegen_write_asm("movf STATUS, w");
+    codegen_write_asm("andlw 5");
+    codegen_write_asm("btfss STATUS, Z");
+    codegen_write_asm("movlw 1");
+    move_to_working(size);
+    if (!is_const) {
+      /* restore name to original value */
+      offset_reg(name, size);
+    }
+    break;
+  case size_float:
+  default:
+    assert(0);
+  }
+
+}
+
+/****************************************************************************/
+/* External Functions                                                       */
+/****************************************************************************/
+
+static void
+do_mult(enum size_tag size, gp_boolean is_const, int value, char *name)
+{
+
+  switch (size) {
+  case size_bit:
+  case size_uint8:
+  case size_uint16:
+  case size_uint24:
+  case size_uint32:
+  case size_int8:
+  case size_int16:
+  case size_int24:
+  case size_int32:
+  case size_float:
+  default:
+    assert(0);
+  }
+
+}
+
+static void
+do_div(enum size_tag size, gp_boolean is_const, int value, char *name)
+{
+
+  switch (size) {
+  case size_bit:
+  case size_uint8:
   case size_int8:
   case size_uint16:
   case size_int16:
@@ -1165,8 +1207,26 @@ do_lte(enum size_tag size, gp_boolean is_const, int value, char *name)
     assert(0);
   }
 
-  if (reg1)
-    free(reg1);
+}
+
+static void
+do_mod(enum size_tag size, gp_boolean is_const, int value, char *name)
+{
+
+  switch (size) {
+  case size_bit:
+  case size_uint8:
+  case size_int8:
+  case size_uint16:
+  case size_int16:
+  case size_uint24:
+  case size_int24:
+  case size_uint32:
+  case size_int32:
+  case size_float:
+  default:
+    assert(0);
+  }
 
 }
 
@@ -1183,15 +1243,6 @@ codegen14(enum node_op op,
     break;
   case op_sub:
     do_sub(size, is_const, value, name);
-    break;
-  case op_mult:
-    do_mult(size, is_const, value, name);
-    break;
-  case op_div:
-    do_div(size, is_const, value, name);
-    break;
-  case op_mod:
-    do_mod(size, is_const, value, name);
     break;
   case op_neg:
     do_neg(size, is_const, value, name);
@@ -1223,17 +1274,25 @@ codegen14(enum node_op op,
   case op_ne:
     do_ne(size, is_const, value, name);
     break;
-  case op_gt:
-    do_gt(size, is_const, value, name);
-    break;
   case op_lt:
     do_lt(size, is_const, value, name);
     break;
-  case op_gte:
-    do_gte(size, is_const, value, name);
-    break;
-  case op_lte: 
+  case op_lte:
     do_lte(size, is_const, value, name);
+    break;
+  case op_gt:
+  case op_gte:
+    /* This is replaced in the optimizer.*/
+    assert(0);
+    break;
+  case op_mult:
+    do_mult(size, is_const, value, name);
+    break;
+  case op_div:
+    do_div(size, is_const, value, name);
+    break;
+  case op_mod:
+    do_mod(size, is_const, value, name);
     break;
   default:
     assert(0); /* Unhandled binary operator */

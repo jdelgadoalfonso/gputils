@@ -82,7 +82,7 @@ add_compile(char *compile)
 {
   gp_linked_list *list = state.compile;
   gp_linked_list *new;
-  int id = 0;
+  int id = 1;
 
   /* search the list for the file name */
   while(list) {
@@ -112,7 +112,7 @@ char *
 get_compile(int id)
 {
   gp_linked_list *list = state.compile;
-  int count = 0;
+  int count = 1;
  
   while(list) {
     if (count == id) {
@@ -181,26 +181,30 @@ set_optimize_level(void)
   state.optimize.constant_folding = false;
   state.optimize.dead_code = false;
   state.optimize.peep = false;
+  state.optimize.second_pass = false;
   state.optimize.strength_reduction = false;
   state.optimize.tail_calls = false;
   state.optimize.tree_shape = false;
   state.optimize.trival_expressions = false;
+  state.optimize.unused_mem = false;
 
   switch(state.optimize.level) {
   case 3:
     state.optimize.auto_inline = true;
+    state.optimize.second_pass = true;
     /* fall through */
   case 2:
     state.optimize.dead_code = true;
+    state.optimize.peep = true;
     state.optimize.tail_calls = true;
+    state.optimize.unused_mem = true;
     /* fall through */
   case 1:
     state.optimize.constant_folding = true;
-    state.optimize.peep = true;
     state.optimize.strength_reduction = true;
     state.optimize.tree_shape = true;
     state.optimize.trival_expressions = true;
-    break;
+    /* fall through */
   case 0:
     break;
   default:
@@ -249,7 +253,7 @@ show_usage(void)
   printf("  -k \"OPT\", --options \"OPT\"      Extra link or lib options.\n");
   printf("  -l, --list-chips               List supported processors.\n");
   printf("  -o FILE, --output FILE         Alternate name of output file.\n");
-  printf("  -O OPT, --optimize OPT         Optimization level.\n");
+  printf("  -O OPT, --optimize OPT         Optimization level [1].\n");
   printf("  -p PROC, --processor PROC      Select processor.\n");
   printf("  -q, --quiet                    Quiet.\n");
   printf("  -S, --compile                  Compile only, don't assemble or link.\n");
@@ -340,6 +344,7 @@ process_args( int argc, char *argv[])
       gp_quiet = 1;
       break;
     case 'S':
+      state.verbose_asm = true;
       state.compile_only = true;
       break;    
     case 't':
@@ -556,7 +561,8 @@ init(void)
   state.delete_temps = true;
   state.read_header = true;
   state.options = NULL;
-  state.optimize.level = 0;
+  state.optimize.level = 1;
+  state.verbose_asm = false;
   state.path = NULL;
   state.input = NULL;
   state.compile = NULL;
@@ -602,7 +608,7 @@ main(int argc, char *argv[])
     state.basefilename = strdup(state.srcfilename);
     pc = strrchr(state.basefilename, '.');
     if (pc) {
-      *pc = 0;
+      *pc++ = 0;
 
       if (strcasecmp(pc, "pal") == 0) {
         /* compile it */

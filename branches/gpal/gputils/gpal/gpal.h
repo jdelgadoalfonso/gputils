@@ -39,11 +39,14 @@ extern struct gpal_state {
     gp_boolean constant_folding;
     gp_boolean dead_code;
     gp_boolean peep;
+    gp_boolean second_pass;
     gp_boolean strength_reduction;
     gp_boolean tail_calls;
     gp_boolean tree_shape;
     gp_boolean trival_expressions;
+    gp_boolean unused_mem;
   } optimize;
+  gp_boolean verbose_asm;		/* write comments in assembly file */
   gp_linked_list *path;			/* list of include paths */
   gp_linked_list *input;		/* list of input file names */
   gp_linked_list *compile;		/* list of compiled files */
