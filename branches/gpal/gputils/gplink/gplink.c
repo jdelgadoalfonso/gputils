@@ -268,7 +268,7 @@ void gplink_open_coff(char *name)
   
   coff = fopen(file_name, "rb");
   if ((coff == NULL) && (strchr(file_name, PATH_CHAR) == 0)) { 
-    /* If include file and no "/" in name, try searching include pathes */
+    /* If no "/" in name, try searching include pathes */
     int i;
 
     for(i = 0; i < state.numpaths; i++) {

@@ -445,25 +445,34 @@ analyze_cond(tree *cond)
 void
 analyze_loop(tree *loop)
 {
-  char *start_label = NULL;  
+  char *start_label = NULL;
+  char *end_label = NULL;
+
+  start_label = codegen_next_label();
 
   analyze_statements(LOOP_INIT(loop));
 
   /* place the label for looping */
-  start_label = codegen_next_label();
   codegen_write_label(start_label);
+
+  /* write the exit statements */
+  if (LOOP_EXIT(loop)) {
+    end_label = codegen_next_label();
+    codegen_test(LOOP_EXIT(loop), end_label);
+  }
 
   /* write the loop body */
   analyze_statements(LOOP_BODY(loop));
 
   /* write the increment statements*/
   analyze_statements(LOOP_INCR(loop));
+  
+  /* jump to the beginning of the loop */
+  codegen_jump(start_label);
 
-  /* write the exit statements */
-  if (LOOP_EXIT(loop)) {
-    codegen_test(LOOP_EXIT(loop), start_label);
-  } else {
-    codegen_jump(start_label);
+  /* place the label for exiting */
+  if (LOOP_EXIT(loop)) {  
+    codegen_write_label(end_label);
   }
 
   if (start_label)
