@@ -101,12 +101,14 @@ gpal_SOURCES = \
 	gpal.c \
 	parse.y \
 	scan.l \
+	symbol.c \
 	tree.c \
 	analyze.h \
 	codegen.h \
 	codegen14.h \
 	gpal.h \
 	scan.h \
+	symbol.h \
 	tree.h
 
 
@@ -125,7 +127,7 @@ PROGRAMS = $(bin_PROGRAMS)
 
 am_gpal_OBJECTS = analyze.$(OBJEXT) codegen.$(OBJEXT) \
 	codegen14.$(OBJEXT) gpal.$(OBJEXT) parse.$(OBJEXT) \
-	scan.$(OBJEXT) tree.$(OBJEXT)
+	scan.$(OBJEXT) symbol.$(OBJEXT) tree.$(OBJEXT)
 gpal_OBJECTS = $(am_gpal_OBJECTS)
 gpal_DEPENDENCIES = ${top_builddir}/@LIBGPUTILS@ \
 	${top_builddir}/@LIBIBERTY@
@@ -140,7 +142,7 @@ am__depfiles_maybe = depfiles
 @AMDEP_TRUE@DEP_FILES = ./$(DEPDIR)/analyze.Po ./$(DEPDIR)/codegen.Po \
 @AMDEP_TRUE@	./$(DEPDIR)/codegen14.Po ./$(DEPDIR)/gpal.Po \
 @AMDEP_TRUE@	./$(DEPDIR)/parse.Po ./$(DEPDIR)/scan.Po \
-@AMDEP_TRUE@	./$(DEPDIR)/tree.Po
+@AMDEP_TRUE@	./$(DEPDIR)/symbol.Po ./$(DEPDIR)/tree.Po
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
 CCLD = $(CC)
@@ -201,6 +203,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gpal.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/parse.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/scan.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/symbol.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tree.Po@am__quote@
 
 distclean-depend:

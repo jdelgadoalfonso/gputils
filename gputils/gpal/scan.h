@@ -23,5 +23,9 @@ Boston, MA 02111-1307, USA.  */
 #define __SCAN_H__
 
 void open_src(char *name, enum src_types type);
+void scan_header(void);
+
+extern int header_line_number;
+extern char header_file_name[];
 
 #endif

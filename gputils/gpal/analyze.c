@@ -25,6 +25,7 @@ Boston, MA 02111-1307, USA.  */
 #include "gpal.h"
 #include "analyze.h"
 #include "codegen.h"
+#include "symbol.h"
 
 #ifdef STDC_HEADERS
 #include <stdarg.h>
@@ -33,20 +34,17 @@ Boston, MA 02111-1307, USA.  */
 /* prototypes */
 void analyze_statements(tree *statement);
 
-static linked_list *data_memory;
-static linked_list *last_link;
+static gp_linked_list *data_memory;
+static gp_linked_list *last_link;
 
 /* create a linked list of all the data memory used */
 
 static void
 add_link(struct variable *var)
 {
-  linked_list *new;
+  gp_linked_list *new = gp_list_make();
 
-  new = malloc(sizeof(linked_list));
-  new->item = var;
-  new->prev = NULL;
-  new->next = NULL;
+  gp_list_annotate(new, var);
 
   if (data_memory) {
     new->prev = last_link;
@@ -59,7 +57,7 @@ add_link(struct variable *var)
 
 }
 
-static void 
+void 
 analyze_error(tree *node, const char *format, ...)
 {
   va_list args;
@@ -74,7 +72,11 @@ analyze_error(tree *node, const char *format, ...)
   vsprintf(buffer, format, args);
   va_end(args);
 
-  printf("%s:%d:error %s\n", node->file_name, node->line_number, buffer);
+  if (node) {
+    printf("%s:%d:error %s\n", node->file_name, node->line_number, buffer);
+  } else {
+    printf("error %s\n", buffer);
+  }
 
   return;
 }
@@ -96,7 +98,12 @@ analyze_warning(tree *node, const char *format, ...)
   vsprintf(buffer, format, args);
   va_end(args);
 
-  printf("%s:%d:warning %s\n", node->file_name, node->line_number, buffer);
+  if (node) {
+    printf("%s:%d:warning %s\n", node->file_name, node->line_number, buffer);
+  } else {
+    printf("warning %s\n", buffer);
+  }
+
 
   return;
 }
@@ -113,117 +120,15 @@ int list_length(tree *L)
   }
 }
 
-/* FIXME: this function is common with gpasm/scan.l */
-
-static char *
-to_lower_case(char *name)
-{
-  char *new;
-  char *ptr;
-
-  ptr = new = strdup(name);
-
-  while (*ptr != '\0') {
-    *ptr = tolower(*ptr);
-    ptr++;
-  }
-
-  return new;
-}
-
-struct variable *
-add_global(char *name, char *alias, tree *node)
-{
-  struct symbol *sym;
-  struct variable *var;
-  tree *other_def;
-
-  sym = get_symbol(state.global, name);
-  if (sym == NULL) {
-    sym = add_symbol(state.global, name);
-    var = malloc(sizeof(*var));
-    annotate_symbol(sym, var);
-    var->alias = to_lower_case(alias);
-    var->class = storage_unknown;
-    var->size = 0;
-    var->bitsize = 0;
-    var->nelts = 0;
-    var->is_init = false;
-    var->is_equ = false;
-    var->is_constant = false;
-    var->value = 0;
-    var->node = node;
-  } else {
-    var = get_symbol_annotation(sym);
-    other_def = var->node;
-    analyze_error(node,
-                  "redefinition of \"%s\",\n\t\talso defined in %s:%i:",
-                  name,
-                  other_def->file_name,
-                  other_def->line_number);
-  }
-  
-  return var;
-}
-
-struct variable *
-add_constant(char *name, int value, tree *node)
-{
-  struct variable *var;
-
-  var = add_global(name, name, node);
-  var->is_constant = true;
-  var->value = value;
-
-  return var;
-}
-
-struct variable *
-get_global(char *name)
-{
-  struct symbol *sym;
-  struct variable *var = NULL;
-
-  sym = get_symbol(state.global, name);
-  if (sym != NULL) {
-    var = get_symbol_annotation(sym);
-  }
-
-  return var;
-}
-
-/* add one symbol to the global table */
-
-static struct variable *
-add_global_symbol(char *name,
-                  char *prefix,
-                  tree *symbol,
-                  enum node_storage class)
-{
-  char buffer[BUFSIZ];
-  struct variable *var;
-
-  if (prefix)
-    sprintf(buffer, "%s_%s", prefix, name);
-  else
-    sprintf(buffer, "%s", name);
-
-  var = add_global(name, buffer, symbol);
-  if (var)
-    var->class = class;
-
-  return var;
-}
-
 /* convert a private procedure to public */
 
 static void
 make_proc_public(struct variable *var, tree *prot)
 {
-  tree *def;
-  tree *head;
-  tree *arg;
-  struct variable *arg_var;
+  tree *def = NULL;
+  tree *head = NULL;
+  tree *arg = NULL;
+  struct variable *arg_var = NULL;
 
   /* FIXME: need to check that the prototype matches the definition */
 
@@ -259,8 +164,8 @@ make_proc_public(struct variable *var, tree *prot)
 static void
 add_arg_symbols(tree *node, char *name)
 {
-  tree *head;
-  tree *arg;
+  tree *head = NULL;
+  tree *arg = NULL;
   struct variable *var;
 
   if (node->tag == node_proc) {
@@ -413,7 +318,7 @@ test_symbol(tree *node)
   /* FIXME: need to test symbol type too.  Can't use procedure name in 
      and expression. */
 
-  sym = get_symbol(state.global, node->value.symbol);
+  sym = get_symbol(state.top, node->value.symbol);
   if (sym == NULL) {
     analyze_error(node, "unknown symbol \"%s\"", node->value.symbol);
     return 1;
@@ -662,7 +567,7 @@ analyze_procedure(tree *procedure, gp_boolean is_func)
   tree *statements;
 
   /* local symbol table */
-  state.global = push_symbol_table(state.global, 1);
+  state.top = push_symbol_table(state.top, 1);
 
   if (is_func) {
     head = FUNC_HEAD(procedure);
@@ -718,7 +623,7 @@ analyze_procedure(tree *procedure, gp_boolean is_func)
   }
   
   /* remove the local table */
-  state.global = pop_symbol_table(state.global);
+  state.top = pop_symbol_table(state.top);
 
   return;
 }
@@ -726,33 +631,23 @@ analyze_procedure(tree *procedure, gp_boolean is_func)
 void
 analyze_declarations(void)
 {
-  linked_list *list = data_memory;
+  gp_linked_list *list = data_memory;
   struct variable *var;
 
   while(list) {
-    var = list->item;
+    var = gp_list_get(list);
     codegen_write_data(var->alias, var->class);
     list = list->next;
   }
 
 }
 
-void
-analyze(void)
+static void
+analyze_module(tree *module)
 {
-  tree *current;
+  tree *current = MODULE_BODY(module);
   char *name;
-  struct variable *var;
-  enum node_storage class;
 
-  /* FIXME: manage memory better or at least try */
-  data_memory = NULL;
-
-  /* open the output file */
-  codegen_init_asm();
-
-  /* add all procedures and data to the global symbol table */
-  current = state.root;
   while (current) {
     switch (current->tag) {
     case node_decl:
@@ -765,26 +660,25 @@ analyze(void)
       add_global_symbol(name, NULL, current, storage_private);
       add_arg_symbols(current, name);     
       break;
-    case node_decl_prot:
-    case node_proc_prot:
-    case node_func_prot:
-      /* do nothing */
-      break;
     default:
       assert(0);
     }
     current = current->next;
   }
 
-  /* add all prototypes and externs to global symbol table */
-  current = state.root;
+  return;
+}
+
+static void
+analyze_public(tree *public)
+{
+  tree *current = PUBLIC_BODY(public);
+  char *name;
+  struct variable *var;
+  enum node_storage class;
+
   while (current) {
     switch (current->tag) {
-    case node_decl:
-    case node_proc:
-    case node_func:
-      /* do nothing */
-      break;
     case node_decl_prot:
     case node_proc_prot:
     case node_func_prot:
@@ -815,8 +709,8 @@ analyze(void)
         assert(0);
       }
       /* remove the prototype */
-      if (current == state.root) {
-        state.root = current->next;
+      if (current == PUBLIC_BODY(public)) {
+        PUBLIC_BODY(public) = current->next;
       } else {
         current->prev->next = current->next;      
       }     
@@ -827,8 +721,14 @@ analyze(void)
     current = current->next;
   }
 
-  /* scan though each procedure and function */
-  current = state.root;
+  return;
+}
+
+static void
+analyze_module_contents(tree *module)
+{
+  tree *current = MODULE_BODY(module);
+
   while (current) {
     switch (current->tag) {
     case node_decl:
@@ -841,8 +741,54 @@ analyze(void)
       analyze_procedure(current, 1);
       break;
     default:
-      print_node(current, 0);
       assert(0);
+    }
+    current = current->next;
+  }
+
+  return;
+}
+
+void
+analyze(void)
+{
+  tree *current;
+  gp_boolean found_module = false;
+
+  /* FIXME: manage memory better or at least try */
+  data_memory = NULL;
+
+  /* open the output file */
+  codegen_init_asm();
+
+  /* add all procedures and data to the global symbol table */
+  current = state.root;
+  while (current) {
+    if (current->tag == node_module) {
+      if (found_module) {
+        gp_error("found multiple modules in one file");
+      } else {
+        analyze_module(current);
+      }
+      found_module = true;
+    }
+    current = current->next;
+  }
+
+  /* add all prototypes and externs to global symbol table */
+  current = state.root;
+  while (current) {
+    if (current->tag == node_public) {
+      analyze_public(current);
+    }
+    current = current->next;
+  }
+
+  /* scan though each procedure and function */
+  current = state.root;
+  while (current) {
+    if (current->tag == node_module) {
+      analyze_module_contents(current);
     }
     current = current->next;
   }

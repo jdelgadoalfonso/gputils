@@ -38,8 +38,10 @@ enum node_tag {
   node_func_prot,  
   node_head,  
   node_loop,
+  node_module,
   node_proc,
   node_proc_prot,
+  node_public,
   node_string,
   node_symbol, 
   node_unop
@@ -153,6 +155,9 @@ typedef struct node_struct {
       tree *body;
     } loop;
     struct {
+      tree *body;
+    } module;    
+    struct {
       tree *head;
       enum node_storage storage;
       tree *body;
@@ -161,6 +166,9 @@ typedef struct node_struct {
       tree *head;
       enum node_storage storage;
     } proc_prot;
+    struct {
+      tree *body;
+    } public;    
     char *string;
     char *symbol;
     struct {
@@ -210,12 +218,14 @@ typedef struct node_struct {
 #define LOOP_EXIT(L)       (L)->value.loop.exit
 #define LOOP_INCR(L)       (L)->value.loop.incr
 #define LOOP_BODY(L)       (L)->value.loop.body
+#define MODULE_BODY(M)     (M)->value.module.body
 #define PROC_HEAD(P)       (P)->value.proc.head
 #define PROC_STOR(F)       (F)->value.proc.storage
 #define PROC_BODY(P)       (P)->value.proc.body
 #define PROC_PROT_HEAD(P)  (P)->value.proc_prot.head
 #define PROC_PROT_STOR(P)  (P)->value.proc_prot.storage
 #define PROC_PROT_BODY(P)  (P)->value.proc_prot.body
+#define PUBLIC_BODY(P)     (P)->value.public.body
 #define UNOP_OP(B)         (B)->value.unop.op
 #define UNOP_ARG(B)        (B)->value.unop.p0
 
@@ -235,8 +245,10 @@ tree *mk_func(tree *head, enum node_storage storage, enum node_size ret, tree *b
 tree *mk_func_prot(tree *head, enum node_storage storage, enum node_size ret);
 tree *mk_head(char *name, tree *args);
 tree *mk_loop(tree *init, tree *exit, tree *incr, tree *body);
+tree *mk_module(tree *body);
 tree *mk_proc(tree *head, enum node_storage storage, tree *body);
 tree *mk_proc_prot(tree *head, enum node_storage storage);
+tree *mk_public(tree *body);
 tree *mk_string(char *value);
 tree *mk_symbol(char *value);
 tree *mk_unop(enum node_op op, tree *p0);
@@ -245,7 +257,7 @@ tree *node_list(tree *head, tree *tail);
 
 enum node_storage determine_storage(tree *node);
 char *find_node_name(tree *node);
-tree *find_node(char *name, enum node_tag tag);
+tree *find_node(tree *search, char *name, enum node_tag tag);
 
 void print_node(tree *node, int level);
 

@@ -11,12 +11,14 @@ gpal_SOURCES=\
 	gpal.c \
 	parse.y \
 	scan.l \
+	symbol.c \
 	tree.c \
 	analyze.h \
 	codegen.h \
 	codegen14.h \
 	gpal.h \
 	scan.h \
+	symbol.h \
 	tree.h
 
 gpal_LDADD = ${top_builddir}/@LIBGPUTILS@ ${top_builddir}/@LIBIBERTY@
