@@ -62,16 +62,16 @@ static tree *case_ident;
   } r;
   char *s;
   tree *t;
-  enum node_type y;
-  enum node_size z;
+  enum node_dir d;
+  enum node_key k;
   enum node_op o;
 }
 
 /* keywords */
-%token <i> CASE, CONST_TYPE, BEGIN_KEY, BIT_SIZE, BYTE_SIZE, ELSE, ELSIF
-%token <i> END, EXTERN_STORAGE, FOR, FUNCTION_TOK, IF, IN, IS, LOOP
-%token <i> MODULE, NULL_TOK, OTHERS, PRAGMA, PROCEDURE, PUBLIC_STORAGE,
-%token <i> RETURN, THEN, TO, VAR_TYPE, VOLATILE_STORAGE, WHEN
+%token <i> ARRAY, CASE, CONST_KEY, BEGIN_KEY, ELSE, ELSIF
+%token <i> END, EXTERN_STORAGE, FOR, FUNCTION_TOK, IF, IN, INOUT, IS, LOOP
+%token <i> MODULE, NULL_TOK, OF, OTHERS, PRAGMA, PROCEDURE, PUBLIC_STORAGE,
+%token <i> RETURN, THEN, TO, TYPE, OUT, VAR_KEY, VOLATILE_STORAGE, WHEN
 %token <i> WHILE, WITH
 
 /* general */
@@ -79,7 +79,7 @@ static tree *case_ident;
 %token <s> IDENT
 %token <i> NUMBER
 %token <s> STRING
-%token <i> ';'
+%token <i> ';', ':'
 
 /* operators */
 %token <i> LSH, RSH, ARROW
@@ -95,14 +95,15 @@ static tree *case_ident;
 %type <i> '+', '-', '*', '/', '%', '!', '~'
 %type <t> expr, e0, e1, e2, e3, e4, e5, e6, e7, e8,
 %type <o> e1op, e2op, e3op, e4op, e5op, e6op, e7op, e8op
+%type <t> type
 %type <t> head
 %type <t> arg_list
 %type <t> arg
+%type <d> arg_direction
 %type <t> body
 %type <t> decl_block
 %type <t> decl
-%type <y> decl_type
-%type <z> decl_size
+%type <k> decl_key
 %type <t> statement_block
 %type <t> statement
 %type <r> range
@@ -149,7 +150,7 @@ entity:
 	{
 	  add_entity(mk_file($3, state.src->type));
 	}
-	;
+        ;
 
 element_list:
 	element
@@ -169,6 +170,11 @@ element:
 	  $$ = mk_pragma($2);
 	}
 	|
+	type
+	{
+	  $$ = $1;
+        }
+	|
 	decl
 	{
 	  $$ = $1;
@@ -184,16 +190,36 @@ element:
 	  $$ = mk_proc($2, NULL);
      	}
         |
-	FUNCTION_TOK head RETURN decl_size body FUNCTION_TOK ';'
+	FUNCTION_TOK head RETURN IDENT body FUNCTION_TOK ';'
 	{ 
 	  $$ = mk_func($2, $4, $5);
      	}
         |
-	FUNCTION_TOK head RETURN decl_size ';'
+	FUNCTION_TOK head RETURN IDENT ';'
 	{ 
 	  $$ = mk_func($2, $4, NULL);
      	}
 	;
+
+type:
+	TYPE IDENT IS IDENT ';'
+	{
+	  /* alias */
+	  $$ = mk_type($2, NULL, NULL, NULL, $4);
+        }
+	|
+	TYPE IDENT IS ARRAY range OF IDENT ';'
+	{
+	  /* array */
+	  $$ = mk_type($2, $5.start, $5.end, NULL, $7);
+        }
+	|
+	TYPE IDENT IS '(' parameter_list ')' ';'
+	{
+	  /* enumerated type */
+	  $$ = mk_type($2, NULL, NULL, $5, NULL);
+        }
+        ;
 
 head:
 	IDENT
@@ -220,10 +246,16 @@ arg_list:
 	;	
 
 arg:
-	decl_size IDENT
+	IDENT ':' arg_direction IDENT 
 	{	  
-	  $$ = mk_decl(type_var, $1, $2, NULL);
+	  $$ = mk_arg($1, $3, $4);
         }
+	;
+
+arg_direction:
+	  IN    { $$ = dir_in; }
+	| INOUT { $$ = dir_inout; }
+	| OUT   { $$ = dir_out; }
 	;
 
 body:
@@ -251,38 +283,27 @@ decl_block:
 	;
 
 decl:
-	decl_type decl_size IDENT ';'
+
+	decl_key IDENT ':' IDENT ';'
 	{ 
-	  $$ = mk_decl($1, $2, $3, NULL);
+	  $$ = mk_decl($1, $4, $2, NULL);
         }
 	|
-	decl_type decl_size IDENT '=' expr ';'
+	decl_key IDENT ':' IDENT '=' expr ';'
 	{ 
-	  $$ = mk_decl($1, $2, $3, $5);
+	  $$ = mk_decl($1, $4, $2, $6);
         }
 	;
 
-decl_type:
-	CONST_TYPE
+decl_key:
+	CONST_KEY
 	{
-	  $$ = type_const;
+	  $$ = key_const;
 	}
 	|
-	VAR_TYPE
+	VAR_KEY
 	{
-	  $$ = type_var;
-	}
-	;
-
-decl_size:
-	BIT_SIZE
-	{
-	  $$ = size_bit;
-	}
-	|
-	BYTE_SIZE
-	{
-	  $$ = size_byte;
+	  $$ = key_var;
 	}
 	;
 

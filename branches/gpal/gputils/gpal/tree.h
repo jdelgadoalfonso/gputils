@@ -26,6 +26,7 @@ Boston, MA 02111-1307, USA.  */
 
 enum node_tag { 
   node_unknown,
+  node_arg,
   node_assembly,
   node_body,
   node_binop,
@@ -36,11 +37,13 @@ enum node_tag {
   node_file,
   node_func,  
   node_head,  
+  node_key, 
   node_loop,
   node_pragma,
   node_proc,
   node_string,
   node_symbol, 
+  node_type,
   node_unop
 };
 
@@ -69,16 +72,17 @@ enum node_op {
   op_ne        /* branch if not equal */
 };
 
-enum node_type { 
-  type_unknown,
-  type_var,
-  type_const
+enum node_key { 
+  key_unknown,
+  key_var,
+  key_const
 };
 
-enum node_size { 
-  size_unknown,
-  size_bit,
-  size_byte
+enum node_dir { 
+  dir_unknown,
+  dir_in,
+  dir_inout,
+  dir_out
 };
 
 /* FIXME: maybe use near and far for bank and page storage key words */
@@ -104,6 +108,11 @@ typedef struct node_struct tree;
 typedef struct node_struct {
   enum node_tag tag;
   union {
+    struct {
+      char *name;
+      enum node_dir dir;
+      char *type;
+    } arg;
     char *assembly;
     struct {
       tree *decl;
@@ -125,8 +134,8 @@ typedef struct node_struct {
       tree *next; /* else or elsif */
     } cond;    
     struct {
-      enum node_type type;
-      enum node_size size;
+      enum node_key key;
+      char *type;
       char *name;
       tree *init;
     } decl;
@@ -136,7 +145,7 @@ typedef struct node_struct {
     } file;
     struct {
       tree *head;
-      enum node_size ret;
+      char *ret;
       tree *body;
     } func;
     struct {
@@ -158,6 +167,13 @@ typedef struct node_struct {
     char *string;
     char *symbol;
     struct {
+      char *type;
+      tree *start;
+      tree *end;
+      tree *list;
+      char *of;
+    } type;
+    struct {
       int op;
       tree *p0;
     } unop;
@@ -173,6 +189,9 @@ typedef struct node_struct {
 
 } node;
 
+#define ARG_NAME(A)        (A)->value.arg.name
+#define ARG_DIR(A)         (A)->value.arg.dir
+#define ARG_TYPE(A)        (A)->value.arg.type
 #define BODY_DECL(B)       (B)->value.body.decl
 #define BODY_STATEMENTS(B) (B)->value.body.statements
 #define BINOP_OP(B)        (B)->value.binop.op
@@ -183,8 +202,8 @@ typedef struct node_struct {
 #define COND_TEST(C)       (C)->value.cond.cond
 #define COND_BODY(C)       (C)->value.cond.body
 #define COND_NEXT(C)       (C)->value.cond.next
+#define DECL_KEY(D)        (D)->value.decl.key
 #define DECL_TYPE(D)       (D)->value.decl.type
-#define DECL_SIZE(D)       (D)->value.decl.size
 #define DECL_NAME(D)       (D)->value.decl.name
 #define DECL_INIT(D)       (D)->value.decl.init
 #define FILE_TYPE(F)       (F)->value.file.type
@@ -200,6 +219,11 @@ typedef struct node_struct {
 #define PROC_HEAD(P)       (P)->value.proc.head
 #define PROC_STOR(F)       (F)->value.proc.storage
 #define PROC_BODY(P)       (P)->value.proc.body
+#define TYPE_TYPE(T)       (T)->value.type.type
+#define TYPE_START(T)      (T)->value.type.start
+#define TYPE_END(T)        (T)->value.type.end
+#define TYPE_LIST(T)       (T)->value.type.list
+#define TYPE_OF(T)         (T)->value.type.of
 #define UNOP_OP(B)         (B)->value.unop.op
 #define UNOP_ARG(B)        (B)->value.unop.p0
 
@@ -207,21 +231,24 @@ void init_nodes(void);
 void free_nodes(void);
 
 tree *mk_node(enum node_tag tag);
+
+tree *mk_arg(char *name, enum node_dir dir, char *type);
 tree *mk_assembly(char *assembly);
 tree *mk_body(tree *decl, tree *statements);
 tree *mk_binop(enum node_op op, tree *p0, tree *p1);
 tree *mk_call(char *name, tree *args);
 tree *mk_constant(int value);
 tree *mk_cond(tree *cond, tree *body, tree *next);
-tree *mk_decl(enum node_type type, enum node_size size, char *name, tree *init);
+tree *mk_decl(enum node_key key, char *type, char *name, tree *init);
 tree *mk_file(tree *body, enum source_type type);
-tree *mk_func(tree *head, enum node_size ret, tree *body);
+tree *mk_func(tree *head, char *ret, tree *body);
 tree *mk_head(char *name, tree *args);
 tree *mk_loop(tree *init, tree *exit, tree *incr, tree *body);
 tree *mk_pragma(tree *pragma);
 tree *mk_proc(tree *head, tree *body);
 tree *mk_string(char *value);
 tree *mk_symbol(char *value);
+tree *mk_type(char *type, tree *start, tree *end, tree *list, char *of);
 tree *mk_unop(enum node_op op, tree *p0);
 
 tree *node_list(tree *head, tree *tail);
