@@ -23,6 +23,7 @@ Boston, MA 02111-1307, USA.  */
 
 #include "libgputils.h"
 #include "gpal.h"
+#include "analyze.h"
 #include "codegen.h"
 #include "codegen14.h"
 
@@ -31,25 +32,25 @@ Boston, MA 02111-1307, USA.  */
 void
 gen_get_mem(char *name)
 {
-  write_asm_line("movf %s, w", name);
+  codegen_write_asm("movf %s, w", name);
 }
 
 void
 gen_put_mem(char *name)
 {
-  write_asm_line("movwf %s", name);
+  codegen_write_asm("movwf %s", name);
 }
 
 void
 gen_put_reg(int reg)
 {
-  write_asm_line("movwf %#x", reg);
+  codegen_write_asm("movwf %#x", reg);
 }
 
 void
 gen_immed(int value)
 {
-  write_asm_line("movlw %#x", value);
+  codegen_write_asm("movlw %#x", value);
 }
 
 /* branches */
@@ -57,37 +58,37 @@ gen_immed(int value)
 void
 gen_call(char *name)
 {
-  write_asm_line("pagesel %s", name);
-  write_asm_line("call %s", name);
+  codegen_write_asm("pagesel %s", name);
+  codegen_write_asm("call %s", name);
 }
 
 void
 gen_goto(char *name)
 {
-  write_asm_line("pagesel %s", name);
-  write_asm_line("goto %s", name);
+  codegen_write_asm("pagesel %s", name);
+  codegen_write_asm("goto %s", name);
 }
 
 void
 gen_return(void)
 {
-  write_asm_line("return");
+  codegen_write_asm("return");
 }
 
 void
 gen_boolean(void)
 {
-  write_asm_line("btfss STATUS, Z");
-  write_asm_line("movlw 1");
+  codegen_write_asm("btfss STATUS, Z");
+  codegen_write_asm("movlw 1");
 }
 
 void
 write_test(tree *test, char *end_label)
 {
   gen_expr(test);
-  write_asm_line("addlw 0             ; FIXME update CCR is not always needed");
-  write_asm_line("btfsc STATUS, Z");
-  write_asm_line("goto %s", end_label);
+  codegen_write_asm("addlw 0             ; FIXME update CCR is not always needed");
+  codegen_write_asm("btfsc STATUS, Z");
+  codegen_write_asm("goto %s", end_label);
 }
 
 static void
@@ -97,15 +98,15 @@ gen_unop_expr(tree *expr)
   gen_expr(expr->value.unop.p0);
   switch (expr->value.unop.op) {
   case op_not:
-    write_asm_line("xorlw 1"); 
+    codegen_write_asm("xorlw 1"); 
     break;
   case op_add:
     break;
   case op_neg:
-    write_asm_line("sublw 0"); 
+    codegen_write_asm("sublw 0"); 
     break;
   case op_com:
-    write_asm_line("xorlw 0xff"); 
+    codegen_write_asm("xorlw 0xff"); 
     break;
   default:
     assert(0);
@@ -119,10 +120,10 @@ gen_binop_constant(enum node_op op, int value)
 
   switch (op) {
   case op_add:
-    write_asm_line("addlw %#x", value);
+    codegen_write_asm("addlw %#x", value);
     break;
   case op_sub:
-    write_asm_line("sublw %#x", value); 
+    codegen_write_asm("sublw %#x", value); 
     break;
   case op_mult:
   case op_div:
@@ -130,47 +131,47 @@ gen_binop_constant(enum node_op op, int value)
     gp_error("unsupported operator");
     break;
   case op_and:
-    write_asm_line("andlw %#x", value); 
+    codegen_write_asm("andlw %#x", value); 
     break;
   case op_or:
-    write_asm_line("iorlw %#x", value); 
+    codegen_write_asm("iorlw %#x", value); 
     break;
   case op_xor:
-    write_asm_line("xorlw %#x", value); 
+    codegen_write_asm("xorlw %#x", value); 
     break;
   case op_lsh:
   case op_rsh:
     gp_error("unsupported operator");
     break;
   case op_eq:
-    write_asm_line("xorlw %#x", value); 
+    codegen_write_asm("xorlw %#x", value); 
     gen_boolean();
-    write_asm_line("xorlw 1"); 
+    codegen_write_asm("xorlw 1"); 
     break;
   case op_ne:
-    write_asm_line("xorlw %#x", value); 
+    codegen_write_asm("xorlw %#x", value); 
     gen_boolean();
     break;
   case op_lt:
-    write_asm_line("sublw %#x", value);
-    write_asm_line("movf STATUS, w");
-    write_asm_line("andlw 1");
-    write_asm_line("xorlw 1");
+    codegen_write_asm("sublw %#x", value);
+    codegen_write_asm("movf STATUS, w");
+    codegen_write_asm("andlw 1");
+    codegen_write_asm("xorlw 1");
     break;
   case op_gt:
-    write_asm_line("sublw %#x", value); 
-    write_asm_line("movf STATUS, w");
-    write_asm_line("andlw 1");
+    codegen_write_asm("sublw %#x", value); 
+    codegen_write_asm("movf STATUS, w");
+    codegen_write_asm("andlw 1");
     break;
   case op_gte:
   case op_lte: 
     gp_error("unsupported operator");
     break;
   case op_land:
-    write_asm_line("andlw %#x", value); 
+    codegen_write_asm("andlw %#x", value); 
     break;
   case op_lor:
-    write_asm_line("iorlw %#x", value); 
+    codegen_write_asm("iorlw %#x", value); 
     break;
   default:
     assert(0); /* Unhandled binary operator */
@@ -184,10 +185,10 @@ gen_binop_symbol(enum node_op op, char *name)
 
   switch (op) {
   case op_add:
-    write_asm_line("addwf %s, w", name); 
+    codegen_write_asm("addwf %s, w", name); 
     break;
   case op_sub:
-    write_asm_line("subwf %s, w", name); 
+    codegen_write_asm("subwf %s, w", name); 
     break;
   case op_mult:
   case op_div:
@@ -195,47 +196,47 @@ gen_binop_symbol(enum node_op op, char *name)
     gp_error("unsupported operator");
     break;
   case op_and:
-    write_asm_line("andwf %s, w", name); 
+    codegen_write_asm("andwf %s, w", name); 
     break;
   case op_or:
-    write_asm_line("iorwf %s, w", name); 
+    codegen_write_asm("iorwf %s, w", name); 
     break;
   case op_xor:
-    write_asm_line("xorwf %s, w", name); 
+    codegen_write_asm("xorwf %s, w", name); 
     break;
   case op_lsh:
   case op_rsh:
     gp_error("unsupported operator");
     break;
   case op_eq:
-    write_asm_line("xorwf %s, w", name); 
+    codegen_write_asm("xorwf %s, w", name); 
     gen_boolean();
-    write_asm_line("xorlw 1"); 
+    codegen_write_asm("xorlw 1"); 
     break;
   case op_ne:
-    write_asm_line("xorwf %s, w", name); 
+    codegen_write_asm("xorwf %s, w", name); 
     gen_boolean();
     break;
   case op_lt:
-    write_asm_line("subwf %s, w", name); 
-    write_asm_line("movf STATUS, w");
-    write_asm_line("andlw 1");
-    write_asm_line("xorlw 1");
+    codegen_write_asm("subwf %s, w", name); 
+    codegen_write_asm("movf STATUS, w");
+    codegen_write_asm("andlw 1");
+    codegen_write_asm("xorlw 1");
     break;
   case op_gt:
-    write_asm_line("subwf %s, w", name); 
-    write_asm_line("movf STATUS, w");
-    write_asm_line("andlw 1");
+    codegen_write_asm("subwf %s, w", name); 
+    codegen_write_asm("movf STATUS, w");
+    codegen_write_asm("andlw 1");
     break;
   case op_gte:
   case op_lte: 
     gp_error("unsupported operator");
     break;
   case op_land:
-    write_asm_line("andwf %s, w", name); 
+    codegen_write_asm("andwf %s, w", name); 
     break;
   case op_lor:
-    write_asm_line("iorwf %s, w", name); 
+    codegen_write_asm("iorwf %s, w", name); 
     break;
   default:
     assert(0); /* Unhandled binary operator */
@@ -267,8 +268,8 @@ gen_binop_expr(tree *expr)
     char temp_name[BUFSIZ];
  
     /* it is a complex expression so save temp data */
-    sprintf(temp_name, "%s_temp_%d", code_name, temp_number++);
-    write_asm_line("movwf %s", temp_name); 
+    sprintf(temp_name, "%s_temp_%d", state.basefilename, temp_number++);
+    codegen_write_asm("movwf %s", temp_name); 
     gen_expr(lhs);
     gen_binop_symbol(expr->value.binop.op, temp_name);
   }
@@ -287,7 +288,7 @@ gen_expr(tree *expr)
   case node_symbol:
     var = get_global(expr->value.symbol);
     if (var->is_constant) {
-      write_asm_line("movlw %i", var->value);
+      codegen_write_asm("movlw %i", var->value);
     } else {
       gen_get_mem(var->alias);
     }

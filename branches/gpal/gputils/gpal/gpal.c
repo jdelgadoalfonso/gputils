@@ -25,13 +25,13 @@ Boston, MA 02111-1307, USA.  */
 #include "gpal.h"
 #include "scan.h"
 #include "tree.h"
-#include "codegen.h"
+#include "analyze.h"
 
 struct gpal_state state;
 
 int yyparse(void);
 
-#define GET_OPTIONS "?I:acdhk:lo:p:Stqv"
+#define GET_OPTIONS "?I:acdhk:lo:O:p:Stqv"
 
 /* Used: acdDehiIlmopqrwv */
 static struct option longopts[] =
@@ -44,6 +44,7 @@ static struct option longopts[] =
   { "options",     1, 0, 'k' },
   { "list-chips",  0, 0, 'l' },
   { "output",      1, 0, 'o' },
+  { "optimize",    1, 0, 'O' },
   { "processor",   1, 0, 'p' },
   { "compile",     0, 0, 'S' },
   { "save-temps",  0, 0, 't' },
@@ -61,9 +62,10 @@ init(void)
   state.archive = false;
   state.delete_temps = true;
   state.options = NULL;
+  state.optimize.level = 0;
   state.path_num = 0;
   state.num_files = 0;
-  state.link_list = NULL;
+  state.file_list = NULL;
   state.cmd_processor = false;
   state.processor = no_processor;
   state.processor_chosen = false;
@@ -168,6 +170,44 @@ add_entity(tree *node)
 }
 
 static void
+set_optimize_level(void)
+{
+
+  /* default */
+  state.optimize.auto_inline = false;
+  state.optimize.constant_folding = false;
+  state.optimize.dead_code = false;
+  state.optimize.peep = false;
+  state.optimize.strength_reduction = false;
+  state.optimize.tail_calls = false;
+  state.optimize.tree_shape = false;
+  state.optimize.trival_expressions = false;
+
+  switch(state.optimize.level) {
+  case 3:
+    state.optimize.auto_inline = true;
+    /* fall through */
+  case 2:
+    state.optimize.dead_code = true;
+    state.optimize.tail_calls = true;
+    /* fall through */
+  case 1:
+    state.optimize.constant_folding = true;
+    state.optimize.peep = true;
+    state.optimize.strength_reduction = true;
+    state.optimize.tree_shape = true;
+    state.optimize.trival_expressions = true;
+    break;
+  case 0:
+    break;
+  default:
+    gp_error("invalid optimization level");
+  }
+
+  return;
+}
+
+static void
 show_usage(void)
 {
   printf("Usage: gpal [options] file\n");
@@ -180,6 +220,7 @@ show_usage(void)
   printf("  -k \"OPT\", --options \"OPT\"      Extra link or lib options.\n");
   printf("  -l, --list-chips               List supported processors.\n");
   printf("  -o FILE, --output FILE         Alternate name of output file.\n");
+  printf("  -O OPT, --optimize OPT         Optimization level.\n");
   printf("  -p PROC, --processor PROC      Select processor.\n");
   printf("  -q, --quiet                    Quiet.\n");
   printf("  -S, --compile                  Compile only, don't assemble or link.\n");
@@ -199,6 +240,21 @@ process_args( int argc, char *argv[])
   int c;
   int usage = 0;
 
+  /* first pass through options */
+  while ((c = getopt_long(argc, argv, GET_OPTIONS, longopts, 0)) != EOF) {
+    switch (c) {
+    case 'O':
+      state.optimize.level = atoi(optarg);
+      break;
+    }
+  }
+
+  /* reset the getopt_long index for the next call */
+  optind = 1;
+
+  set_optimize_level();
+
+  /* second pass through options */
   while ((c = getopt_long(argc, argv, GET_OPTIONS, longopts, 0)) != EOF) {
     switch (c) {
     case '?':
@@ -226,6 +282,9 @@ process_args( int argc, char *argv[])
       break;
     case 'o':
       state.outfilename = strdup(optarg);
+      break;
+    case 'O':
+      /* do nothing */
       break;
     case 'p':
       select_processor(optarg);
@@ -269,7 +328,7 @@ process_args( int argc, char *argv[])
 }
 
 static void
-compile(char *base_name)
+compile(void)
 {
   /* symbol table */
   state.global = push_symbol_table(state.global, 1);
@@ -289,21 +348,8 @@ compile(char *base_name)
   /* parse the input file */
   yyparse();
 
-  /* optimize the intermediate code */
-  /* optimize(); */
-
-  /* open output filename */
-  strcpy(state.asmfilename, base_name);
-  strcat(state.asmfilename, ".asm");
-  state.output.f = fopen(state.asmfilename, "w");
-  if (state.output.f == NULL) {
-    perror(state.asmfilename);
-    exit(1);
-  }
-
-  /* write the assembly output */
-  write_asm();
-  fclose(state.output.f);
+  /* check for semantic errors and write the code */
+  analyze();
 
   /* destory symbol table for the current module */
   state.global = pop_symbol_table(state.global);
@@ -353,28 +399,28 @@ assemble(char *file_name, gp_boolean asm_source)
   return;
 }
 
+static linked_list *last_file;
+
 static void
-link_list(char *file_name)
+add_file_list(char *file_name)
 {
-  file_list *new;
-  file_list *list;
+  linked_list *new;
 
-  new = (file_list *)malloc(sizeof(*new));
-  new->name = (char *)malloc(strlen(file_name) + 3);
-  strcpy(new->name, file_name);
-  strcat(new->name, ".o");
+  new = malloc(sizeof(*new));
+  new->item = malloc(strlen(file_name) + 3);
+  strcpy(new->item, file_name);
+  strcat(new->item, ".o");
+  new->prev = NULL;
   new->next = NULL;
-  
-  if (state.link_list == NULL) {
-    state.link_list = new;
-  } else {
-    list = state.link_list;
-    while(list->next != NULL)
-      list = list->next;
-    
-    list->next = new;
-  }
 
+  if (state.file_list) {
+    new->prev = last_file;
+    last_file->next = new;
+    last_file = new;
+  } else {
+    state.file_list = new;
+    last_file = new;
+  }
 
   return;
 }
@@ -385,7 +431,7 @@ static void
 combine_output(void)
 {
   char command[BUFSIZ];
-  file_list *list = state.link_list;
+  linked_list *list = state.file_list;
 
   /* only link if commanded */
   if ((state.compile_only == true) || (state.no_link == true))
@@ -427,7 +473,7 @@ combine_output(void)
     gp_error("no files to link or archive");
   } else {
     while(list != NULL) {
-      strcat(command, list->name); 
+      strcat(command, list->item); 
       strcat(command, " ");
       list = list->next;
     }
@@ -439,9 +485,9 @@ combine_output(void)
   if (system(command)) {
     gp_num_errors++;
   } else if (state.delete_temps == true) {
-    list = state.link_list;
+    list = state.file_list;
     while(list != NULL) {
-      unlink(list->name);
+      unlink(list->item);
       list = list->next;
     }    
   
@@ -467,18 +513,18 @@ main(int argc, char *argv[])
     
     if (strcasecmp(pc, "pal") == 0) {
       /* compile it */
-      compile(state.basefilename);
+      compile();
       assemble(state.basefilename, false);
-      link_list(state.basefilename);
+      add_file_list(state.basefilename);
     } else if (strcasecmp(pc, "pub") == 0) {
       gp_error("public files are not compiled \"%s\"", state.file_name[i]);
     } else if (strcasecmp(pc, "asm") == 0) {
       /* assemble it */
       assemble(state.basefilename, true);
-      link_list(state.basefilename);
+      add_file_list(state.basefilename);
     } else if ((strcasecmp(pc, "o") == 0) || (strcasecmp(pc, "a") == 0)) {
       /* add it to the list for linking */
-      link_list(state.basefilename);
+      add_file_list(state.basefilename);
     } else {
       gp_error("unknown extension of \"%s\"", state.file_name[i]);
       exit(1);

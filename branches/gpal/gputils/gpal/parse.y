@@ -26,12 +26,18 @@ Boston, MA 02111-1307, USA.  */
 #include "gpal.h"
 #include "scan.h"
 
-void yyerror(char *message)
+void
+yyerror(char *message)
 {
-  gp_error("%s:%d:%s",
-           state.src->name,
-	   state.src->line_number,
-	   message);
+
+  gp_num_errors++;
+
+  if (gp_quiet != 0)
+    return;
+    
+  printf("%s:%d:%s\n", state.src->name, state.src->line_number, message);
+
+  return;
 }
 
 int yylex(void);
@@ -122,7 +128,7 @@ line:
           if (state.src->type == source) {
             add_entity(mk_proc($2, storage_private, $3));
           } else {
-            gp_error("procedures can only be defined in .pal files");
+            yyerror("procedures can only be defined in .pal files");
           }
      	}
 	|
@@ -133,7 +139,7 @@ line:
 	  } else if (state.src->type == with) {
             add_entity(mk_proc_prot($2, storage_extern));
           } else {
-            gp_error("procedure declarations can only be in .pub files");
+            yyerror("procedure declarations can only be in .pub files");
           }
      	}
         |
@@ -142,7 +148,7 @@ line:
 	  if (state.src->type == source) {
             add_entity(mk_func($2, storage_private, $4, $5));
           } else {
-            gp_error("functions can only be defined in .pal files");
+            yyerror("functions can only be defined in .pal files");
           }
      	}
         |
@@ -153,7 +159,7 @@ line:
 	  } else if (state.src->type == with) {
             add_entity(mk_func_prot($2, storage_extern, $4));
           } else {
-            gp_error("function declarations can only be in .pub files");
+            yyerror("function declarations can only be in .pub files");
           }
      	}
 	;
@@ -173,19 +179,19 @@ head:
 arg_list:
 	arg
 	{
-	  $$ = mk_list($1, NULL);
+	  $$ = node_list($1, NULL);
 	}
 	|
 	arg ',' arg_list
 	{
-	  $$ = mk_list($1, $3);
+	  $$ = node_list($1, $3);
 	}
 	;	
 
 arg:
 	decl_size IDENT
 	{	  
-	  $$ = mk_decl(0, $1, 0, mk_symbol($2));
+	  $$ = mk_decl(type_var, $1, storage_public, $2, NULL);
         }
 	;
 
@@ -204,17 +210,17 @@ body:
 decl_block:
 	decl
 	{
-	  $$ = mk_list($1, NULL);
+	  $$ = node_list($1, NULL);
 	}
 	|
         decl decl_block
 	{
-	  $$ = mk_list($1, $2);
+	  $$ = node_list($1, $2);
 	}
 	;
 
 decl:
-	decl_type decl_size parameter_list ';'
+	decl_type decl_size IDENT ';'
 	{ 
 	  if (state.src->type == source_with) {
 	    $$ = mk_decl_prot($1, $2, storage_public, $3);
@@ -222,7 +228,20 @@ decl:
 	    $$ = mk_decl_prot($1, $2, storage_extern, $3);
 	  } else {
 	    /* should only get here from inside a function or procedure */
-	    $$ = mk_decl($1, $2, storage_private, $3);
+	    $$ = mk_decl($1, $2, storage_private, $3, NULL);
+	  }
+        }
+	|
+	decl_type decl_size IDENT '=' expr ';'
+	{ 
+	  if (state.src->type == source_with) {
+	    yyerror("initialized data can only appear in pal files");
+	    $$ = mk_decl_prot($1, $2, storage_public, $3);
+	  } else if (state.src->type == with) {
+	    yyerror("initialized data can only appear in pal files");
+            $$ = mk_decl_prot($1, $2, storage_extern, $3);
+	  } else {
+	    $$ = mk_decl($1, $2, storage_private, $3, $5);
 	  }
         }
 	;
@@ -254,12 +273,12 @@ decl_size:
 statement_block:
 	statement
 	{
-	  $$ = mk_list($1, NULL);
+	  $$ = node_list($1, NULL);
 	}
 	|
 	statement statement_block
 	{
-	  $$ = mk_list($1, $2);
+	  $$ = node_list($1, $2);
 	}
 	;
 
@@ -319,12 +338,12 @@ loop_statement:
 parameter_list:
 	expr
 	{
-	  $$ = mk_list($1, NULL);
+	  $$ = node_list($1, NULL);
 	}
 	|
 	expr ',' parameter_list
 	{
-	  $$ = mk_list($1, $3);
+	  $$ = node_list($1, $3);
 	}
 	;
 

@@ -36,7 +36,6 @@ enum node_tag {
   node_func,  
   node_func_prot,  
   node_head,  
-  node_list,
   node_loop,
   node_proc,
   node_proc_prot,
@@ -117,13 +116,14 @@ typedef struct node_struct {
       enum node_type type;
       enum node_size size;
       enum node_storage storage;
-      tree *expr;
+      char *name;
+      tree *init;
     } decl;
     struct {
       enum node_type type;
       enum node_size size;
       enum node_storage storage;
-      tree *expr;
+      char *name;
     } decl_prot;
     struct {
       tree *head;
@@ -140,9 +140,6 @@ typedef struct node_struct {
       char *name;
       tree *args;
     } head;
-    struct {
-      tree *head, *tail;
-    } list;
     struct {
       /* for, while, ... */
       tree *init;   /* initalization code */
@@ -190,11 +187,12 @@ typedef struct node_struct {
 #define DECL_TYPE(D)       (D)->value.decl.type
 #define DECL_SIZE(D)       (D)->value.decl.size
 #define DECL_STOR(D)       (D)->value.decl.storage
-#define DECL_EXPR(D)       (D)->value.decl.expr
+#define DECL_NAME(D)       (D)->value.decl.name
+#define DECL_INIT(D)       (D)->value.decl.init
 #define DECL_PROT_TYPE(D)  (D)->value.decl_prot.type
 #define DECL_PROT_SIZE(D)  (D)->value.decl_prot.size
 #define DECL_PROT_STOR(D)  (D)->value.decl_prot.storage
-#define DECL_PROT_EXPR(D)  (D)->value.decl_prot.expr
+#define DECL_PROT_NAME(D)  (D)->value.decl_prot.name
 #define FUNC_HEAD(F)       (F)->value.func.head
 #define FUNC_STOR(F)       (F)->value.func.storage
 #define FUNC_BODY(F)       (F)->value.func.body
@@ -203,8 +201,6 @@ typedef struct node_struct {
 #define FUNC_PROT_BODY(F)  (F)->value.func_prot.body
 #define HEAD_NAME(H)       (H)->value.head.name
 #define HEAD_ARGS(H)       (H)->value.head.args
-#define LIST_HEAD(L)       (L)->value.list.head
-#define LIST_TAIL(L)       (L)->value.list.tail
 #define LOOP_INIT(L)       (L)->value.loop.init
 #define LOOP_EXIT(L)       (L)->value.loop.exit
 #define LOOP_INCR(L)       (L)->value.loop.incr
@@ -227,18 +223,23 @@ tree *mk_binop(enum node_op op, tree *p0, tree *p1);
 tree *mk_call(char *name, tree *args);
 tree *mk_constant(int value);
 tree *mk_cond(tree *cond, tree *body, tree *next);
-tree *mk_decl(enum node_type type, enum node_size size, enum node_storage storage, tree *expr);
-tree *mk_decl_prot(enum node_type type, enum node_size size, enum node_storage storage, tree *expr);
+tree *mk_decl(enum node_type type, enum node_size size, enum node_storage storage, char *name, tree *init);
+tree *mk_decl_prot(enum node_type type, enum node_size size, enum node_storage storage, char *name);
 tree *mk_func(tree *head, enum node_storage storage, enum node_size ret, tree *body);
 tree *mk_func_prot(tree *head, enum node_storage storage, enum node_size ret);
 tree *mk_head(char *name, tree *args);
-tree *mk_list(tree *head, tree *tail);
 tree *mk_loop(tree *init, tree *exit, tree *incr, tree *body);
 tree *mk_proc(tree *head, enum node_storage storage, tree *body);
 tree *mk_proc_prot(tree *head, enum node_storage storage);
 tree *mk_string(char *value);
 tree *mk_symbol(char *value);
 tree *mk_unop(enum node_op op, tree *p0);
+
+tree *node_list(tree *head, tree *tail);
+
+enum node_storage determine_storage(tree *node);
+char *find_node_name(tree *node);
+tree *find_node(char *name, enum node_tag tag);
 
 void print_node(tree *node, int level);
 
