@@ -363,7 +363,7 @@ void show_usage(void)
     { "map",         0, 0, 'm' },
     { "output",      1, 0, 'o' },
     { "quiet",       0, 0, 'q' },
-    { "script",      1, 0, 'r' },
+    { "script",      1, 0, 's' },
     { "version",     0, 0, 'v' },
     { 0, 0, 0, 0 }
   };

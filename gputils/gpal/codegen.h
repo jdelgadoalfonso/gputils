@@ -23,28 +23,44 @@ Boston, MA 02111-1307, USA.  */
 #define __CODEGEN_H__
 
 #define LOCAL_DATA_LABEL "_local_data"
+#define WORKING_LABEL "_working_data"
 
 void codegen_write_asm(const char *format, ...);
 char *codegen_next_label(void);
 void codegen_write_label(char *label);
-void codegen_jump(char *label);
 
+void codegen_jump(char *label);
 void codegen_call(char *label, enum node_storage storage);
-void codegen_banksel(char *label);
-void codegen_bankisel(char *label);
-void codegen_test(tree *node, char *label);
-void codegen_expr(tree *statement);
 void codegen_assembly(tree *assembly);
-void codegen_put_mem(struct variable *var, gp_boolean add_banksel);
+
+void codegen_test(tree *node, char *label, enum size_tag size);
+void codegen_expr(tree *statement, enum size_tag size);
+void codegen_indirect(struct variable *var, tree *offset);
+void codegen_store(struct variable *var,
+                   gp_boolean constant_offset,
+                   int offset,
+                   tree *offset_expr);
+
 void codegen_init_proc(char *name, 
                        enum node_storage storage,
                        gp_boolean is_func);
 void codegen_finish_proc(gp_boolean add_return);
+
+
 void codegen_init_data(void);
 void codegen_write_data(char *label, int size, enum node_storage storage);
 void codegen_finish_data(void);
-char *codegen_get_temp(void);
+char *codegen_get_temp(enum size_tag size);
+
 void codegen_init_asm(void);
 void codegen_close_asm(void);
+void codegen_select(tree *expr);
+
+struct function_pointer_struct {
+  long int codegen;
+  long int load_constant;
+  long int load_file;
+  long int store_file;
+};
 
 #endif
