@@ -1,28 +1,3 @@
-2003-11-23 Craig Franklin <craigfranklin@comcast.net>
-  * Fixed gpasm bug that caused the relocation to be omitted if the macro
-    argument is complex.
-  * Fixed gpasm bug that could cause symbol offsets in relocations to be
-    calculated incorrectly.
-
-2003-11-22 Craig Franklin <craigfranklin@comcast.net>
-  * gputils 0.11.8 Released.
-  * Added new processors: 16f54, 16f57, 16f688
-  * Updated header files and linker scripts.
-  * Updated libiberty from upstream sources.
-  * Changed gpasm 18xx banksel from movlb relocation to banksel relocation.
-  * Changed gplink movlb relocation to use the upper byte of symbol address.
-
-2003-10-21 Craig Franklin <craigfranklin@comcast.net>
-  * Fixed string to long conversion in gpasm so 32 bit numbers
-    could be used.
-
-2003-10-19 Craig Franklin <craigfranklin@comcast.net>
-  * Updated documentation.
-
-2003-10-18 Craig Franklin <craigfranklin@comcast.net>
-  * Fixed a bug in 16xx special instruction mnemonics that could cause
-    an incorrect branch calculation if a goto proceded the mnemonic.
-
 2003-10-17 Craig Franklin <craigfranklin@comcast.net>
   * gputils 0.11.7 Released.
 
