@@ -53,28 +53,6 @@ gen_immed(int value)
   codegen_write_asm("movlw %#x", value);
 }
 
-/* branches */
-
-void
-gen_call(char *name)
-{
-  codegen_write_asm("pagesel %s", name);
-  codegen_write_asm("call %s", name);
-}
-
-void
-gen_goto(char *name)
-{
-  codegen_write_asm("pagesel %s", name);
-  codegen_write_asm("goto %s", name);
-}
-
-void
-gen_return(void)
-{
-  codegen_write_asm("return");
-}
-
 void
 gen_boolean(void)
 {
@@ -117,6 +95,10 @@ gen_unop_expr(tree *expr)
 static void
 gen_binop_constant(enum node_op op, int value)
 {
+  char *reg1 = NULL;
+  char *reg2 = NULL;
+  char *label1 = NULL;
+  char *label2 = NULL;
 
   switch (op) {
   case op_add:
@@ -126,9 +108,47 @@ gen_binop_constant(enum node_op op, int value)
     codegen_write_asm("sublw %#x", value); 
     break;
   case op_mult:
+    reg1 = codegen_get_temp();
+    label1 = codegen_next_label();
+    codegen_write_asm("movwf %s", reg1); 
+    codegen_write_asm("movlw 0");
+    codegen_write_label(label1);
+    codegen_write_asm("addlw %#x", value);
+    codegen_write_asm("decfsz %s, f", reg1);
+    codegen_write_asm("goto %s", label1);
+    break;
   case op_div:
+    reg1 = codegen_get_temp();
+    reg2 = codegen_get_temp();
+    label1 = codegen_next_label();
+    label2 = codegen_next_label();
+    codegen_write_asm("movwf %s", reg1);    /* store the divisor in temp*/
+    codegen_write_asm("movlw %#x", value);
+    codegen_write_asm("movwf %s", reg2);    /* store the dividend */
+    codegen_write_asm("movf %s, w", reg1);  /* move the divisor into w */
+    codegen_write_asm("clrf %s", reg1);     /* clear the result */
+    codegen_write_label(label1);
+    codegen_write_asm("subwf %s, f", reg2); /* sub the divisor from the dividend */
+    codegen_write_asm("btfsc STATUS, C");
+    codegen_write_asm("goto %s", label2);
+    codegen_write_asm("incf %s, f", reg1);  /* increment the result */
+    codegen_write_asm("goto %s", label1);
+    codegen_write_label(label2);
+    codegen_write_asm("movf %s, w", reg1);  /* move the result into w */
+    break;
   case op_mod:
-    gp_error("unsupported operator");
+    reg1 = codegen_get_temp();
+    reg2 = codegen_get_temp();
+    label1 = codegen_next_label();
+    codegen_write_asm("movwf %s", reg1);    /* store the divisor in temp*/
+    codegen_write_asm("movlw %#x", value);
+    codegen_write_asm("movwf %s", reg2);    /* store the dividend */
+    codegen_write_asm("movf %s, w", reg1);  /* move the divisor into w */
+    codegen_write_label(label1);
+    codegen_write_asm("subwf %s, f", reg2); /* sub the divisor from the dividend */
+    codegen_write_asm("btfss STATUS, C");
+    codegen_write_asm("goto %s", label1);
+    codegen_write_asm("addwf %s, w", reg2); /* move the modulus into w */
     break;
   case op_and:
     codegen_write_asm("andlw %#x", value); 
@@ -140,8 +160,42 @@ gen_binop_constant(enum node_op op, int value)
     codegen_write_asm("xorlw %#x", value); 
     break;
   case op_lsh:
+    reg1 = codegen_get_temp();
+    reg2 = codegen_get_temp();
+    label1 = codegen_next_label();
+    label2 = codegen_next_label();
+    codegen_write_asm("movwf %s", reg2);    /* store the number of shifts in temp*/
+    codegen_write_asm("movlw %#x", value);
+    codegen_write_asm("movwf %s", reg1);    /* store the number to be shifted */
+    codegen_write_asm("movf %s", reg2);     /* test number of shifts */
+    codegen_write_asm("btfsc STATUS, Z");
+    codegen_write_asm("goto %s", label2);
+    codegen_write_label(label1);
+    codegen_write_asm("bcf STATUS, C");
+    codegen_write_asm("rlf %s, f", reg1); 
+    codegen_write_asm("decfsz %s", reg2);
+    codegen_write_asm("goto %s", label1);
+    codegen_write_label(label2);
+    codegen_write_asm("movf %s, w", reg1);  /* move the result into w */
+    break;
   case op_rsh:
-    gp_error("unsupported operator");
+    reg1 = codegen_get_temp();
+    reg2 = codegen_get_temp();
+    label1 = codegen_next_label();
+    label2 = codegen_next_label();
+    codegen_write_asm("movwf %s", reg2);    /* store the number of shifts in temp*/
+    codegen_write_asm("movlw %#x", value);
+    codegen_write_asm("movwf %s", reg1);    /* store the number to be shifted */
+    codegen_write_asm("movf %s", reg2);     /* test number of shifts */
+    codegen_write_asm("btfsc STATUS, Z");
+    codegen_write_asm("goto %s", label2);
+    codegen_write_label(label1);
+    codegen_write_asm("bcf STATUS, C");
+    codegen_write_asm("rrf %s, f", reg1); 
+    codegen_write_asm("decfsz %s", reg2);
+    codegen_write_asm("goto %s", label1);
+    codegen_write_label(label2);
+    codegen_write_asm("movf %s, w", reg1);  /* move the result into w */
     break;
   case op_eq:
     codegen_write_asm("xorlw %#x", value); 
@@ -164,8 +218,21 @@ gen_binop_constant(enum node_op op, int value)
     codegen_write_asm("andlw 1");
     break;
   case op_gte:
+    reg1 = codegen_get_temp();
+    codegen_write_asm("movwf %s", reg1);
+    codegen_write_asm("movlw %#x", value);
+    codegen_write_asm("subwf %s, w", reg1);
+    codegen_write_asm("movf STATUS, w");
+    codegen_write_asm("andlw 1");
+    codegen_write_asm("xorlw 1");
+    break;
   case op_lte: 
-    gp_error("unsupported operator");
+    reg1 = codegen_get_temp();
+    codegen_write_asm("movwf %s", reg1);
+    codegen_write_asm("movlw %#x", value);
+    codegen_write_asm("subwf %s, w", reg1);
+    codegen_write_asm("movf STATUS, w");
+    codegen_write_asm("andlw 1");
     break;
   case op_land:
     codegen_write_asm("andlw %#x", value); 
@@ -177,11 +244,28 @@ gen_binop_constant(enum node_op op, int value)
     assert(0); /* Unhandled binary operator */
   }
 
+  if (reg1)
+    free(reg1);
+
+  if (reg2)
+    free(reg2);
+
+  if (label1)
+    free(label1);
+
+  if (label2)
+    free(label2);
+
+  return;
 }
 
 static void
 gen_binop_symbol(enum node_op op, char *name)
 {
+  char *reg1 = NULL;
+  char *reg2 = NULL;
+  char *label1 = NULL;
+  char *label2 = NULL;
 
   switch (op) {
   case op_add:
@@ -191,9 +275,47 @@ gen_binop_symbol(enum node_op op, char *name)
     codegen_write_asm("subwf %s, w", name); 
     break;
   case op_mult:
+    reg1 = codegen_get_temp();
+    label1 = codegen_next_label();
+    codegen_write_asm("movwf %s", reg1); 
+    codegen_write_asm("movlw 0");
+    codegen_write_label(label1);
+    codegen_write_asm("addwf %s, w", name);
+    codegen_write_asm("decfsz %s, f", reg1);
+    codegen_write_asm("goto %s", label1);
+    break;
   case op_div:
+    reg1 = codegen_get_temp();
+    reg2 = codegen_get_temp();
+    label1 = codegen_next_label();
+    label2 = codegen_next_label();
+    codegen_write_asm("movwf %s", reg1);    /* store the divisor in temp*/
+    codegen_write_asm("movf %s, w", name);
+    codegen_write_asm("movwf %s", reg2);    /* store the dividend */
+    codegen_write_asm("movf %s, w", reg1);  /* move the divisor into w */
+    codegen_write_asm("clrf %s", reg1);     /* clear the result */
+    codegen_write_label(label1);
+    codegen_write_asm("subwf %s, f", reg2); /* sub the divisor from the dividend */
+    codegen_write_asm("btfsc STATUS, C");
+    codegen_write_asm("goto %s", label2);
+    codegen_write_asm("incf %s, f", reg1);  /* increment the result */
+    codegen_write_asm("goto %s", label1);
+    codegen_write_label(label2);
+    codegen_write_asm("movf %s, w", reg1);  /* move the result into w */
+    break;
   case op_mod:
-    gp_error("unsupported operator");
+    reg1 = codegen_get_temp();
+    reg2 = codegen_get_temp();
+    label1 = codegen_next_label();
+    codegen_write_asm("movwf %s", reg1);    /* store the divisor in temp*/
+    codegen_write_asm("movf %s, w", name);
+    codegen_write_asm("movwf %s", reg2);    /* store the dividend */
+    codegen_write_asm("movf %s, w", reg1);  /* move the divisor into w */
+    codegen_write_label(label1);
+    codegen_write_asm("subwf %s, f", reg2); /* sub the divisor from the dividend */
+    codegen_write_asm("btfss STATUS, C");
+    codegen_write_asm("goto %s", label1);
+    codegen_write_asm("addwf %s, w", reg2); /* move the modulus into w */
     break;
   case op_and:
     codegen_write_asm("andwf %s, w", name); 
@@ -205,8 +327,42 @@ gen_binop_symbol(enum node_op op, char *name)
     codegen_write_asm("xorwf %s, w", name); 
     break;
   case op_lsh:
+    reg1 = codegen_get_temp();
+    reg2 = codegen_get_temp();
+    label1 = codegen_next_label();
+    label2 = codegen_next_label();
+    codegen_write_asm("movwf %s", reg2);    /* store the number of shifts in temp*/
+    codegen_write_asm("movwf %s", name);
+    codegen_write_asm("movwf %s", reg1);    /* store the number to be shifted */
+    codegen_write_asm("movf %s", reg2);     /* test number of shifts */
+    codegen_write_asm("btfsc STATUS, Z");
+    codegen_write_asm("goto %s", label2);
+    codegen_write_label(label1);
+    codegen_write_asm("bcf STATUS, C");
+    codegen_write_asm("rlf %s, f", reg1); 
+    codegen_write_asm("decfsz %s", reg2);
+    codegen_write_asm("goto %s", label1);
+    codegen_write_label(label2);
+    codegen_write_asm("movf %s, w", reg1);  /* move the result into w */
+    break;
   case op_rsh:
-    gp_error("unsupported operator");
+    reg1 = codegen_get_temp();
+    reg2 = codegen_get_temp();
+    label1 = codegen_next_label();
+    label2 = codegen_next_label();
+    codegen_write_asm("movwf %s", reg2);    /* store the number of shifts in temp*/
+    codegen_write_asm("movwf %s", name);
+    codegen_write_asm("movwf %s", reg1);    /* store the number to be shifted */
+    codegen_write_asm("movf %s", reg2);     /* test number of shifts */
+    codegen_write_asm("btfsc STATUS, Z");
+    codegen_write_asm("goto %s", label2);
+    codegen_write_label(label1);
+    codegen_write_asm("bcf STATUS, C");
+    codegen_write_asm("rrf %s, f", reg1); 
+    codegen_write_asm("decfsz %s", reg2);
+    codegen_write_asm("goto %s", label1);
+    codegen_write_label(label2);
+    codegen_write_asm("movf %s, w", reg1);  /* move the result into w */
     break;
   case op_eq:
     codegen_write_asm("xorwf %s, w", name); 
@@ -229,8 +385,21 @@ gen_binop_symbol(enum node_op op, char *name)
     codegen_write_asm("andlw 1");
     break;
   case op_gte:
+    reg1 = codegen_get_temp();
+    codegen_write_asm("movwf %s", reg1);
+    codegen_write_asm("movwf %s", name);
+    codegen_write_asm("subwf %s, w", reg1);
+    codegen_write_asm("movf STATUS, w");
+    codegen_write_asm("andlw 1");
+    codegen_write_asm("xorlw 1");
+    break;
   case op_lte: 
-    gp_error("unsupported operator");
+    reg1 = codegen_get_temp();
+    codegen_write_asm("movwf %s", reg1);
+    codegen_write_asm("movwf %s", name);
+    codegen_write_asm("subwf %s, w", reg1);
+    codegen_write_asm("movf STATUS, w");
+    codegen_write_asm("andlw 1");
     break;
   case op_land:
     codegen_write_asm("andwf %s, w", name); 
@@ -242,6 +411,16 @@ gen_binop_symbol(enum node_op op, char *name)
     assert(0); /* Unhandled binary operator */
   }
 
+  if (reg1)
+    free(reg1);
+
+  if (label1)
+    free(label1);
+
+  if (label2)
+    free(label2);
+
+  return;
 }
 
 static void
@@ -265,13 +444,15 @@ gen_binop_expr(tree *expr)
       gen_binop_symbol(expr->value.binop.op, var->alias);
     }
   } else {
-    char temp_name[BUFSIZ];
+    char *temp_name;
  
     /* it is a complex expression so save temp data */
-    sprintf(temp_name, "%s_temp_%d", state.basefilename, temp_number++);
+    temp_name = codegen_get_temp();
     codegen_write_asm("movwf %s", temp_name); 
     gen_expr(lhs);
     gen_binop_symbol(expr->value.binop.op, temp_name);
+    if (temp_name)
+      free(temp_name);
   }
 
 }

@@ -26,6 +26,7 @@ Boston, MA 02111-1307, USA.  */
 
 enum node_tag { 
   node_unknown,
+  node_assembly,
   node_body,
   node_binop,
   node_call,
@@ -81,11 +82,14 @@ enum node_size {
   size_byte
 };
 
+/* FIXME: maybe use near and far for bank and page storage key words */
+
 enum node_storage { 
   storage_unknown,
-  storage_public,
-  storage_private,
-  storage_extern
+  storage_public,  /* local data which is visible to other modules */
+  storage_private, /* local data which is not visible to other modules */
+  storage_local,   /* external data on the same page or bank with module */
+  storage_extern   /* external data which is on an unknown page or bank */
 };
 
 typedef struct node_struct tree;
@@ -93,6 +97,7 @@ typedef struct node_struct tree;
 typedef struct node_struct {
   enum node_tag tag;
   union {
+    char *assembly;
     struct {
       tree *decl;
       tree *statements;
@@ -218,6 +223,7 @@ void init_nodes(void);
 void free_nodes(void);
 
 tree *mk_node(enum node_tag tag);
+tree *mk_assembly(char *assembly);
 tree *mk_body(tree *decl, tree *statements);
 tree *mk_binop(enum node_op op, tree *p0, tree *p1);
 tree *mk_call(char *name, tree *args);

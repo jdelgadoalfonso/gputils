@@ -93,9 +93,18 @@ mk_node(enum node_tag tag)
   new->tag = tag;
   new->prev = NULL;
   new->next = NULL;
-  new->file_name = state.src->name;
+  /* FIXME: This is wasteful, replace the strdup. */
+  new->file_name = strdup(state.src->name);
   new->line_number = state.src->line_number;
 
+  return new;
+}
+
+tree *
+mk_assembly(char *assembly)
+{
+  tree *new = mk_node(node_assembly);
+  new->value.assembly = assembly;
   return new;
 }
 
