@@ -388,7 +388,9 @@ statement:
             for (i = 0; i < number; i++) {
               $$ = do_insn($2, NULL);
             }
-          } 
+          } else {
+	    macro_append();
+	  }
 	}
 	|
 	FILL IDENTIFIER parameter_list ')' ',' expr '\n'
@@ -402,7 +404,9 @@ statement:
             for (i = 0; i < number; i++) {
               $$ = do_insn($2, $3);
             }
-          }
+          } else {
+	    macro_append();
+	  }
 	}
 	|
 	CBLOCK expr '\n' { begin_cblock($2); next_line(0); }
