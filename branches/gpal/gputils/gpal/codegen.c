@@ -592,6 +592,37 @@ extern_args(char *main_name, tree *list)
 
 }
 
+static enum node_storage
+determine_storage(tree *node)
+{
+  enum node_storage storage;
+
+  switch(node->tag) {
+  case node_decl:
+    storage = DECL_STOR(node);
+    break;
+  case node_decl_prot:
+    storage = DECL_PROT_STOR(node);
+    break;
+  case node_func:
+    storage = FUNC_STOR(node);
+    break;
+  case node_func_prot:
+    storage = FUNC_PROT_STOR(node);
+    break; 
+  case node_proc:
+    storage = PROC_STOR(node);
+    break;
+  case node_proc_prot:
+    storage = PROC_PROT_STOR(node);
+    break;
+  default:
+    assert(0);
+  }   
+
+  return storage;
+}
+
 static void
 write_externs(void)
 {
@@ -600,46 +631,34 @@ write_externs(void)
   tree *args = NULL;
   tree *symbol = NULL;
   gp_boolean first_time = true;
-  int storage;
 
   current = state.root;
   while (current != NULL) {
-    /* CLEAN THIS UP !! */
-    switch(current->tag) {
-    case node_decl:
-      storage = current->value.decl.storage;
-      break;
-    case node_func:
-      storage = current->value.func.storage;
-      break; 
-    case node_proc:
-      storage = current->value.proc.storage;
-      break;
-    default:
-      assert(0);
-    }   
-    if (storage == storage_extern) {
+    if (determine_storage(current) == storage_extern) {
       if (first_time == true)  {
         fprintf(state.output.f, "; external symbols\n");
         first_time = false;
       }
       switch(current->tag) {
-      case node_decl:
+      case node_decl_prot:
         symbol = LIST_HEAD(current->value.decl.expr);
         extern_name(symbol->value.symbol, NULL, symbol);
         break;
-      case node_func:
+      case node_func_prot:
         name = current->value.func.head->value.head.name;
         args = current->value.func.head->value.head.args;
         extern_name(name, NULL, current);
         extern_args(name, args);
         break; 
-      case node_proc:
+      case node_proc_prot:
         name = current->value.proc.head->value.head.name;
         args = current->value.proc.head->value.head.args;
         extern_name(name, NULL, current);
         extern_args(name, args);
         break;
+      case node_decl:
+      case node_func:
+      case node_proc:
       default:
         assert(0);
       }
@@ -653,10 +672,127 @@ write_externs(void)
   return;
 }
 
+static char *
+find_node_name(tree *node)
+{
+  tree *symbol;
+  tree *head;
+  char *name = NULL;
+
+  switch(node->tag) {
+  case node_decl:
+    symbol = LIST_HEAD(DECL_EXPR(node));
+    assert(symbol->tag == node_symbol);
+    name = symbol->value.symbol;
+    break;
+  case node_decl_prot:
+    symbol = LIST_HEAD(DECL_PROT_EXPR(node));
+    assert(symbol->tag == node_symbol);
+    name = symbol->value.symbol;
+    break;
+  case node_func:
+    head = FUNC_HEAD(node);
+    name = HEAD_NAME(head);
+    break;
+  case node_func_prot:
+    head = FUNC_PROT_HEAD(node);
+    name = HEAD_NAME(head);
+    break; 
+  case node_proc:
+    head = PROC_HEAD(node);
+    name = HEAD_NAME(head);
+    break;
+  case node_proc_prot:
+    head = PROC_PROT_HEAD(node);
+    name = HEAD_NAME(head);
+    break;
+  default:
+    assert(0);
+  }   
+
+  return name;
+}
+
+static tree *
+find_node(char *name, enum node_tag tag)
+{
+  tree *current = NULL;
+  tree *found = NULL;
+  char *node_name;
+
+  current = state.root;
+  while (current != NULL) {
+    if (current->tag == tag) {
+      node_name = find_node_name(current);
+      if (strcasecmp(node_name, name) == 0) {
+        found = current;
+        break;
+      }
+    }
+    current = current->next;
+  }
+
+  return found;
+}
+
+static void
+remove_public_prots(void)
+{
+  tree *current = NULL;
+  tree *def;
+  gp_boolean remove_prot;
+
+  /* FIXME: need to check that the prototype matches the function */
+
+  /* remove the public prototypes */
+  current = state.root;
+  while (current != NULL) {
+    remove_prot = false;
+    if (determine_storage(current) == storage_public) {
+      switch(current->tag) {
+      case node_decl:
+      case node_func:
+      case node_proc:
+        /* do nothing */
+        break;
+      case node_decl_prot:
+        def = find_node(find_node_name(current), node_decl);
+        DECL_STOR(def) = storage_public;
+        remove_prot = true;
+        break;
+      case node_func_prot:
+        def = find_node(find_node_name(current), node_func);
+        FUNC_STOR(def) = storage_public;
+        remove_prot = true;
+        break; 
+      case node_proc_prot:
+        def = find_node(find_node_name(current), node_proc);
+        PROC_STOR(def) = storage_public;
+        remove_prot = true;
+        break;
+      default:
+        break;
+      }
+      if (remove_prot) {
+         if (current->prev == NULL ) {
+           state.root = current->next;
+         } else {
+           current->prev->next = current->next;      
+         }
+      }
+    }	
+
+    current = current->next;
+  }  
+
+}
+
 void
 write_asm(void)
 {
   tree *current = NULL;
+
+  remove_public_prots();
 
   write_header();
   write_startup();
@@ -668,6 +804,9 @@ write_asm(void)
   while (current != NULL) {
     switch(current->tag) {
     case node_decl:
+    case node_decl_prot:
+    case node_func_prot:
+    case node_proc_prot:
       /* do nothing */
       break;
     case node_func:

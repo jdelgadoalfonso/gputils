@@ -60,20 +60,21 @@ void
 free_nodes(void)
 {
   tree_block *prev;
-  unsigned int num_freed = 0;
+  unsigned int num_block_freed = 0;
+  unsigned int num_node_freed = 0;
 
   while(head_block) {
    prev = head_block;
    head_block = head_block->next;
    free(prev);
-   num_freed++;
+   num_block_freed++;
   }
 
-  gp_debug("freed %i block(s) of tree nodes (%i bytes of memory)", 
-           num_freed,
-           num_freed * sizeof(tree_block));
+  num_node_freed = (num_block_freed * NODES_PER_BLOCK) + next_node;
 
-  gp_debug("used %i nodes of the current block", next_node);
+  gp_debug("freed %i tree nodes (%i bytes of memory)", 
+           num_node_freed,
+           num_node_freed * sizeof(tree));
 
 }
 
@@ -158,6 +159,18 @@ mk_decl(enum node_type type, enum node_size size, enum node_storage storage, tre
 }
 
 tree *
+mk_decl_prot(enum node_type type, enum node_size size, enum node_storage storage, tree *expr)
+{
+  tree *new = mk_node(node_decl_prot);
+  new->value.decl_prot.type = type;
+  new->value.decl_prot.size = size;
+  new->value.decl_prot.storage = storage;
+  new->value.decl_prot.expr = expr;
+  
+  return new;
+}
+
+tree *
 mk_func(tree *head, enum node_storage storage, enum node_size ret, tree *body)
 {
   tree *new = mk_node(node_func);
@@ -172,7 +185,7 @@ mk_func(tree *head, enum node_storage storage, enum node_size ret, tree *body)
 tree *
 mk_func_prot(tree *head, enum node_storage storage, enum node_size ret)
 {
-  tree *new = mk_node(node_func);
+  tree *new = mk_node(node_func_prot);
   new->value.func_prot.head = head;
   new->value.func_prot.storage = storage;
   new->value.func_prot.ret = ret;
@@ -224,7 +237,7 @@ mk_proc(tree *head, enum node_storage storage, tree *body)
 tree *
 mk_proc_prot(tree *head, enum node_storage storage)
 {
-  tree *new = mk_node(node_proc);
+  tree *new = mk_node(node_proc_prot);
   new->value.proc_prot.head = head;
   new->value.proc_prot.storage = storage;
   
@@ -271,6 +284,8 @@ print_node(tree *node, int level)
 
   /* indent this node */
   level += 2;
+
+  /* FIXME: use the macros in tree.h for access */
 
   switch(node->tag) {
   case node_unknown:
@@ -336,6 +351,14 @@ print_node(tree *node, int level)
             node->value.decl.storage);
     print_node(node->value.decl.expr, level);
     break;
+  case node_decl_prot:
+    print_space(level);
+    printf("node_decl_prot type=%i, size=%i, storage=%i\n",
+            node->value.decl_prot.type,
+            node->value.decl_prot.size,
+            node->value.decl_prot.storage);
+    print_node(node->value.decl_prot.expr, level);
+    break;
   case node_func:
     print_space(level);
     printf("node_func that returns %i\n", node->value.func.ret);
@@ -346,9 +369,9 @@ print_node(tree *node, int level)
     break;
   case node_func_prot:
     print_space(level);
-    printf("node_func_prot that returns %i\n", node->value.func.ret);
-    if (node->value.proc_prot.head != NULL)  
-      print_node(node->value.proc_prot.head, level);
+    printf("node_func_prot that returns %i\n", node->value.func_prot.ret);
+    if (node->value.func_prot.head != NULL)  
+      print_node(node->value.func_prot.head, level);
     break;
   case node_head:
     print_space(level);
@@ -402,8 +425,8 @@ print_node(tree *node, int level)
     printf("node_proc\n");
     if (node->value.proc.head != NULL)  
       print_node(node->value.proc.head, level);
-    if (node->value.cond.body != NULL)
-      print_node(node->value.cond.body, level);
+    if (node->value.proc.body != NULL)
+      print_node(node->value.proc.body, level);
     break;
   case node_proc_prot:
     print_space(level);

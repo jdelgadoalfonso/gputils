@@ -126,7 +126,7 @@ process_pragma(tree *expr)
   case node_binop:
     lhs = expr->value.binop.p0;
     rhs = expr->value.binop.p1;
-    if ((expr->value.binop.op != '=') ||
+    if ((expr->value.binop.op != op_eq) ||
         (lhs->tag != node_symbol)) {
       gp_error("unknown pragma");
     } else {
