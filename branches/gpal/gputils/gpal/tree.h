@@ -33,15 +33,12 @@ enum node_tag {
   node_constant, 
   node_cond,
   node_decl,
-  node_decl_prot,
+  node_file,
   node_func,  
-  node_func_prot,  
   node_head,  
   node_loop,
-  node_module,
+  node_pragma,
   node_proc,
-  node_proc_prot,
-  node_public,
   node_string,
   node_symbol, 
   node_unop
@@ -94,6 +91,13 @@ enum node_storage {
   storage_extern   /* external data which is on an unknown page or bank */
 };
 
+enum source_type {
+  source_unknown,
+  source_module,   /* a source file */
+  source_public,   /* the public file for the module being compiled */
+  source_with      /* the public file for a external module */ 
+};
+
 typedef struct node_struct tree;
 
 typedef struct node_struct {
@@ -122,27 +126,18 @@ typedef struct node_struct {
     struct {
       enum node_type type;
       enum node_size size;
-      enum node_storage storage;
       char *name;
       tree *init;
     } decl;
     struct {
-      enum node_type type;
-      enum node_size size;
-      enum node_storage storage;
-      char *name;
-    } decl_prot;
+      enum source_type type;
+      tree *body;
+    } file;
     struct {
       tree *head;
-      enum node_storage storage;
       enum node_size ret;
       tree *body;
     } func;
-    struct {
-      tree *head;
-      enum node_storage storage;
-      enum node_size ret;
-    } func_prot;
     struct {
       char *name;
       tree *args;
@@ -154,21 +149,11 @@ typedef struct node_struct {
       tree *incr;   /* code executed at the end of each pass (for loops) */
       tree *body;
     } loop;
-    struct {
-      tree *body;
-    } module;    
+    tree *pragma;
     struct {
       tree *head;
-      enum node_storage storage;
       tree *body;
     } proc;
-    struct {
-      tree *head;
-      enum node_storage storage;
-    } proc_prot;
-    struct {
-      tree *body;
-    } public;    
     char *string;
     char *symbol;
     struct {
@@ -199,33 +184,21 @@ typedef struct node_struct {
 #define COND_NEXT(C)       (C)->value.cond.next
 #define DECL_TYPE(D)       (D)->value.decl.type
 #define DECL_SIZE(D)       (D)->value.decl.size
-#define DECL_STOR(D)       (D)->value.decl.storage
 #define DECL_NAME(D)       (D)->value.decl.name
 #define DECL_INIT(D)       (D)->value.decl.init
-#define DECL_PROT_TYPE(D)  (D)->value.decl_prot.type
-#define DECL_PROT_SIZE(D)  (D)->value.decl_prot.size
-#define DECL_PROT_STOR(D)  (D)->value.decl_prot.storage
-#define DECL_PROT_NAME(D)  (D)->value.decl_prot.name
+#define FILE_TYPE(F)       (F)->value.file.type
+#define FILE_BODY(F)       (F)->value.file.body
 #define FUNC_HEAD(F)       (F)->value.func.head
-#define FUNC_STOR(F)       (F)->value.func.storage
 #define FUNC_BODY(F)       (F)->value.func.body
-#define FUNC_PROT_HEAD(F)  (F)->value.func_prot.head
-#define FUNC_PROT_STOR(F)  (F)->value.func_prot.storage
-#define FUNC_PROT_BODY(F)  (F)->value.func_prot.body
 #define HEAD_NAME(H)       (H)->value.head.name
 #define HEAD_ARGS(H)       (H)->value.head.args
 #define LOOP_INIT(L)       (L)->value.loop.init
 #define LOOP_EXIT(L)       (L)->value.loop.exit
 #define LOOP_INCR(L)       (L)->value.loop.incr
 #define LOOP_BODY(L)       (L)->value.loop.body
-#define MODULE_BODY(M)     (M)->value.module.body
 #define PROC_HEAD(P)       (P)->value.proc.head
 #define PROC_STOR(F)       (F)->value.proc.storage
 #define PROC_BODY(P)       (P)->value.proc.body
-#define PROC_PROT_HEAD(P)  (P)->value.proc_prot.head
-#define PROC_PROT_STOR(P)  (P)->value.proc_prot.storage
-#define PROC_PROT_BODY(P)  (P)->value.proc_prot.body
-#define PUBLIC_BODY(P)     (P)->value.public.body
 #define UNOP_OP(B)         (B)->value.unop.op
 #define UNOP_ARG(B)        (B)->value.unop.p0
 
@@ -239,23 +212,19 @@ tree *mk_binop(enum node_op op, tree *p0, tree *p1);
 tree *mk_call(char *name, tree *args);
 tree *mk_constant(int value);
 tree *mk_cond(tree *cond, tree *body, tree *next);
-tree *mk_decl(enum node_type type, enum node_size size, enum node_storage storage, char *name, tree *init);
-tree *mk_decl_prot(enum node_type type, enum node_size size, enum node_storage storage, char *name);
-tree *mk_func(tree *head, enum node_storage storage, enum node_size ret, tree *body);
-tree *mk_func_prot(tree *head, enum node_storage storage, enum node_size ret);
+tree *mk_decl(enum node_type type, enum node_size size, char *name, tree *init);
+tree *mk_file(tree *body, enum source_type type);
+tree *mk_func(tree *head, enum node_size ret, tree *body);
 tree *mk_head(char *name, tree *args);
 tree *mk_loop(tree *init, tree *exit, tree *incr, tree *body);
-tree *mk_module(tree *body);
-tree *mk_proc(tree *head, enum node_storage storage, tree *body);
-tree *mk_proc_prot(tree *head, enum node_storage storage);
-tree *mk_public(tree *body);
+tree *mk_pragma(tree *pragma);
+tree *mk_proc(tree *head, tree *body);
 tree *mk_string(char *value);
 tree *mk_symbol(char *value);
 tree *mk_unop(enum node_op op, tree *p0);
 
 tree *node_list(tree *head, tree *tail);
 
-enum node_storage determine_storage(tree *node);
 char *find_node_name(tree *node);
 tree *find_node(tree *search, char *name, enum node_tag tag);
 

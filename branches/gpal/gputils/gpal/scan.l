@@ -103,6 +103,11 @@ DECCHAR [0-9]
 			  yylval.s = strdup(yytext);
 			  return IDENT;
 			}
+\"[^"]+\"		{
+			  yytext[yyleng - 1] = '\0';
+			  yylval.s = strdup(yytext + 1);
+			  return STRING;
+			}
 0x{HEXCHAR}+		{
 			  yylval.i = stringtolong(yytext + 2, 16);
                           return NUMBER;
@@ -130,14 +135,14 @@ DECCHAR [0-9]
 
 %%
 
-void open_src(char *name, enum src_types type)
+void open_src(char *name, enum source_type type)
 {
   extern FILE *yyin;
   struct source_context *new = malloc(sizeof(*new));
   char *file_name;
   int length;
 
-  if ((type == with) || (type == source_with)) {
+  if ((type == source_with) || (type == source_public)) {
     /* construct the public file name */
     length = strlen(name);
     length += strlen(".pub") + 1;
