@@ -278,6 +278,7 @@ write_call(tree *statement)
 
 int temp_number;
 int max_temp_number;
+char *code_name;
 
 static void
 write_expression(tree *statement)
@@ -428,7 +429,7 @@ write_statements(tree *statements)
 }
 
 static void
-write_decl(tree *decl, char *name)
+write_decl(tree *decl, char *name, gp_boolean is_public)
 {
   tree *expr;
   tree *list;  
@@ -448,6 +449,9 @@ write_decl(tree *decl, char *name)
       var = add_global(symbol->value.symbol, alias, symbol);
       if (decl->value.decl.type == type_var) {
         fprintf(state.output.f, "%s res 1\n", var->alias);
+        if (is_public) {
+          fprintf(state.output.f, "  global %s\n", var->alias);
+        }
       }
     }
   } else if (expr->tag == node_symbol) {
@@ -455,8 +459,12 @@ write_decl(tree *decl, char *name)
     symbol = expr;
     sprintf(alias, "%s_%s", name, symbol->value.symbol);
     var = add_global(symbol->value.symbol, alias, symbol);
-    if (var)
+    if (var) {
       fprintf(state.output.f, "%s res 1\n", var->alias);
+      if (is_public) {
+        fprintf(state.output.f, "  global %s\n", var->alias);
+      }
+    }
   } else {
     assert(0);
   }
@@ -552,6 +560,7 @@ write_procedure(tree *procedure, int is_func)
   var = add_global(HEAD_NAME(head), HEAD_NAME(head), procedure);
   if (var) {
     name = var->alias;
+    code_name = var->alias;
   } else {
     return;
   }
@@ -574,7 +583,7 @@ write_procedure(tree *procedure, int is_func)
         assert(argument->value.decl.type == 0);
         /* FIXME: only bytes are supported so far */
         assert(argument->value.decl.size == size_byte);
-        write_decl(argument, name);
+        write_decl(argument, name, true);
       }  
     }
     /* the procedure or function has local variables */ 
@@ -586,7 +595,7 @@ write_procedure(tree *procedure, int is_func)
         /* FIXME: only bytes are supported so far */
         assert(argument->value.decl.size == size_byte);
         if (argument->value.decl.type == type_var)
-          write_decl(argument, name);
+          write_decl(argument, name, false);
 
       }  
     }
@@ -609,7 +618,7 @@ write_procedure(tree *procedure, int is_func)
     /* FIXME: overlay this if possible */
     fprintf(state.output.f, ".udata_%s_temp udata\n", name);
     for(i = 0; i < max_temp_number; i++)
-      fprintf(state.output.f, "_temp_%d res 1\n", i);
+      fprintf(state.output.f, "%s_temp_%d res 1\n", name, i);
       
     fprintf(state.output.f, "\n");
   }

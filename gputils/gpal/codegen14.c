@@ -267,7 +267,7 @@ gen_binop_expr(tree *expr)
     char temp_name[BUFSIZ];
  
     /* it is a complex expression so save temp data */
-    sprintf(temp_name, "_temp_%d", temp_number++);
+    sprintf(temp_name, "%s_temp_%d", code_name, temp_number++);
     write_asm_line("movwf %s", temp_name); 
     gen_expr(lhs);
     gen_binop_symbol(expr->value.binop.op, temp_name);
