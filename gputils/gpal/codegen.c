@@ -51,11 +51,11 @@ to_lower_case(char *name)
   return new;
 }
 
-void
+struct variable *
 add_global(char *name, char *alias, tree *object)
 {
   struct symbol *sym;
-  struct variable *var;
+  struct variable *var = NULL;
 
   sym = get_symbol(state.global, name);
   if (sym == NULL) {
@@ -72,7 +72,7 @@ add_global(char *name, char *alias, tree *object)
     gp_error("duplicate symbol \"%s\"", name);
   }
   
-  return;
+  return var;
 }
 
 void
@@ -213,25 +213,63 @@ int list_length(tree *L)
 static void
 write_call(tree *statement)
 {
+  struct variable *var;
+  int call_length;
+  int def_length;
+  tree *head;
+  tree *def_args;
+  tree *call_args;
+  gp_boolean first_time = true;
+  tree *arg_node;
+  tree *arg_symbol;
+  char *arg_name;
 
   fprintf(state.output.f, ";#CSRC %s %d\n", 
           state.srcfilename,
           statement->line_number);
 
-/*
-  struct variable *var;
-
   var = get_global(statement->value.call.name);
-  if (var == NULL)
+  if (var == NULL) {
     return;
-*/
-
-/*  if (statement->value.call.args) {
-    call_length = list_length(statement->value.call.args);
-  
-  
   }
-*/
+
+  if (var->node->tag == node_proc)
+    head = PROC_HEAD(var->node);
+  else
+    head = FUNC_HEAD(var->node);
+
+  call_args = CALL_ARGS(statement);
+  def_args = HEAD_ARGS(head);
+
+  if (call_args) {
+    call_length = list_length(call_args);
+    def_length = list_length(def_args);
+    /* FIXME: should also check argument type */
+    if (call_length != def_length) {
+      gp_error("incorrect number of arguments in call");
+      return;
+    }
+  }
+
+  while (call_args) {
+    arg_node = LIST_HEAD(def_args);
+    assert(arg_node->tag == node_decl);
+    arg_symbol = DECL_EXPR(arg_node);
+    assert(arg_symbol->tag == node_symbol);
+    arg_name = to_lower_case(arg_symbol->value.symbol);
+    if (first_time) {
+      fprintf(state.output.f, "  banksel %s_%s\n", var->alias, arg_name);
+      first_time = false;
+    }
+    gen_expr(LIST_HEAD(call_args));
+    /*gen_put_mem(arg_name);*/
+    write_asm_line("movwf %s_%s", var->alias, arg_name);
+    if (arg_name)
+      free(arg_name);
+    def_args = LIST_TAIL(def_args);
+    call_args = LIST_TAIL(call_args);
+  }
+
   fprintf(state.output.f, "  pagesel %s\n", statement->value.call.name);
   fprintf(state.output.f, "  call %s\n", statement->value.call.name);
 
@@ -392,22 +430,35 @@ write_statements(tree *statements)
 static void
 write_decl(tree *decl, char *name)
 {
+  tree *expr;
   tree *list;  
   tree *symbol;
   char alias[BUFSIZ];
+  struct variable *var;
 
   assert(decl->tag == node_decl);
-  list = decl->value.decl.expr;
-  assert(list->tag == node_list);
+  expr = DECL_EXPR(decl);
 
-  for (; list; list = LIST_TAIL(list)) {
-    symbol = LIST_HEAD(list);
-    assert(symbol->tag == node_symbol);
-    sprintf(alias, "%s_%s", name, symbol->value.symbol);
-    add_global(symbol->value.symbol, alias, symbol);
-    if (decl->value.decl.type == type_var) {
-      fprintf(state.output.f, "%s res 1\n", alias);
+  if (expr->tag == node_list) {
+    /* local data is in a list */
+    for (list = expr; list; list = LIST_TAIL(list)) {
+      symbol = LIST_HEAD(list);
+      assert(symbol->tag == node_symbol);
+      sprintf(alias, "%s_%s", name, symbol->value.symbol);
+      var = add_global(symbol->value.symbol, alias, symbol);
+      if (decl->value.decl.type == type_var) {
+        fprintf(state.output.f, "%s res 1\n", var->alias);
+      }
     }
+  } else if (expr->tag == node_symbol) {
+    /* arguments are symbols only */  
+    symbol = expr;
+    sprintf(alias, "%s_%s", name, symbol->value.symbol);
+    var = add_global(symbol->value.symbol, alias, symbol);
+    if (var)
+      fprintf(state.output.f, "%s res 1\n", var->alias);
+  } else {
+    assert(0);
   }
 
 }
@@ -470,6 +521,7 @@ write_procedure(tree *procedure, int is_func)
 {
   tree *head;
   tree *body;
+  struct variable *var;
   char *name;
   tree *args;
   tree *decl;
@@ -493,10 +545,16 @@ write_procedure(tree *procedure, int is_func)
 
   assert(head->tag == node_head);  
   assert(body->tag == node_body); 
-  name = head->value.head.name;
   args = head->value.head.args;
   decl = body->value.body.decl;
   statements = body->value.body.statements; 
+
+  var = add_global(HEAD_NAME(head), HEAD_NAME(head), procedure);
+  if (var) {
+    name = var->alias;
+  } else {
+    return;
+  }
 
   if (is_func) {
     fprintf(state.output.f, "; function %s\n", name);
@@ -538,7 +596,6 @@ write_procedure(tree *procedure, int is_func)
 
   /* program memory section */
   fprintf(state.output.f, ".code_%s code\n", name);
-  add_global(name, name, procedure);
   write_label(name);
   if (storage == storage_public)
     fprintf(state.output.f, "  global %s\n", name);
@@ -563,14 +620,16 @@ static void
 extern_name(char *name1, char *name2, tree *symbol)
 {
   char buffer[BUFSIZ];
+  struct variable *var;
 
   if (name2)
     sprintf(buffer, "%s_%s", name1, name2);
   else
     sprintf(buffer, "%s", name1);
 
-  fprintf(state.output.f, "  extern %s\n", buffer);
-  add_global(buffer, buffer, symbol);
+  var = add_global(buffer, buffer, symbol);
+  if (var)
+    fprintf(state.output.f, "  extern %s\n", var->alias);
 
   return;
 }
