@@ -42,9 +42,7 @@ add_global(char *name, char *alias, tree *node)
     annotate_symbol(sym, var);
     var->alias = gp_lower_case(alias);
     var->class = storage_unknown;
-    var->size = 0;
-    var->bitsize = 0;
-    var->nelts = 0;
+    var->type = NULL;
     var->is_init = false;
     var->is_equ = false;
     var->is_constant = false;
@@ -103,9 +101,7 @@ add_equ(char *name, int value)
     annotate_symbol(sym, var);
     var->alias = strdup(name);
     var->class = storage_unknown;
-    var->size = 0;
-    var->bitsize = 0;
-    var->nelts = 0;
+    var->type = NULL;
     var->is_init = true;
     var->is_equ = true;
     var->is_constant = true;
