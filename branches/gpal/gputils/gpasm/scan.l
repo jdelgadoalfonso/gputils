@@ -436,22 +436,6 @@ A'{STR_QCHAR}'           {
 			 }
 %%
 
-static char *
-to_lower_case(char *name)
-{
-  char *new;
-  char *ptr;
-
-  ptr = new = strdup(name);
-
-  while (*ptr != '\0') {
-    *ptr = tolower(*ptr);
-    ptr++;
-  }
-
-  return new;
-}
-
 static void
 search_pathes(struct source_context *new, char *name)
 {
@@ -491,7 +475,7 @@ void open_src(char *name, int isinclude)
       /* We didn't find a match so check for lower case.  This is mainly for 
          Microchip examples and some includes in which filenames were written
          without regard to case */    
-      char *lower_case_name = to_lower_case(name);
+      char *lower_case_name = gp_lower_case(name);
       search_pathes(new, lower_case_name);      
       free(lower_case_name);  
 

@@ -23,7 +23,7 @@ Boston, MA 02111-1307, USA.  */
 
 #include "libgputils.h"
 #include "gpal.h"
-#include "analyze.h"
+#include "symbol.h"
 #include "codegen.h"
 #include "codegen14.h"
 
@@ -184,9 +184,21 @@ codegen_init_data(void)
   fprintf(state.output.f, "; declarations \n");
 
   if (state.section.udata) {
-    fprintf(state.output.f, "%s udata\n", state.section.udata);
+    if (state.section.udata_addr_valid) {
+      fprintf(state.output.f, "%s udata %#x\n", 
+              state.section.udata,
+              state.section.udata_addr);
+    } else {
+      fprintf(state.output.f, "%s udata\n", state.section.udata);
+    }
   } else {
-    fprintf(state.output.f, ".udata_%s udata\n", state.basefilename);
+    if (state.section.udata_addr_valid) {
+      fprintf(state.output.f, ".udata_%s udata %#x\n",
+              state.basefilename,
+              state.section.udata_addr);
+    } else {
+      fprintf(state.output.f, ".udata_%s udata\n", state.basefilename);
+    }  
   }
 
   codegen_write_label(LOCAL_DATA_LABEL);
@@ -245,9 +257,21 @@ write_header(void)
   } 
 
   if (state.section.code) {
-    fprintf(state.output.f, "%s code\n", state.section.code);
+    if (state.section.code_addr_valid) {
+      fprintf(state.output.f, "%s code %#x\n", 
+              state.section.code,
+              state.section.code_addr);
+    } else {
+      fprintf(state.output.f, "%s code\n", state.section.code);
+    }
   } else {
-    fprintf(state.output.f, ".code_%s code\n", state.basefilename);
+    if (state.section.code_addr_valid) {
+      fprintf(state.output.f, ".code_%s code %#x\n", 
+              state.basefilename,
+              state.section.code_addr);
+    } else {
+      fprintf(state.output.f, ".code_%s code\n", state.basefilename);
+    }
   }
 
   return;
@@ -285,7 +309,7 @@ write_externs(void)
   gp_boolean first_time = true;
 
   for (i = 0; i < HASH_SIZE; i++) {
-    for (sym = state.global->hash_table[i]; sym; sym = sym->next) {
+    for (sym = state.top->hash_table[i]; sym; sym = sym->next) {
       var = get_symbol_annotation(sym);
       if ((var) && 
           ((var->class == storage_extern) ||

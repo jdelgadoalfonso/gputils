@@ -48,6 +48,10 @@ yyerror(char *message)
 
 int yylex(void);
 
+/* FIXME: Clean this up.  We need to read the pragmas then modify the data
+   so the mod doesn't start after the pragma statement. Maybe use the
+   parse tree to implement the pragmas. */
+
 static void
 process_pragma(tree *expr)
 {
@@ -72,6 +76,7 @@ process_pragma(tree *expr)
         }
       } else if (strcasecmp(lhs->value.symbol, "code_section") == 0) {
         if (rhs->tag != node_symbol) {
+          /* FIXME: change from symbol to string */
           gp_error("invalid code section name");
         } else {
           if (state.src->type == with) {            
@@ -114,6 +119,24 @@ process_pragma(tree *expr)
             }
           }        
         }
+      } else if (strcasecmp(lhs->value.symbol, "code_address") == 0) {
+        if (rhs->tag != node_constant) {
+          gp_error("invalid code address");
+        } else if (state.src->type == source) {            
+          state.section.code_addr = rhs->value.constant;
+          state.section.code_addr_valid = true;
+        } else {
+          gp_error("udata section addresses can only be in .pal files");
+        }
+      } else if (strcasecmp(lhs->value.symbol, "udata_address") == 0) {
+        if (rhs->tag != node_constant) {
+          gp_error("invalid udata address");
+        } else if (state.src->type == source) {            
+          state.section.udata_addr = rhs->value.constant;
+          state.section.udata_addr_valid = true;
+        } else {
+          gp_error("udata section addresses can only be in .pal files");
+        }
       } else {
         gp_error("unknown pragma \"%s\"", lhs->value.symbol);
       }
@@ -145,6 +168,7 @@ process_pragma(tree *expr)
 %token <i> VAR_TYPE, CONST_TYPE 
 %token <i> BIT_SIZE, BYTE_SIZE 
 %token <i> EXTERN_STORAGE, PUBLIC_STORAGE, PRIVATE_STORAGE, VOLATILE_STORAGE
+%token <i> MODULE
 
 /* general */
 %token <s> ASM
@@ -161,7 +185,9 @@ process_pragma(tree *expr)
 %token <i> '='
 
 /* types */
-%type <s> line
+%type <s> entity
+%type <t> element_list
+%type <t> element
 %type <i> '+', '-', '*', '/', '%', '!', '~'
 %type <t> expr, e0, e1, e2, e3, e4, e5, e6, e7, e8,
 %type <o> e1op, e2op, e3op, e4op, e5op, e6op, e7op, e8op
@@ -187,12 +213,12 @@ process_pragma(tree *expr)
 program:
 	/* can be nothing */
 	|
-	program line
+	program entity
 	| 
 	program error '\n'
 	;
 
-line:
+entity:
 	PRAGMA expr ';'
 	{
 	  process_pragma($2);
@@ -203,48 +229,76 @@ line:
 	  open_src($2, with);
 	}
 	|
+	MODULE IS END MODULE ';' { }
+	|
+	MODULE IS element_list END MODULE ';'
+	{
+	  add_entity(mk_module($3));
+	}
+	|
+	PUBLIC_STORAGE IS END PUBLIC_STORAGE ';' { }
+	|
+	PUBLIC_STORAGE IS element_list END PUBLIC_STORAGE ';'
+	{
+	  add_entity(mk_public($3));
+	}
+	;
+
+element_list:
+	element
+	{
+	  $$ = node_list($1, NULL);
+	}
+	|
+	element element_list
+	{
+	  $$ = node_list($1, $2);
+	}
+	;
+
+element:
 	decl
 	{
-	  add_entity($1);
+	  $$ = $1;
         }
 	|
 	PROCEDURE head body PROCEDURE ';'
 	{ 
           if (state.src->type == source) {
-            add_entity(mk_proc($2, storage_private, $3));
+            $$ = mk_proc($2, storage_private, $3);
           } else {
-            yyerror("procedures can only be defined in .pal files");
+            yyerror("procedures can only be defined in modules");
           }
      	}
 	|
 	PROCEDURE head ';'
 	{ 
 	  if (state.src->type == source_with) {
-            add_entity(mk_proc_prot($2, storage_public));
+            $$ = mk_proc_prot($2, storage_public);
 	  } else if (state.src->type == with) {
-            add_entity(mk_proc_prot($2, state.section.code_default));
+            $$ = mk_proc_prot($2, state.section.code_default);
           } else {
-            yyerror("procedure declarations can only be in .pub files");
+            yyerror("procedure declarations can only be in a public");
           }
      	}
         |
 	FUNCTION_TOK head RETURN decl_size body FUNCTION_TOK ';'
 	{ 
 	  if (state.src->type == source) {
-            add_entity(mk_func($2, storage_private, $4, $5));
+            $$ = mk_func($2, storage_private, $4, $5);
           } else {
-            yyerror("functions can only be defined in .pal files");
+            yyerror("functions can only be defined in modules");
           }
      	}
         |
 	FUNCTION_TOK head RETURN decl_size ';'
 	{ 
 	  if (state.src->type == source_with) {
-            add_entity(mk_func_prot($2, storage_public, $4));
+            $$ = mk_func_prot($2, storage_public, $4);
 	  } else if (state.src->type == with) {
-            add_entity(mk_func_prot($2, state.section.code_default, $4));
+            $$ = mk_func_prot($2, state.section.code_default, $4);
           } else {
-            yyerror("function declarations can only be in .pub files");
+            yyerror("function declarations can only be in a public");
           }
      	}
 	;

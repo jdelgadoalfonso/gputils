@@ -29,14 +29,6 @@ Boston, MA 02111-1307, USA.  */
 
 #include "tree.h"
 
-typedef struct list_struct linked_list;
-
-struct list_struct {
-  void *item;
-  struct list_struct *prev;
-  struct list_struct *next;
-};
-
 extern struct gpal_state {
   gp_boolean compile_only;		/* compile, but don't assemble or link */
   gp_boolean no_link;			/* compile and assemble, but don't link */
@@ -58,16 +50,20 @@ extern struct gpal_state {
   char *paths[MAX_PATHS];       	/* the list of include paths */
   int num_files;               		/* number of filenames in the list */
   char *file_name[MAX_FILE_NAMES];  	/* the list of file names */
-  linked_list *file_list;		/* list of files to link */
+  gp_linked_list *file_list;		/* list of files to link */
   gp_boolean cmd_processor;		/* processor chose on command line */
   enum pic_processor processor;
   struct px *processor_info;    	/* Processor identifiers (e.g. name) */
   gp_boolean processor_chosen;		/* Nonzero after processor-specific init */
   struct {				/* Processor data */
     char *code;      			/* code section name */
-    enum node_storage code_default;	/* pub file code on same page */
+    int code_addr;			/* absolute address of code section */
+    gp_boolean code_addr_valid;		/* is code address valid? */
+    enum node_storage code_default;	/* code storage from pub file */
     char *udata;      			/* uninitialized data section name */
-    enum node_storage udata_default;	/* pub file udata on same bank */
+    int udata_addr;			/* absolute address of udata section */
+    gp_boolean udata_addr_valid;	/* is udata address valid? */
+    enum node_storage udata_default;	/* udata storage from pub file */
   } section;
   struct {				/* Processor data */
     enum proc_class class;      	/* Processor class */
@@ -77,9 +73,9 @@ extern struct gpal_state {
     int bsr_boundary;			/* 18xx bsr boundary location */
   } device;
   struct symbol_table
-    *type,				/* Symbol Types */
-    *global,				/* Global symbols */
-    *data;				/* Data memory symbols */
+    *global,				/* Base of Global symbols */
+    *top,				/* Top of Global symbols */
+    *type;				/* Symbol Types */
   tree *root;				/* start of tree */
   struct source_context *src;		/* Top of the stack of source files */
   char *basefilename;			/* base filename */

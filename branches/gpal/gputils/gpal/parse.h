@@ -35,18 +35,19 @@ typedef union {
 # define	PUBLIC_STORAGE	276
 # define	PRIVATE_STORAGE	277
 # define	VOLATILE_STORAGE	278
-# define	ASM	279
-# define	IDENT	280
-# define	NUMBER	281
-# define	STRING	282
-# define	LSH	283
-# define	RSH	284
-# define	GREATER_EQUAL	285
-# define	LESS_EQUAL	286
-# define	EQUAL	287
-# define	NOT_EQUAL	288
-# define	LOGICAL_AND	289
-# define	LOGICAL_OR	290
+# define	MODULE	279
+# define	ASM	280
+# define	IDENT	281
+# define	NUMBER	282
+# define	STRING	283
+# define	LSH	284
+# define	RSH	285
+# define	GREATER_EQUAL	286
+# define	LESS_EQUAL	287
+# define	EQUAL	288
+# define	NOT_EQUAL	289
+# define	LOGICAL_AND	290
+# define	LOGICAL_OR	291
 
 
 extern YYSTYPE yylval;

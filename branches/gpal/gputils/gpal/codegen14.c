@@ -23,7 +23,7 @@ Boston, MA 02111-1307, USA.  */
 
 #include "libgputils.h"
 #include "gpal.h"
-#include "analyze.h"
+#include "symbol.h"
 #include "codegen.h"
 #include "codegen14.h"
 
