@@ -98,14 +98,24 @@ void add_entity(tree *node);
 int add_compile(char *compile);
 char *get_compile(int id);
 
+/* type data */
+
+struct type {
+  int size;				/* size in bytes */
+  int bitsize;				/* size in bits */
+  int nelts;				/* number of elements */
+  int start;				/* first element number */
+  int end;				/* last element number */
+  gp_boolean is_derived;		/* the symbol is derived from others */
+  struct type *prim;			/* primative type it is derived from */  
+};
+
 /* symbol data */
 
 struct variable {
   char *alias;
   enum node_storage class;		/* storage class */
-  int size;				/* size in bytes */
-  int bitsize;				/* size in bits */
-  int nelts;				/* number of elements */
+  struct type *type;			/* symbol type */
   gp_boolean is_init;			/* the symbol has been initialized */
   gp_boolean is_equ;			/* true if processor header equate */
   gp_boolean is_constant;		/* true if constant symbol */

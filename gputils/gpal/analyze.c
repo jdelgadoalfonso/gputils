@@ -176,15 +176,14 @@ add_arg_symbols(tree *node, char *name, enum node_storage storage)
   } else if (node->tag == node_func) {
     head = FUNC_HEAD(node);
   } else {
-    print_node(node, 0);
     assert(0);
   }
 
   arg = HEAD_ARGS(head);
 
   while (arg) {
-    assert(arg->tag == node_decl);
-    var = add_global_symbol(DECL_NAME(arg), name, arg, storage);
+    assert(arg->tag == node_arg);
+    var = add_global_symbol(ARG_NAME(arg), name, arg, storage);
     if ((var->class == storage_private) ||
         (var->class == storage_public)) {    
       add_link(var);
@@ -363,6 +362,7 @@ analyze_call(tree *call)
   tree *def_args;
   tree *call_args;
   struct variable *def_var;
+  struct variable *call_var;
 
   var = get_global(CALL_NAME(call));
   if (var) {
@@ -389,27 +389,56 @@ analyze_call(tree *call)
     return;
   }
 
+  /* write data into the in/inout of the function or procedure */
   while (call_args) {
-    assert(def_args->tag == node_decl);
+    assert(def_args->tag == node_arg);
 
-    /* write the expression */
-    codegen_expr(call_args);
+    if ((ARG_DIR(def_args) == dir_in) ||
+        (ARG_DIR(def_args) == dir_inout)) {
+      /* write the expression */
+      codegen_expr(call_args);
 
-    /* store the result in the memory mapped argument */
-    def_var = get_global(DECL_NAME(def_args));
-    assert(def_var != NULL);
-    if (def_var->class == storage_extern) {
-      codegen_put_mem(def_var, true);
-      codegen_banksel(LOCAL_DATA_LABEL);
-    } else {
-      codegen_put_mem(def_var, false);
+      /* store the result in the memory mapped argument */
+      def_var = get_global(ARG_NAME(def_args));
+      assert(def_var != NULL);
+      if (def_var->class == storage_extern) {
+        codegen_put_mem(def_var, true);
+        codegen_banksel(LOCAL_DATA_LABEL);
+      } else {
+        codegen_put_mem(def_var, false);
+      }
     }
-  
+
     def_args = def_args->next;
     call_args = call_args->next;
   }
 
   codegen_call(var->alias, var->class);
+
+  /* read data from the inout/out of the function or procedure */
+  call_args = CALL_ARGS(call);
+  def_args = HEAD_ARGS(head);
+  while (call_args) {
+    assert(def_args->tag == node_arg);
+
+    if ((ARG_DIR(def_args) == dir_inout) ||
+        (ARG_DIR(def_args) == dir_out)) {
+      /* write the expression */
+      codegen_expr(def_args);
+
+      /* store the result in the memory mapped argument */
+      if (call_args->tag == node_symbol) {
+        call_var = get_global(call_args->value.symbol);
+        assert(call_var != NULL);
+        codegen_put_mem(call_var, false);
+      } else {
+        analyze_error(call_args, "call argument must be a symbol");
+      }
+    }
+
+    def_args = def_args->next;
+    call_args = call_args->next;
+  }
 
   return;
 }
@@ -594,12 +623,12 @@ analyze_procedure(tree *procedure, gp_boolean is_func)
   /* local data */
   while (decl) {
     assert(decl->tag == node_decl);
-    if (DECL_TYPE(decl) == type_var) {
+    if (DECL_KEY(decl) == key_var) {
       add_link(add_global_symbol(DECL_NAME(decl), 
                proc_name,
                decl,
                storage_private));
-    } else if (DECL_TYPE(decl) == type_const) {
+    } else if (DECL_KEY(decl) == key_const) {
       if (DECL_INIT(decl)) {
         add_constant(DECL_NAME(decl), maybe_evaluate(DECL_INIT(decl)), decl);
       } else {
@@ -776,6 +805,15 @@ analyze_pragma(tree *expr, enum source_type type)
   return;
 }
 
+static void
+analyze_type(tree *type)
+{
+  /* FIXME: finish the type checking */
+
+
+
+}
+
 /* FIXME: make sure public proc don't have bodies, but modules do */
 
 static void
@@ -783,12 +821,16 @@ analyze_module(tree *file)
 {
   tree *current;
   char *name;
+  struct variable *var;
 
   current = FILE_BODY(file);
   while (current) {
     switch (current->tag) {
     case node_pragma:
       analyze_pragma(current->value.pragma, FILE_TYPE(file));
+      break;
+    case node_type:
+      analyze_type(current);
       break;
     case node_decl:
     case node_proc:
@@ -804,10 +846,14 @@ analyze_module(tree *file)
   while (current) {
     switch (current->tag) {
     case node_pragma:
+    case node_type:
       break;
     case node_decl:
       name = find_node_name(current);
-      add_link(add_global_symbol(name, NULL, current, storage_private));
+      var = add_global_symbol(name, NULL, current, storage_private);
+      if (DECL_KEY(current) == key_var) {
+        add_link(var);
+      }
       break;
     case node_proc:
     case node_func:
@@ -837,6 +883,9 @@ analyze_public(tree *file)
     case node_pragma:
       analyze_pragma(current->value.pragma,  FILE_TYPE(file));
       break;
+    case node_type:
+      analyze_type(current);
+      break;
     case node_decl:
     case node_proc:
     case node_func:
@@ -852,6 +901,7 @@ analyze_public(tree *file)
     switch (current->tag) {
     case node_pragma:
       break;
+    case node_type:
     case node_decl:
     case node_proc:
     case node_func:
@@ -894,6 +944,7 @@ analyze_module_contents(tree *file)
     switch (current->tag) {
     case node_pragma:
     case node_decl:
+    case node_type:
       /* do nothing */
       break;
     case node_proc:

@@ -70,11 +70,10 @@ DECCHAR [0-9]
 	  		    exit(1);
 			  }
 			}
+"array"			{ return ARRAY; }
 "case"			{ return CASE; }
-"const"			{ return CONST_TYPE; }
+"const"			{ return CONST_KEY; }
 "begin"			{ return BEGIN_KEY; }
-"bit"			{ return BIT_SIZE; }
-"byte"			{ return BYTE_SIZE; }
 "else"			{ return ELSE; }
 "elsif"			{ return ELSIF; }
 "end"			{ return END; }
@@ -83,18 +82,22 @@ DECCHAR [0-9]
 "function"		{ return FUNCTION_TOK; }
 "if"			{ return IF; }
 "in"			{ return IN; }
+"inout"			{ return INOUT; }
 "is"			{ return IS; }
 "loop"			{ return LOOP; }
 "module"		{ return MODULE; }
 "null"			{ return NULL_TOK; }
+"of"			{ return OF; }
 "others"		{ return OTHERS; }
+"out"			{ return OUT; }
 "pragma"		{ return PRAGMA; }
 "procedure"		{ return PROCEDURE; }
 "public"		{ return PUBLIC_STORAGE; }
 "return"		{ return RETURN; }
 "then"			{ return THEN; }
 "to"			{ return TO; }
-"var"			{ return VAR_TYPE; }
+"type"			{ return TYPE; }
+"var"			{ return VAR_KEY; }
 "volatile"		{ return VOLATILE_STORAGE; }
 "when"			{ return WHEN; }
 "while"			{ return WHILE; }

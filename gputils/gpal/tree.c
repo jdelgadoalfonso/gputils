@@ -100,6 +100,17 @@ mk_node(enum node_tag tag)
 }
 
 tree *
+mk_arg(char *name, enum node_dir dir, char *type)
+{
+  tree *new = mk_node(node_arg);
+  new->value.arg.name = name;
+  new->value.arg.dir = dir;
+  new->value.arg.type = type;
+  
+  return new;
+}
+
+tree *
 mk_assembly(char *assembly)
 {
   tree *new = mk_node(node_assembly);
@@ -155,14 +166,14 @@ mk_cond(tree *cond, tree *body, tree *next)
 }
 
 tree *
-mk_decl(enum node_type type,
-        enum node_size size,
+mk_decl(enum node_key key,
+        char *type,
         char *name,
         tree *init)
 {
   tree *new = mk_node(node_decl);
+  new->value.decl.key = key;
   new->value.decl.type = type;
-  new->value.decl.size = size;
   new->value.decl.name = name;
   new->value.decl.init = init;
   
@@ -180,7 +191,7 @@ mk_file(tree *body, enum source_type type)
 }
 
 tree *
-mk_func(tree *head, enum node_size ret, tree *body)
+mk_func(tree *head, char *ret, tree *body)
 {
   tree *new = mk_node(node_func);
   new->value.func.head = head;
@@ -243,6 +254,18 @@ mk_symbol(char *value)
 {
   tree *new = mk_node(node_symbol);
   new->value.symbol = strdup(value);
+  return new;
+}
+
+tree *
+mk_type(char *type, tree *start, tree *end, tree *list, char *of)
+{
+  tree *new = mk_node(node_type);
+  new->value.type.type = type;
+  new->value.type.start = start;
+  new->value.type.end = end;
+  new->value.type.list = list;
+  new->value.type.of = of;
   return new;
 }
 
@@ -331,6 +354,13 @@ print_node(tree *node, int level)
     print_space(level);
     printf("node_unknown\n");
     break;
+  case node_arg:
+    print_space(level);
+    printf("node_arg name=%s, dir=%i, type=%s\n",
+            ARG_NAME(node),
+            ARG_DIR(node),
+            ARG_TYPE(node));
+    break;
   case node_body:
     print_space(level);
     printf("node_body\n");
@@ -384,9 +414,9 @@ print_node(tree *node, int level)
     break;
   case node_decl:
     print_space(level);
-    printf("node_decl type=%i, size=%i, name=%s\n",
+    printf("node_decl key=%i, type=%s, name=%s\n",
+            DECL_KEY(node),
             DECL_TYPE(node),
-            DECL_SIZE(node),
             DECL_NAME(node));
     if (DECL_INIT(node)) {
       print_node(DECL_INIT(node), level);
@@ -400,7 +430,7 @@ print_node(tree *node, int level)
     break;
   case node_func:
     print_space(level);
-    printf("node_func that returns %i\n", node->value.func.ret);
+    printf("node_func that returns %s\n", node->value.func.ret);
     if (FUNC_HEAD(node) != NULL)  
       print_node(FUNC_HEAD(node), level);
     if (FUNC_BODY(node) != NULL)
@@ -454,6 +484,17 @@ print_node(tree *node, int level)
   case node_symbol:
     print_space(level);
     printf("node_symbol %s\n", node->value.symbol);
+    break;
+  case node_type:
+    print_space(level);
+    if (TYPE_LIST(node)) {
+      printf("node_type %s is enumerated\n", TYPE_TYPE(node));
+      print_node(TYPE_LIST(node), level);
+    } else if (TYPE_START(node)) {
+      printf("node_type %s is array of %s\n", TYPE_TYPE(node), TYPE_OF(node));
+    } else {
+      printf("node_type %s is %s\n", TYPE_TYPE(node), TYPE_OF(node));
+    }
     break;
   case node_unop:
     print_space(level);

@@ -463,6 +463,16 @@ gen_expr(tree *expr)
   struct variable *var;
 
   switch(expr->tag) {
+  case node_arg:
+    var = get_global(ARG_NAME(expr));
+    if (var->class == storage_extern) {
+      codegen_banksel(var->alias);
+      gen_get_mem(var->alias);
+      codegen_banksel(LOCAL_DATA_LABEL);
+    } else {
+      gen_get_mem(var->alias);
+    }
+    break;
   case node_constant:
     gen_immed(expr->value.constant);    
     break;
@@ -471,7 +481,13 @@ gen_expr(tree *expr)
     if (var->is_constant) {
       codegen_write_asm("movlw %i", var->value);
     } else {
-      gen_get_mem(var->alias);
+      if (var->class == storage_extern) {
+        codegen_banksel(var->alias);
+        gen_get_mem(var->alias);
+        codegen_banksel(LOCAL_DATA_LABEL);
+      } else {
+        gen_get_mem(var->alias);
+      }      
     }
     break;
   case node_unop:
@@ -481,7 +497,6 @@ gen_expr(tree *expr)
     gen_binop_expr(expr);
     break;
   default:
-    print_node(expr, 0);
     assert(0);
   }
 
