@@ -27,7 +27,6 @@ Boston, MA 02111-1307, USA.  */
 
 #include "libgputils.h"
 #include "gpal.h"
-#include "scan.h"
 #include "analyze.h"
 
 struct variable *
@@ -35,7 +34,6 @@ add_global(char *name, char *alias, tree *node)
 {
   struct symbol *sym;
   struct variable *var;
-  tree *other_def;
 
   sym = get_symbol(state.top, name);
   if (sym == NULL) {
@@ -51,19 +49,16 @@ add_global(char *name, char *alias, tree *node)
     var->is_equ = false;
     var->is_constant = false;
     var->value = 0;
+    var->file_id = node->file_id;
+    var->line_number = node->line_number;
     var->node = node;
   } else {
     var = get_symbol_annotation(sym);
-    other_def = var->node;
-    if (other_def) {
-      analyze_error(node,
-                    "redefinition of \"%s\",\n\t\talso defined in %s:%i:",
-                    name,
-                    other_def->file_name,
-                    other_def->line_number);
-    } else {
-      analyze_error(node, "redefinition of \"%s\"", name);
-    }
+    analyze_error(node,
+                  "redefinition of \"%s\",\n\talso defined in %s:%i:",
+                  name,
+                  get_compile(var->file_id),
+                  var->line_number);
   }
   
   return var;
@@ -115,13 +110,15 @@ add_equ(char *name, int value)
     var->is_equ = true;
     var->is_constant = true;
     var->value = value;
+    var->file_id = state.src->file_id;
+    var->line_number = state.src->line_number;
     var->node = NULL;
   } else {
     gp_num_errors++;
     if (gp_quiet == 0) {
       printf("%s:%d:error duplicate symbol \"%s\"\n",
-             header_file_name,
-             header_line_number,
+             state.src->name,
+             state.src->line_number,
              name);
     }
   }

@@ -24,99 +24,134 @@ Boston, MA 02111-1307, USA.  */
 #include "libgputils.h"
 #include "gpal.h"
 #include "scan.h"
-#include "tree.h"
 #include "analyze.h"
+#include "symbol.h"
 
 struct gpal_state state;
 
 int yyparse(void);
 
-#define GET_OPTIONS "?I:acdhk:lo:O:p:Stqv"
+static gp_linked_list *last_path;
 
-/* Used: acdDehiIlmopqrwv */
-static struct option longopts[] =
+static void
+add_path(char *path)
 {
-  { "archive",     0, 0, 'a' },
-  { "object",      0, 0, 'c' },
-  { "debug",       0, 0, 'd' },
-  { "include",     1, 0, 'I' },
-  { "help",        0, 0, 'h' },
-  { "options",     1, 0, 'k' },
-  { "list-chips",  0, 0, 'l' },
-  { "output",      1, 0, 'o' },
-  { "optimize",    1, 0, 'O' },
-  { "processor",   1, 0, 'p' },
-  { "compile",     0, 0, 'S' },
-  { "save-temps",  0, 0, 't' },
-  { "quiet",       0, 0, 'q' },
-  { "version",     0, 0, 'v' },
-  { 0, 0, 0, 0 }
-};
+  gp_linked_list *new;
 
-void
-init(void)
-{
-  /* restore gpal to its initialized state */
-  state.compile_only = false;
-  state.no_link = false;
-  state.archive = false;
-  state.delete_temps = true;
-  state.options = NULL;
-  state.optimize.level = 0;
-  state.path_num = 0;
-  state.num_files = 0;
-  state.file_list = NULL;
-  state.cmd_processor = false;
-  state.processor = no_processor;
-  state.processor_chosen = false;
-  state.outfilename = NULL;
+  new = gp_list_make();
+  gp_list_annotate(new, strdup(path));
 
-  /* create the global symbol table that is case insensitive */
-  state.top = state.global = push_symbol_table(NULL, 1);
-   
+  if (state.path) {
+    new->prev = last_path;
+    last_path->next = new;
+    last_path = new;
+  } else {
+    state.path = new;
+    last_path = new;
+  }
+
   return;
 }
 
-static void 
-add_path(char *path)
+static gp_linked_list *last_input;
+
+static void
+add_input(char *input)
 {
-  if(state.path_num < MAX_PATHS) {
-    state.paths[state.path_num++] = strdup(path);
+  gp_linked_list *new;
+
+  new = gp_list_make();
+  gp_list_annotate(new, strdup(input));
+
+  if (state.input) {
+    new->prev = last_input;
+    last_input->next = new;
+    last_input = new;
   } else {
-    fprintf(stderr, "too many -I paths\n");
-    exit(1);
+    state.input = new;
+    last_input = new;
   }
+
+  return;
 }
 
-void
-select_processor(char *name)
-{
-  struct px *found = NULL;
+static gp_linked_list *last_compile;
 
-  if (state.cmd_processor) {
-    gp_warning("processor superseded by command line");
-  } else {
-    found = gp_find_processor(name);
-    if (found) {
-      if (state.processor == no_processor) {
-        state.processor = found->tag;
-        state.processor_info = found;
-        scan_header();
-        /* FIXME: should the processor name be defined as a symbol? */
-      } else if (state.processor != found->tag ) {
-        gp_warning("redefining processor");
-      }
-    } else {
-      gp_error("unknown processor \"%s\"", name);
+int
+add_compile(char *compile)
+{
+  gp_linked_list *list = state.compile;
+  gp_linked_list *new;
+  int id = 0;
+
+  /* search the list for the file name */
+  while(list) {
+    if (strcmp(gp_list_get(list), compile) == 0) {
+      return id;
     }
-   
-    /* load the instruction sets if necessary */
-    if ((state.processor_chosen == false) && 
-        (state.processor != no_processor)) {
-      /* FIXME select the correct code generator */
-      state.processor_chosen = true;
-    }
+    id++;
+    list = list->next;
   }
+
+  new = gp_list_make();
+  gp_list_annotate(new, strdup(compile));
+
+  if (state.compile) {
+    new->prev = last_compile;
+    last_compile->next = new;
+    last_compile = new;
+  } else {
+    state.compile = new;
+    last_compile = new;
+  }
+
+  return id;
+}
+
+char *
+get_compile(int id)
+{
+  gp_linked_list *list = state.compile;
+  int count = 0;
+ 
+  while(list) {
+    if (count == id) {
+      return gp_list_get(list);
+    }
+    count++;
+    list = list->next;
+  }  
+
+  assert(0);
+
+  return NULL;
+}
+
+static gp_linked_list *last_link;
+
+static void
+add_link(char *link)
+{
+  gp_linked_list *new;
+  char *name;
+
+  name = malloc(strlen(link) + 3);
+  strcpy(name, link);
+  strcat(name, ".o");
+
+  new = gp_list_make();
+  gp_list_annotate(new, name);
+
+  if (state.link) {
+    new->prev = last_link;
+    last_link->next = new;
+    last_link = new;
+  } else {
+    state.link = new;
+    last_link = new;
+  }
+
+  return;
 }
 
 static tree *last_node;
@@ -174,6 +209,30 @@ set_optimize_level(void)
   return;
 }
 
+#define GET_OPTIONS "?I:acdDhH:k:lo:O:p:Stqv"
+
+/* Used: acdDehiIlmopqrwv */
+static struct option longopts[] =
+{
+  { "archive",     0, 0, 'a' },
+  { "object",      0, 0, 'c' },
+  { "debug",       0, 0, 'd' },
+  { "skip-header", 0, 0, 'D' },
+  { "include",     1, 0, 'I' },
+  { "help",        0, 0, 'h' },
+  { "header",      1, 0, 'H' },
+  { "options",     1, 0, 'k' },
+  { "list-chips",  0, 0, 'l' },
+  { "output",      1, 0, 'o' },
+  { "optimize",    1, 0, 'O' },
+  { "processor",   1, 0, 'p' },
+  { "compile",     0, 0, 'S' },
+  { "save-temps",  0, 0, 't' },
+  { "quiet",       0, 0, 'q' },
+  { "version",     0, 0, 'v' },
+  { 0, 0, 0, 0 }
+};
+
 static void
 show_usage(void)
 {
@@ -182,7 +241,9 @@ show_usage(void)
   printf("  -a, --archive                  Compile or assemble, then archive.\n");
   printf("  -c, --object                   Compile or assemble, but don't link.\n");
   printf("  -d, --debug                    Output debug messages.\n");
+  printf("  -D, --skip-header              Don't read the default processor header file.\n");
   printf("  -h, --help                     Show this usage message.\n");
+  printf("  -H FILE, --header FILE         Scan the specified processor header file.\n");
   printf("  -I DIR, --include DIR          Specify include directory.\n");
   printf("  -k \"OPT\", --options \"OPT\"      Extra link or lib options.\n");
   printf("  -l, --list-chips               List supported processors.\n");
@@ -194,12 +255,20 @@ show_usage(void)
   printf("  -t, --save-temps               Do not delete intermediate files.\n");
   printf("  -v, --version                  Show version.\n");
   printf("\n");
+  #ifdef USE_DEFAULT_PATHS
+    #ifdef HAVE_DOS_BASED_FILE_SYSTEM
+      printf("Reading header files from %s\n", DOS_HEADER_PATH);    
+    #else
+      printf("Reading header files from %s\n", GPASM_HEADER_PATH);
+    #endif
+    printf("\n");    
+  #endif
   printf("Report bugs to:\n");
   printf("%s\n", BUG_REPORT_URL);
   exit(0);
 }
 
-void
+static void
 process_args( int argc, char *argv[])
 {
   extern char *optarg;
@@ -210,6 +279,9 @@ process_args( int argc, char *argv[])
   /* first pass through options */
   while ((c = getopt_long(argc, argv, GET_OPTIONS, longopts, 0)) != EOF) {
     switch (c) {
+    case 'D':
+      state.read_header = false;
+      break;
     case 'O':
       state.optimize.level = atoi(optarg);
       break;
@@ -224,10 +296,6 @@ process_args( int argc, char *argv[])
   /* second pass through options */
   while ((c = getopt_long(argc, argv, GET_OPTIONS, longopts, 0)) != EOF) {
     switch (c) {
-    case '?':
-    case 'h':
-      usage = 1;
-      break;
     case 'a':
       state.archive = true;
       break;    
@@ -236,6 +304,16 @@ process_args( int argc, char *argv[])
       break;    
     case 'd':
       gp_debug_disable = 0;
+      break;
+    case 'D':
+      /* do nothing */
+      break;
+    case '?':
+    case 'h':
+      usage = 1;
+      break;
+    case 'H':
+      scan_header(optarg);
       break;
     case 'I':
       add_path(optarg);
@@ -254,7 +332,7 @@ process_args( int argc, char *argv[])
       /* do nothing */
       break;
     case 'p':
-      select_processor(optarg);
+      analyze_select_processor(NULL, optarg);
       state.cmd_processor = true;
       break;
     case 'q':
@@ -277,12 +355,7 @@ process_args( int argc, char *argv[])
   
   if (optind < argc) {
     for ( ; optind < argc; optind++) {
-      state.file_name[state.num_files] = argv[optind];
-      if (state.num_files >= MAX_FILE_NAMES) {
-        gp_error("exceeded maximum number of source files");
-        break;
-      }
-      state.num_files++;
+      add_input(argv[optind]);
     }
   } else {
     usage = 1;
@@ -291,6 +364,16 @@ process_args( int argc, char *argv[])
   if (usage) {
     show_usage();
   }
+
+  /* Add the header path to the include paths list last, so that the user
+     specified directories are searched first */
+  #ifdef USE_DEFAULT_PATHS
+    #ifdef HAVE_DOS_BASED_FILE_SYSTEM
+      add_path(DOS_HEADER_PATH);
+    #else
+      add_path(GPASM_HEADER_PATH);
+    #endif
+  #endif
 
 }
 
@@ -303,7 +386,7 @@ compile(void)
   init_nodes();
   state.root = NULL;
 
-  /* remove section names */
+  /* initialize the compile */
   state.section.code = NULL;
   state.section.code_addr = 0;
   state.section.code_addr_valid = false;
@@ -326,12 +409,10 @@ compile(void)
   /* parse the input file */
   yyparse();
 
-  /* don't bother analyzing if there are already errors */
-  if (gp_num_errors)
-    return;
-
-  /* check for semantic errors and write the code */
-  analyze();
+  /* check for semantic errors and write the code, if there are no errors */
+  if (!gp_num_errors) {
+    analyze();
+  }
 
   /* destory symbol table for the current module */
   state.top = pop_symbol_table(state.top);
@@ -364,7 +445,7 @@ assemble(char *file_name, gp_boolean asm_source)
   strcat(command, file_name);
   strcat(command, ".asm ");
 
-  if (!gp_quiet) {
+  if (!gp_debug_disable) {
     printf("%s\n", command);
   }
   if (system(command)) {
@@ -381,40 +462,13 @@ assemble(char *file_name, gp_boolean asm_source)
   return;
 }
 
-static gp_linked_list *last_file;
-
-static void
-add_file_list(char *file_name)
-{
-  gp_linked_list *new;
-  char *name;
-
-  name = malloc(strlen(file_name) + 3);
-  strcpy(name, file_name);
-  strcat(name, ".o");
-
-  new = gp_list_make();
-  gp_list_annotate(new, name);
-
-  if (state.file_list) {
-    new->prev = last_file;
-    last_file->next = new;
-    last_file = new;
-  } else {
-    state.file_list = new;
-    last_file = new;
-  }
-
-  return;
-}
-
 /* Either link or archive the objects */
 
 static void
 combine_output(void)
 {
   char command[BUFSIZ];
-  gp_linked_list *list = state.file_list;
+  gp_linked_list *list = state.link;
 
   /* only link if commanded */
   if ((state.compile_only == true) || (state.no_link == true))
@@ -462,13 +516,13 @@ combine_output(void)
     }
   }
   
-  if (!gp_quiet) {
+  if (!gp_debug_disable) {
     printf("%s\n", command);
   }
   if (system(command)) {
     gp_num_errors++;
   } else if (state.delete_temps == true) {
-    list = state.file_list;
+    list = state.link;
     while(list != NULL) {
       unlink(gp_list_get(list));
       list = list->next;
@@ -479,43 +533,81 @@ combine_output(void)
   return;
 }
 
+static void
+init(void)
+{
+  /* restore gpal to its initialized state */
+  state.compile_only = false;
+  state.no_link = false;
+  state.archive = false;
+  state.delete_temps = true;
+  state.read_header = true;
+  state.options = NULL;
+  state.optimize.level = 0;
+  state.path = NULL;
+  state.input = NULL;
+  state.compile = NULL;
+  state.link = NULL;
+  state.cmd_processor = false;
+  state.processor = no_processor;
+  state.processor_chosen = false;
+  state.outfilename = NULL;
+
+  /* create the global symbol table that is case insensitive */
+  state.top = state.global = push_symbol_table(NULL, 1);
+
+#ifdef PARSE_DEBUG
+  {
+    extern int yydebug;
+    yydebug = 1;
+  }
+#endif
+   
+  return;
+}
+
 int 
 main(int argc, char *argv[])
 {
-  int i;
+  gp_linked_list *input;
   char *pc;
 
   init();
   process_args(argc, argv);
 
-  for (i = 0; i < state.num_files; i++) {
-    state.basefilename = strdup(state.file_name[i]);
+  input = state.input;
+
+  while(input) {
+    state.srcfilename = gp_list_get(input);
+    
+    state.basefilename = strdup(state.srcfilename);
     pc = strrchr(state.basefilename, '.');
     *pc++ = 0;
-    state.srcfilename = state.file_name[i];
     
     if (strcasecmp(pc, "pal") == 0) {
       /* compile it */
       compile();
       assemble(state.basefilename, false);
-      add_file_list(state.basefilename);
+      add_link(state.basefilename);
     } else if (strcasecmp(pc, "pub") == 0) {
-      gp_error("public files are not compiled \"%s\"", state.file_name[i]);
+      gp_error("public files are not compiled \"%s\"", state.srcfilename);
     } else if (strcasecmp(pc, "asm") == 0) {
       /* assemble it */
       assemble(state.basefilename, true);
-      add_file_list(state.basefilename);
+      add_link(state.basefilename);
     } else if ((strcasecmp(pc, "o") == 0) || (strcasecmp(pc, "a") == 0)) {
       /* add it to the list for linking */
-      add_file_list(state.basefilename);
+      add_link(state.basefilename);
     } else {
-      gp_error("unknown extension of \"%s\"", state.file_name[i]);
+      gp_error("unknown extension of \"%s\"", state.srcfilename);
       exit(1);
     }
 
     /* free the new filename */
     if (state.basefilename)
       free(state.basefilename);
+  
+    input = input->next;
   }
 
   combine_output();

@@ -361,14 +361,7 @@ parameter_list:
 	}
 	;
 
-expr:
-	e8
-	|
-	STRING
-        {
-	  $$ = mk_string($1);
-        }
-	;
+expr:	e8;
 
 e8:
 	e7
@@ -474,6 +467,11 @@ e1op:	  '-' { $$ = op_neg; }
 	| '+' { $$ = op_add; };
 
 e0:
+	STRING
+        {
+	  $$ = mk_string($1);
+        }
+	|
 	IDENT
         {
 	  $$ = mk_symbol($1);

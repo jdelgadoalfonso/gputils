@@ -93,8 +93,7 @@ mk_node(enum node_tag tag)
   new->tag = tag;
   new->prev = NULL;
   new->next = NULL;
-  /* FIXME: This is wasteful, replace the strdup. */
-  new->file_name = strdup(state.src->name);
+  new->file_id = state.src->file_id;
   new->line_number = state.src->line_number;
 
   return new;
