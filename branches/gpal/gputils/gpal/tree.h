@@ -51,22 +51,26 @@ enum node_tag {
 enum node_op { 
   op_unknown,  /* unknown operation */
   /* valid during all phases of compilation */
+  op_assign,   /* assign a symbol a value */
   op_add,      /* add */
   op_sub,      /* subtract */
   op_mult,     /* multiply */
   op_div,      /* divide */
   op_mod,      /* modulus */
   op_neg,      /* negative */
+  op_com,      /* complement */
   op_and,      /* and */
   op_or,       /* or */
   op_xor,      /* exclusive or */
   op_not,      /* not */
   op_lsh,      /* left shift */
   op_rsh,      /* right shift */
-  op_eq,       /* branch if equal */
-  op_ne,       /* branch if not equal */
-  op_lt,       /* branch if less than */
-  op_lte,      /* branch if less than or equal */
+  op_land,     /* logical and */
+  op_lor,      /* logical or */
+  op_eq,       /* equal */
+  op_ne,       /* not equal */
+  op_lt,       /* less than */
+  op_lte,      /* less than or equal */
   /* valid only during parse */
   op_gt,       /* branch if greater than */
   op_gte,      /* branch if greater than or equal */
@@ -242,9 +246,6 @@ typedef struct node_struct {
 
 #define COPY_DEBUG(x, y) y->line_number = x->line_number;\
                          y->file_id = x->file_id;
-
-extern int file_id;
-extern int line_number;
 
 void init_nodes(void);
 void free_nodes(void);

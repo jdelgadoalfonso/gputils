@@ -56,7 +56,7 @@ void codegen_finish_proc(gp_boolean add_return);
 
 void codegen_init_data(void);
 void codegen_write_data(char *label, int size, enum node_storage storage);
-void codegen_finish_data(void);
+void codegen_temp_data(void);
 char *codegen_get_temp(enum size_tag size);
 
 void codegen_init_asm(void);

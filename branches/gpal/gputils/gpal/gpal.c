@@ -298,7 +298,6 @@ process_args( int argc, char *argv[])
       gp_quiet = 1;
       break;
     case 'S':
-      state.verbose_asm = true;
       state.compile_only = true;
       break;    
     case 't':
@@ -391,7 +390,7 @@ compile(void)
 }
 
 static void
-assemble(void)
+assemble(gp_boolean debug_info)
 {
   char command[BUFSIZ];
 
@@ -405,9 +404,13 @@ assemble(void)
 
   strcpy(command, "gpasm -c ");
 
+  if (debug_info) {
+    strcat(command, "-g ");
+  }
+
   if (gp_quiet) {
     strcat(command, "-q ");
-  }  
+  }
 
   strcat(command, state.basefilename);
   strcat(command, ".asm ");
@@ -515,7 +518,6 @@ init(void)
   state.delete_temps = true;
   state.options = NULL;
   state.optimize.level = 1;
-  state.verbose_asm = false;
   state.path = NULL;
   state.file = NULL;
   state.cmd_processor = false;
@@ -528,10 +530,10 @@ init(void)
   state.top = state.global = push_symbol_table(NULL, 1);
 
   /* create the type symbol table that is case insensitive */
-  state.memory = push_symbol_table(NULL, 1);
+  state.type = push_symbol_table(NULL, 1);
 
   /* create the memory symbol table that is case sensitive */
-  state.type = push_symbol_table(NULL, 0);
+  state.memory = push_symbol_table(NULL, 0);
 
   /* local data */
   next_file_id = 1;
@@ -570,12 +572,12 @@ main(int argc, char *argv[])
       if (strcasecmp(pc, "pal") == 0) {
         /* compile it */
         compile();
-        assemble();
+        assemble(true);
       } else if (strcasecmp(pc, "pub") == 0) {
         gp_error("public files are not compiled %s", state.srcfilename);
       } else if (strcasecmp(pc, "asm") == 0) {
         /* assemble it */
-        assemble();
+        assemble(false);
       } else if (strcasecmp(pc, "o") == 0) {
         /* add the object to the list for linking */
         add_file(state.basefilename, "o", false, true);

@@ -263,7 +263,7 @@ can_evaluate(tree *p, gp_boolean gen_errors)
   case node_symbol:
     var = get_global(SYM_NAME(p));
     if (var) {
-      if ((var->tag == sym_const) || (var->tag == sym_equ)) {
+      if (var->tag == sym_const) {
         return 1;
       } else {
         if (gen_errors) { 
@@ -343,9 +343,8 @@ evaluate(tree *p)
     case op_ne:    return p0 != p1;
     case op_gte:   return p0 >= p1;
     case op_lte:   return p0 <= p1;
-/* FIXME: straighten out the logical operators
     case op_land:  return p0 && p1;
-    case op_lor:   return p0 || p1; */
+    case op_lor:   return p0 || p1;
     default:
       assert(0); /* Unhandled binary operator */
     }
@@ -514,6 +513,8 @@ analyze_call(tree *call, gp_boolean in_expr, enum size_tag codegen_size)
     return;
   }
 
+  codegen_line_number(call);
+
   /* local symbol table */
   state.top = push_symbol_table(state.top, 1);
 
@@ -533,7 +534,7 @@ analyze_call(tree *call, gp_boolean in_expr, enum size_tag codegen_size)
 
     if ((ARG_DIR(def_args) == dir_in) ||
         (ARG_DIR(def_args) == dir_inout)) {
-      assignment = mk_binop(op_eq,
+      assignment = mk_binop(op_assign,
                             arg_to_symbol(var->alias, def_args),
                             call_args);
       COPY_DEBUG(call_args, assignment);
@@ -555,7 +556,7 @@ analyze_call(tree *call, gp_boolean in_expr, enum size_tag codegen_size)
     if ((ARG_DIR(def_args) == dir_inout) ||
         (ARG_DIR(def_args) == dir_out)) {
       if (call_args->tag == node_symbol) {
-        assignment = mk_binop(op_eq,
+        assignment = mk_binop(op_assign,
                               call_args,
                               arg_to_symbol(var->alias, def_args));
         COPY_DEBUG(call_args, assignment);
@@ -612,8 +613,6 @@ analyze_test(tree *test, char *end_label)
   if (scan_tree(test, size)) {
     return 1;
   }
-
-  codegen_line_number(test);
 
   /* optimize the expression */
   test = optimize_expr(test);
@@ -746,7 +745,7 @@ analyze_expr(tree *expr)
   int element_size;
   int offset = 0;
 
-  if ((expr->tag != node_binop) || (BINOP_OP(expr) != op_eq)) {
+  if ((expr->tag != node_binop) || (BINOP_OP(expr) != op_assign)) {
     analyze_error(expr, "expression is missing =");
     return;
   }
@@ -813,8 +812,9 @@ analyze_return(tree *ret)
   found_return = true;
  
   if (generating_function) {
-    if (scan_tree(ret->value.ret, return_size))
+    if (scan_tree(ret->value.ret, return_size)) {
       return;
+    }
     codegen_line_number(ret);
     ret->value.ret = optimize_expr(ret->value.ret);
     codegen_expr(ret->value.ret, return_size);
@@ -828,8 +828,6 @@ analyze_return(tree *ret)
 static void
 analyze_assembly(tree *assembly)
 {
-  /* FIXME: need to figure out how to check the asm blocks */
-  codegen_line_number(assembly);
   codegen_assembly(assembly);
 }
 
@@ -1004,8 +1002,10 @@ analyze_declarations(void)
     }
   }
 
+  codegen_temp_data();
+
   if (first_time == false)
-    codegen_write_comment(" ");
+    fprintf(state.output.f, "\n");
 
   /* write the external symbols for procedures and functions */
 
@@ -1027,7 +1027,7 @@ analyze_declarations(void)
   }
 
   if (first_time == false)
-    codegen_write_comment(" ");
+    fprintf(state.output.f, "\n");
 
   /* write the external symbols for data memory */
 
@@ -1047,7 +1047,7 @@ analyze_declarations(void)
   }
 
   if (first_time == false)
-    codegen_write_comment(" ");
+    fprintf(state.output.f, "\n");
 
 }
 
@@ -1093,15 +1093,18 @@ analyze_pragma(tree *expr, enum source_type type)
   case node_binop:
     lhs = expr->value.binop.p0;
     rhs = expr->value.binop.p1;
-    if ((expr->value.binop.op != op_eq) ||
+    if ((expr->value.binop.op != op_assign) ||
         (lhs->tag != node_symbol)) {
       analyze_error(expr, "unknown pragma");
     } else {
-      if (strcasecmp(lhs->value.string, "processor") == 0) {
-        if (rhs->tag != node_string) {
-          analyze_error(expr, "processor name must be a string");        
+      if (strcasecmp(SYM_NAME(lhs), "code_address") == 0) {
+        if (rhs->tag != node_constant) {
+          analyze_error(expr, "code address must be a constant");
+        } else if (type == source_module) {            
+          state.section.code_addr = rhs->value.constant;
+          state.section.code_addr_valid = true;
         } else {
-          analyze_select_processor(rhs, rhs->value.string);
+          analyze_error(expr, "udata section addresses can only be in modules");
         }
       } else if (strcasecmp(SYM_NAME(lhs), "code_section") == 0) {
         if (rhs->tag != node_string) {
@@ -1135,6 +1138,22 @@ analyze_pragma(tree *expr, enum source_type type)
             analyze_error(expr, "processor must be selected");        
           }
         }
+      } else if (strcasecmp(lhs->value.string, "processor") == 0) {
+        if (rhs->tag != node_string) {
+          analyze_error(expr, "processor name must be a string");        
+        } else {
+          analyze_select_processor(rhs, rhs->value.string);
+        }
+
+      } else if (strcasecmp(SYM_NAME(lhs), "udata_address") == 0) {
+        if (rhs->tag != node_constant) {
+          analyze_error(expr, "udata address must be a constant");
+        } else if (type == source_module) {            
+          state.section.udata_addr = rhs->value.constant;
+          state.section.udata_addr_valid = true;
+        } else {
+          analyze_error(expr, "udata section addresses can only be in modules");
+        }
       } else if (strcasecmp(lhs->value.string, "udata_section") == 0) {
         if (rhs->tag != node_string) {
           analyze_error(expr, "udata section name must be a string");
@@ -1156,24 +1175,6 @@ analyze_pragma(tree *expr, enum source_type type)
               state.section.udata = rhs->value.string;
             }
           }        
-        }
-      } else if (strcasecmp(SYM_NAME(lhs), "code_address") == 0) {
-        if (rhs->tag != node_constant) {
-          analyze_error(expr, "code address must be a constant");
-        } else if (type == source_module) {            
-          state.section.code_addr = rhs->value.constant;
-          state.section.code_addr_valid = true;
-        } else {
-          analyze_error(expr, "udata section addresses can only be in modules");
-        }
-      } else if (strcasecmp(SYM_NAME(lhs), "udata_address") == 0) {
-        if (rhs->tag != node_constant) {
-          analyze_error(expr, "udata address must be a constant");
-        } else if (type == source_module) {            
-          state.section.udata_addr = rhs->value.constant;
-          state.section.udata_addr_valid = true;
-        } else {
-          analyze_error(expr, "udata section addresses can only be in modules");
         }
       } else {
         analyze_error(expr, "unknown pragma %s", SYM_NAME(lhs));
@@ -1455,8 +1456,6 @@ analyze_module_contents(tree *file)
 {
   tree *current = FILE_BODY(file);
 
-  state.module = file;
-
   while (current) {
     switch (current->tag) {
     case node_pragma:
@@ -1486,7 +1485,6 @@ analyze(void)
   tree *module = NULL;
   gp_boolean found_module = false;
 
-  /* FIXME: manage memory better or at least try */
   generating_function = false;
   found_return = false;
   return_size = size_unknown;
@@ -1525,26 +1523,17 @@ analyze(void)
   if (gp_num_errors)
     return;
 
-  /* scan though each procedure and function */
-  current = state.root;
-  while (current) {
-    if (FILE_TYPE(current) == source_module) {
-      /* open the output file */
-      codegen_init_asm();
-      
-      /* scan the module and exit */
-      analyze_module_contents(current);
-      break;
-    }
-    current = current->next;
-  }
+  state.module = module;
 
-  /* scan though each declaration */
+  /* open the output file */
+  codegen_init_asm();
+
+  /* scan the module */
+  analyze_module_contents(module);
+
+  /* finish the assembly output */
   codegen_init_data();
   analyze_declarations();
-  codegen_finish_data();
-
-  /* close the assembly output */
   codegen_close_asm();
 
   return;
