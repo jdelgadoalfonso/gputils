@@ -97,7 +97,6 @@ cod_init(void)
       perror(state.codfilename);
       exit(1);
     }
-    add_file(ft_cod,state.codfilename);
     state.cod.enabled = 1;
   }
 
@@ -160,7 +159,7 @@ write_file_block(void)
 
   /* Find the head of the file list: */
 
-  fc = state.files->prev;
+  fc = state.files;
   while(fc->prev && id_number++ < 1000) {
     fc = fc->prev;
   }
@@ -489,7 +488,7 @@ cod_write_code(void)
 	     is needed. This is done by writing the start and end address to
 	     the directory map. */
 	  gp_putl16(&rb.block[offset], 2*start_address);
-	  gp_putl16(&rb.block[offset+2], 2*(i-1));
+	  gp_putl16(&rb.block[offset+2], 2*(i-1) + 1);
 
 	  offset += 4;
 	  if(offset>=COD_BLOCK_SIZE) {
@@ -550,7 +549,6 @@ write_directory(void)
 void
 cod_close_file(void)
 {
-  char *processor_name;
 
   if(!state.cod.enabled)
     return;
@@ -560,13 +558,10 @@ cod_close_file(void)
   write_file_block();
 
   cod_write_code();
-  
-  processor_name = gp_upper_case(state.processor_info->names[2]);
 
   gp_cod_strncpy(&main_dir.dir.block[COD_DIR_PROCESSOR], 
-	         processor_name,
+	         state.processor_info->names[2],
 	         COD_DIR_LSYMTAB - COD_DIR_PROCESSOR);
-  free(processor_name);
 
   write_directory();
   fclose(state.cod.f);

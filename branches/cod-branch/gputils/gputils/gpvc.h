@@ -36,6 +36,8 @@ extern char *source_file_names[MAX_SOURCE_FILES];
 extern FILE *source_files[MAX_SOURCE_FILES];
 extern DirBlockInfo main_dir;
 
+extern int byte_addr;
+
 extern char directory_block_data[COD_BLOCK_SIZE];
 extern char * SymbolType4[154];
 

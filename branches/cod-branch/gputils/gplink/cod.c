@@ -50,7 +50,7 @@ init_DirBlock(DirBlockInfo *a_dir)
   /* Initialize the directory block with known data. It'll be written
    * to the .cod file after everything else */
   gp_cod_strncpy(&a_dir->dir.block[COD_DIR_SOURCE], 
-	         "FIXME",
+	         state.codfilename,
 	         COD_DIR_DATE - COD_DIR_SOURCE);
   gp_cod_date(&a_dir->dir.block[COD_DIR_DATE], 
               COD_DIR_TIME - COD_DIR_DATE);
@@ -508,7 +508,7 @@ cod_write_code(void)
 	     is needed. This is done by writing the start and end address to
 	     the directory map. */
 	  gp_putl16(&rb.block[offset], 2*start_address);
-	  gp_putl16(&rb.block[offset+2], 2*(i-1));
+	  gp_putl16(&rb.block[offset+2], 2*(i-1) + 1);
 
 	  offset += 4;
 	  if(offset>=COD_BLOCK_SIZE) {
@@ -588,7 +588,6 @@ cod_symbol_table(struct symbol_table *table)
 void
 cod_close_file(void)
 {
-  char *processor_name;
 
   if(!state.cod.enabled)
     return;
@@ -603,12 +602,9 @@ cod_close_file(void)
 
   cod_write_code();
 
-  processor_name = gp_upper_case(gp_processor_name(state.processor, 2));
-
   gp_cod_strncpy(&main_dir.dir.block[COD_DIR_PROCESSOR], 
-	         processor_name,
+	         gp_processor_name(state.processor, 2),
 	         COD_DIR_LSYMTAB - COD_DIR_PROCESSOR);
-  free(processor_name);
 
   write_directory();
   fclose(state.cod.f);
