@@ -53,7 +53,7 @@ add_global(char *name, char *alias, tree *node)
   } else {
     var = get_symbol_annotation(sym);
     analyze_error(node,
-                  "redefinition of \"%s\",\n\talso defined in %s:%i:",
+                  "redefinition of %s,\n\talso defined in %s:%i:",
                   name,
                   get_compile(var->file_id),
                   var->line_number);
@@ -86,7 +86,7 @@ add_constant(char *name, int value, tree *node, char *type)
     if (type) {
       var->type = get_type(type);   
       if (var->type == NULL) {
-        analyze_error(node, "unknown symbol type \"%s\"", type);
+        analyze_error(node, "unknown symbol type %s", type);
       }
     }
     var->tag = sym_const;
@@ -129,7 +129,7 @@ add_equ(char *name, int value)
   } else {
     gp_num_errors++;
     if (gp_quiet == 0) {
-      printf("%s:%d:error duplicate symbol \"%s\"\n",
+      printf("%s:%d:error duplicate symbol %s\n",
              state.src->name,
              state.src->line_number,
              name);
@@ -144,6 +144,7 @@ add_equ(char *name, int value)
 struct variable *
 add_global_symbol(char *name,
                   char *prefix,
+                  gp_boolean mangle_name,
                   tree *symbol,
                   enum sym_tag tag,
                   enum node_storage class,
@@ -157,12 +158,16 @@ add_global_symbol(char *name,
   else
     sprintf(buffer, "%s", name);
 
-  var = add_global(name, buffer, symbol);
+  if (mangle_name) {
+    var = add_global(buffer, buffer, symbol);
+  } else {
+    var = add_global(name, buffer, symbol);
+  }
   if (var) {
     if (type) {
       var->type = get_type(type);   
       if (var->type == NULL) {
-        analyze_error(symbol, "unknown symbol type \"%s\"", type);
+        analyze_error(symbol, "unknown symbol type %s", type);
       }
     }
     var->tag = tag;
@@ -206,13 +211,13 @@ add_type_array(char *name, int start, int end, char *type)
 
   prim = get_symbol(state.type, type);
   if (prim == NULL) {
-    analyze_error(NULL, "unknown type \"%s\"", type);
+    analyze_error(NULL, "unknown type %s", type);
     return;
   } else {
     prim_type = get_symbol_annotation(prim);
     assert(prim_type != NULL);
     if (prim_type->tag != type_prim) {
-      analyze_error(NULL, "arrays can't be of derived type \"%s\"", type);
+      analyze_error(NULL, "arrays can't be of derived type %s", type);
       return;
     }
   }
@@ -229,7 +234,7 @@ add_type_array(char *name, int start, int end, char *type)
     new->end = end;
     new->prim = prim_type;
   } else {
-    analyze_error(NULL, "redefinition of type \"%s\"", name);
+    analyze_error(NULL, "redefinition of type %s", name);
   }
   
   return;
@@ -263,7 +268,7 @@ add_type_enum(char *name)
     new->end = 0;
     new->prim = prim_type;
   } else {
-    analyze_error(NULL, "redefinition of type \"%s\"", name);
+    analyze_error(NULL, "redefinition of type %s", name);
   }
   
   return ;
@@ -279,7 +284,7 @@ add_type_alias(char *name, char *type)
 
   prim = get_symbol(state.type, type);
   if (prim == NULL) {
-    analyze_error(NULL, "unknown type \"%s\"", type);
+    analyze_error(NULL, "unknown type %s", type);
     return;
   } else {
     prim_type = get_symbol_annotation(prim);
@@ -298,7 +303,7 @@ add_type_alias(char *name, char *type)
     new->end = 0;
     new->prim = prim_type;
   } else {
-    analyze_error(NULL, "redefinition of type \"%s\"", name);
+    analyze_error(NULL, "redefinition of type %s", name);
   }
   
   return;
@@ -398,7 +403,7 @@ type_size(struct type *type)
     size = prim_size(type->size);
     break;
   case type_array:
-    size = type->nelts * prim_size(type->size);
+    size = type->nelts * type_size(type->prim);
     break;
   case type_enum:
     size = type_size(type->prim);

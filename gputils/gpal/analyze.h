@@ -32,7 +32,7 @@ int evaluate(tree *p);
 int maybe_evaluate(tree *p);
 
 int analyze_check_array(tree *symbol, struct variable *var);
-void analyze_call(tree *call, gp_boolean in_expr);
+void analyze_call(tree *call, gp_boolean in_expr, enum size_tag codegen_size);
 void analyze_expr(tree *expr);
 
 #endif
