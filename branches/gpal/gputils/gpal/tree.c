@@ -93,8 +93,14 @@ mk_node(enum node_tag tag)
   new->tag = tag;
   new->prev = NULL;
   new->next = NULL;
-  new->file_id = state.src->file_id;
-  new->line_number = state.src->line_number;
+  if (state.src) {
+    new->file_id = state.src->file_id;
+    new->line_number = state.src->line_number;
+  } else {
+    /* a node is constructed while parser not running */
+    new->file_id = 0;
+    new->line_number = 0;
+  }
 
   return new;
 }
@@ -242,6 +248,15 @@ mk_proc(tree *head, tree *body)
 }
 
 tree *
+mk_return(tree *ret)
+{
+  tree *new = mk_node(node_return);
+  new->value.ret = ret;
+  
+  return new;
+}
+
+tree *
 mk_string(char *value)
 {
   tree *new = mk_node(node_string);
@@ -250,10 +265,12 @@ mk_string(char *value)
 }
 
 tree *
-mk_symbol(char *value)
+mk_symbol(char *name, tree *offset)
 {
   tree *new = mk_node(node_symbol);
-  new->value.symbol = strdup(value);
+  new->value.symbol.name = strdup(name);
+  new->value.symbol.offset = offset;
+
   return new;
 }
 
@@ -477,13 +494,20 @@ print_node(tree *node, int level)
     if (PROC_BODY(node) != NULL)
       print_node(PROC_BODY(node), level);
     break;
+  case node_return:
+    print_space(level);
+    printf("node_return\n");
+    print_node(node->value.ret, level);
+    break;
   case node_string:
     print_space(level);
     printf("node_string %s\n", node->value.string);
     break;
   case node_symbol:
     print_space(level);
-    printf("node_symbol %s\n", node->value.symbol);
+    printf("node_symbol %s\n", SYM_NAME(node));
+    if (SYM_OFST(node) != NULL)  
+      print_node(SYM_OFST(node), level);
     break;
   case node_type:
     print_space(level);

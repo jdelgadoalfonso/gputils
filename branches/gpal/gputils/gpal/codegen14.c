@@ -23,9 +23,10 @@ Boston, MA 02111-1307, USA.  */
 
 #include "libgputils.h"
 #include "gpal.h"
-#include "symbol.h"
+#include "analyze.h"
 #include "codegen.h"
 #include "codegen14.h"
+#include "symbol.h"
 
 /* data movement */
 
@@ -36,9 +37,29 @@ gen_get_mem(char *name)
 }
 
 void
+gen_get_mem_offset(char *name, int offset)
+{
+  if (offset < 0) {
+    codegen_write_asm("movf %s - %#x, w", name, -offset);
+  } else {
+    codegen_write_asm("movf %s + %#x, w", name, offset);
+  }
+}
+
+void
 gen_put_mem(char *name)
 {
   codegen_write_asm("movwf %s", name);
+}
+
+void
+gen_put_mem_offset(char *name, int offset)
+{
+  if (offset < 0) {
+    codegen_write_asm("movwf %s - %#x", name, -offset);
+  } else {
+    codegen_write_asm("movwf %s + %#x", name, offset);
+  }
 }
 
 void
@@ -92,7 +113,7 @@ gen_unop_expr(tree *expr)
 
 }
 
-static void
+void
 gen_binop_constant(enum node_op op, int value)
 {
   char *reg1 = NULL;
@@ -428,32 +449,48 @@ gen_binop_expr(tree *expr)
 {
   tree *lhs = expr->value.binop.p0;
   tree *rhs = expr->value.binop.p1;
+  char *reg1 = NULL;
+  char *reg2 = NULL;
+  struct variable *var;
 
   /* calculate right hand side */
   gen_expr(rhs);
 
   if (lhs->tag == node_constant) {
+    reg1 = codegen_get_temp();
+    codegen_write_asm("movwf %s", reg1); 
+    analyze_call(expr, true);    
+    gen_binop_symbol(expr->value.binop.op, reg1);
+  } else if (lhs->tag == node_constant) {
     gen_binop_constant(expr->value.binop.op, lhs->value.constant);
   } else if (lhs->tag == node_symbol) { 
-    struct variable *var;
-
-    var = get_global(lhs->value.symbol);
-    if (var->is_constant) {
+    var = get_global(SYM_NAME(lhs));
+    if (var->tag == sym_const) {
       gen_binop_constant(expr->value.binop.op, var->value);
+    } else if (SYM_OFST(lhs)) {
+      /* it is a complex expression, so save temp data */
+      reg1 = codegen_get_temp();
+      reg2 = codegen_get_temp();
+      codegen_write_asm("movwf %s", reg1); 
+      analyze_get_array(lhs, var);
+      codegen_write_asm("movwf %s", reg2); 
+      codegen_write_asm("movf %s, w", reg1); 
+      gen_binop_symbol(expr->value.binop.op, reg2);
     } else {
       gen_binop_symbol(expr->value.binop.op, var->alias);
     }
   } else {
-    char *temp_name;
- 
     /* it is a complex expression so save temp data */
-    temp_name = codegen_get_temp();
-    codegen_write_asm("movwf %s", temp_name); 
+    reg1 = codegen_get_temp();
+    codegen_write_asm("movwf %s", reg1); 
     gen_expr(lhs);
-    gen_binop_symbol(expr->value.binop.op, temp_name);
-    if (temp_name)
-      free(temp_name);
+    gen_binop_symbol(expr->value.binop.op, reg1);
   }
+
+  if (reg1)
+    free(reg1);
+  if (reg2)
+    free(reg2);
 
 }
 
@@ -473,13 +510,18 @@ gen_expr(tree *expr)
       gen_get_mem(var->alias);
     }
     break;
+  case node_call:
+    analyze_call(expr, true);    
+    break;
   case node_constant:
     gen_immed(expr->value.constant);    
     break;
   case node_symbol:
-    var = get_global(expr->value.symbol);
-    if (var->is_constant) {
-      codegen_write_asm("movlw %i", var->value);
+    var = get_global(SYM_NAME(expr));
+    if (var->tag == sym_const) {
+      codegen_write_asm("movlw %#x", var->value);
+    } else if (SYM_OFST(expr)) {
+      analyze_get_array(expr, var);
     } else {
       if (var->class == storage_extern) {
         codegen_banksel(var->alias);
