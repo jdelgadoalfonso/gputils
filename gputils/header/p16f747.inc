@@ -23,7 +23,6 @@
 
 ;Rev:   Date:    Reason:
 ;1.00   05/05/03 Initial Release 
-;1.01	10/21/03 Made changes to Program Memory register names. 
 
 ;==========================================================================
 ;
@@ -107,8 +106,8 @@ ADCON1                       EQU     H'009F'
 
 WDTCON					  	 EQU	 H'0105'
 LVDCON						 EQU	 H'0109'
-PMDATA	                     EQU     H'010C'
-PMADR                        EQU     H'010D'
+PMDATL	                     EQU     H'010C'
+PMADRL                       EQU     H'010D'
 PMDATH                       EQU     H'010E'
 PMADRH                       EQU     H'010F'
 
