@@ -1,3 +1,6 @@
+2004-09-25 Craig Franklin <craigfranklin@users.sourceforge.net>
+  * Changed to byte addressing for 18xx cod files.
+
 2004-09-24 Craig Franklin <craigfranklin@users.sourceforge.net>
   * gputils 0.12.4 Released.
   * Allow odd relocation addresses in gplink and gpasm.
