@@ -650,50 +650,6 @@ do_not(enum size_tag size, gp_boolean is_const, int value, char *name)
 
 }
 
-static void
-com_byte(int byte)
-{
-  codegen_write_asm("movlw 0xff");
-  codegen_write_asm("xorwf %s + %i, f", WORKING_LABEL, byte);
-}
-
-static void
-do_com(enum size_tag size, gp_boolean is_const, int value, char *name)
-{
-
-  switch (size) {
-  case size_bit:
-    assert(0);
-    break;
-  case size_uint8:
-  case size_int8:
-    codegen_write_asm("xorlw 0xff"); 
-    break;
-  case size_uint16:
-  case size_int16:
-    com_byte(0);
-    com_byte(1);
-    break;
-  case size_uint24:
-  case size_int24:
-    com_byte(0);
-    com_byte(1);
-    com_byte(2);
-    break;
-  case size_uint32:
-  case size_int32:
-    com_byte(0);
-    com_byte(1);
-    com_byte(2);
-    com_byte(3);
-    break;
-  case size_float:
-  default:
-    assert(0);
-  }
-
-}
-
 /****************************************************************************/
 /* Shift                                                                    */
 /****************************************************************************/
@@ -1246,9 +1202,6 @@ codegen14(enum node_op op,
     break;
   case op_neg:
     do_neg(size, is_const, value, name);
-    break;
-  case op_com:
-    do_com(size, is_const, value, name);
     break;
   case op_and:
     do_and(size, is_const, value, name);

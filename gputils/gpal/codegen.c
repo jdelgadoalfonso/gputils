@@ -28,10 +28,6 @@ Boston, MA 02111-1307, USA.  */
 #include "codegen.h"
 #include "codegen14.h"
 
-#ifdef STDC_HEADERS
-#include <stdarg.h>
-#endif
-
 /* prototypes */
 static void gen_expr(tree *expr);
 
@@ -103,11 +99,13 @@ codegen_write_comment(const char *format, ...)
   return;
 }
 
-static void
+void
 codegen_line_number(tree *node)
 {
+
+  assert(node->file_id != 0);
   fprintf(state.output.f, ";#CSRC %s %d\n",
-          get_compile(node->file_id),
+          get_file_name(node->file_id),
           node->line_number);
 }
 
@@ -150,7 +148,6 @@ void
 codegen_assembly(tree *assembly)
 {
 
-  codegen_line_number(assembly);
   fprintf(state.output.f, "%s\n", assembly->value.assembly);
 
   return;
@@ -207,14 +204,14 @@ codegen_load_file(tree *symbol, struct variable *var)
       if (can_evaluate(SYM_OFST(symbol), false)) {
         /* direct access */
         offset = analyze_check_array(symbol, var) * element_size;
-        if (var->class == storage_extern) {
+        if (var->storage == storage_extern) {
           LOAD_FILE(var->alias, codegen_size, offset, true);
         } else {
           LOAD_FILE(var->alias, codegen_size, offset, false);
         }
       } else {
         codegen_indirect(SYM_OFST(symbol), var, element_size, false);
-        if (var->class == storage_extern) {
+        if (var->storage == storage_extern) {
           LOAD_INDIRECT(var->alias, codegen_size, 0, true);
         } else {
           LOAD_INDIRECT(var->alias, codegen_size, 0, false);
@@ -225,7 +222,7 @@ codegen_load_file(tree *symbol, struct variable *var)
                     SYM_NAME(symbol));
     }
   } else {
-    if (var->class == storage_extern) {
+    if (var->storage == storage_extern) {
       LOAD_FILE(var->alias, codegen_size, 0, true);
     } else {
       LOAD_FILE(var->alias, codegen_size, 0, false);
@@ -246,20 +243,20 @@ codegen_store(struct variable *var,
 
   if (offset_expr) {
     if (constant_offset) {
-      if (var->class == storage_extern) {
+      if (var->storage == storage_extern) {
         STORE_FILE(var->alias, codegen_size, offset, true);
       } else {
         STORE_FILE(var->alias, codegen_size, offset, false);
       }    
     } else {
-      if (var->class == storage_extern) {
+      if (var->storage == storage_extern) {
         STORE_INDIRECT(var->alias, codegen_size, 0, true);
       } else {
         STORE_INDIRECT(var->alias, codegen_size, 0, false);
       }
     }
   } else {
-    if (var->class == storage_extern) {
+    if (var->storage == storage_extern) {
       STORE_FILE(var->alias, codegen_size, 0, true);
     } else {
       STORE_FILE(var->alias, codegen_size, 0, false);
@@ -282,7 +279,6 @@ gen_unop_expr(tree *expr)
     break;
   case op_not:
   case op_neg:
-  case op_com:
     CODEGEN(expr->value.unop.op, codegen_size, true, 0, NULL);
     break;
   default:
@@ -410,8 +406,6 @@ void
 codegen_test(tree *node, char *label, enum size_tag size)
 {
 
-  codegen_line_number(node);
-
   temp_number = codegen_setup(size);
 
   gen_expr(node);
@@ -426,8 +420,6 @@ codegen_test(tree *node, char *label, enum size_tag size)
 void
 codegen_expr(tree *statement, enum size_tag size)
 {
-
-  codegen_line_number(statement);
 
   temp_number = codegen_setup(size);
 
@@ -472,7 +464,7 @@ codegen_finish_proc(gp_boolean add_return)
 /****************************************************************************/
 
 void
-codegen_init_data(void)
+codegen_init_data()
 {
   codegen_write_comment("declarations");
 
@@ -487,10 +479,10 @@ codegen_init_data(void)
   } else {
     if (state.section.udata_addr_valid) {
       fprintf(state.output.f, ".udata_%s udata %#x\n",
-              state.basefilename,
+              FILE_NAME(state.module),
               state.section.udata_addr);
     } else {
-      fprintf(state.output.f, ".udata_%s udata\n", state.basefilename);
+      fprintf(state.output.f, ".udata_%s udata\n", FILE_NAME(state.module));
     }  
   }
 
@@ -510,7 +502,7 @@ codegen_write_data(char *label, int size, enum node_storage storage)
 }
 
 void
-codegen_finish_data(void)
+codegen_finish_data()
 {
   int i;
 
@@ -520,7 +512,7 @@ codegen_finish_data(void)
   }
 
   for (i = 0; i < max_temp_number; i++) 
-    fprintf(state.output.f, "_%s_temp_%d res 1\n", state.basefilename, i);
+    fprintf(state.output.f, "_%s_temp_%d res 1\n", FILE_NAME(state.module), i);
 
   fprintf(state.output.f, "\n");
 
@@ -531,40 +523,11 @@ codegen_get_temp(enum size_tag size)
 {
   char temp_name[BUFSIZ];
  
-  sprintf(temp_name, "_%s_temp_%d", state.basefilename, temp_number);
+  sprintf(temp_name, "_%s_temp_%d", FILE_NAME(state.module), temp_number);
 
   temp_number += prim_size(size);
 
   return strdup(temp_name);
-}
-
-static void
-write_externs(void)
-{
-  struct variable *var;
-  int i;
-  struct symbol *sym;
-  gp_boolean first_time = true;
-
-  for (i = 0; i < HASH_SIZE; i++) {
-    for (sym = state.top->hash_table[i]; sym; sym = sym->next) {
-      var = get_symbol_annotation(sym);
-      if ((var) && 
-          ((var->class == storage_extern) ||
-           (var->class == storage_local))){
-        if (first_time == true)  {
-          codegen_write_comment("external symbols");
-          first_time = false;
-        }
-        fprintf(state.output.f, "  extern %s\n", var->alias);
-      }
-    }
-  }
-
-  if (first_time == false)
-    fprintf(state.output.f, "\n");
-
-  return;
 }
 
 /****************************************************************************/
@@ -572,7 +535,7 @@ write_externs(void)
 /****************************************************************************/
 
 void
-codegen_init_asm(void)
+codegen_init_asm()
 {
   char buffer[BUFSIZ];
 
@@ -618,10 +581,10 @@ codegen_init_asm(void)
   } else {
     if (state.section.code_addr_valid) {
       fprintf(state.output.f, ".code_%s code %#x\n", 
-              state.basefilename,
+              FILE_NAME(state.module),
               state.section.code_addr);
     } else {
-      fprintf(state.output.f, ".code_%s code\n", state.basefilename);
+      fprintf(state.output.f, ".code_%s code\n", FILE_NAME(state.module));
     }
   }
 
@@ -632,16 +595,14 @@ void
 codegen_close_asm(void)
 {
   struct variable *var;
-  
-  write_externs();
 
   var = get_global("main");
   if ((var) && (var->node->tag == node_proc)) {
     /* a procedure named "main" exists so add the startup code */
     codegen_write_comment("startup and interrupt vectors\n");
     fprintf(state.output.f, "STARTUP code\n");
-    fprintf(state.output.f, "  pagesel main\n");
-    fprintf(state.output.f, "  goto main\n\n");
+    fprintf(state.output.f, "  pagesel %s\n", var->alias);
+    fprintf(state.output.f, "  goto %s\n\n", var->alias);
   }
 
   fprintf(state.output.f, "  end\n\n");

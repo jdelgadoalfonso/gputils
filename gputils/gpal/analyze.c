@@ -29,15 +29,8 @@ Boston, MA 02111-1307, USA.  */
 #include "optimize.h"
 #include "scan.h"
 
-#ifdef STDC_HEADERS
-#include <stdarg.h>
-#endif
-
 /* prototypes */
 void analyze_statements(tree *statement);
-
-static gp_linked_list *data_memory;
-static gp_linked_list *last_link;
 
 /* function return data */
 static gp_boolean generating_function;
@@ -47,26 +40,6 @@ static enum size_tag return_size;
 
 /* test for default expression size */ 
 static enum size_tag scan_size;
-
-/* create a linked list of all the data memory used */
-
-static void
-add_link(struct variable *var)
-{
-  gp_linked_list *new = gp_list_make();
-
-  gp_list_annotate(new, var);
-
-  if (data_memory) {
-    new->prev = last_link;
-    last_link->next = new;
-    last_link = new;
-  } else {
-    data_memory = new;
-    last_link = new;
-  }
-
-}
 
 void 
 analyze_error(tree *node, const char *format, ...)
@@ -85,7 +58,7 @@ analyze_error(tree *node, const char *format, ...)
 
   if ((node) && (node->file_id)) {
     printf("%s:%d: error: %s\n",
-           get_compile(node->file_id),
+           get_file_name(node->file_id),
            node->line_number,
            buffer);
   } else {
@@ -112,7 +85,7 @@ analyze_warning(tree *node, const char *format, ...)
 
   if ((node) && (node->file_id)) {
     printf("%s:%d: warning: %s\n",
-           get_compile(node->file_id),
+           get_file_name(node->file_id),
            node->line_number,
            buffer);
   } else {
@@ -145,7 +118,7 @@ make_proc_public(struct variable *var, tree *prot)
   tree *prot_args;
 
   /* make the procedure public */
-  var->class = storage_public;
+  var->storage = storage_public;
   
   /* verify that the procedure definition and declaration match */
   def = var->node;
@@ -185,7 +158,7 @@ make_proc_public(struct variable *var, tree *prot)
                     "argument %s,\n\t defined as %s in %s:%i:",
                     ARG_NAME(prot_args),
                     ARG_NAME(def_args),
-                    get_compile(var->file_id),
+                    get_file_name(var->file_id),
                     var->line_number);
       /* The argument name didn't match, so skip the rest of the tests.  
          This should prevent generating spurious errors. */
@@ -198,7 +171,7 @@ make_proc_public(struct variable *var, tree *prot)
                     ARG_TYPE(prot_args),
                     ARG_NAME(prot_args),
                     ARG_TYPE(def_args),
-                    get_compile(var->file_id),
+                    get_file_name(var->file_id),
                     var->line_number);
     }
 
@@ -206,7 +179,7 @@ make_proc_public(struct variable *var, tree *prot)
       analyze_error(prot,
                     "direction mismatch of argument %s,\n\t defined in %s:%i:",
                     ARG_NAME(prot_args),
-                    get_compile(var->file_id),
+                    get_file_name(var->file_id),
                     var->line_number);
     }
 
@@ -227,6 +200,7 @@ make_proc_public(struct variable *var, tree *prot)
 static void
 add_arg_symbols(tree *node,
                 char *name,
+                char *module,
                 gp_boolean is_declar,
                 enum node_storage storage)
 {
@@ -249,6 +223,7 @@ add_arg_symbols(tree *node,
     if (is_declar) {
       /* Its a declaration, so prefix the symbol name with the function name */ 
       var = add_global_symbol(ARG_NAME(arg),
+                              NULL,
                               name,
                               true,
                               arg,
@@ -259,16 +234,12 @@ add_arg_symbols(tree *node,
       /* Its a definition so use the symbol name as is. */
       var = add_global_symbol(ARG_NAME(arg),
                               name,
+                              module,
                               false,
                               arg,
                               sym_udata,
                               storage,
                               ARG_TYPE(arg));
-      /* allocate memory for the arguments */
-      if ((var->class == storage_private) ||
-          (var->class == storage_public)) {    
-        add_link(var);
-      }    
     }
     if (var->type->tag == type_array) {
       analyze_error(arg, "arguments can not be arrays");     
@@ -343,8 +314,6 @@ evaluate(tree *p)
       return  evaluate(p->value.unop.p0);
     case op_neg:
       return -evaluate(p->value.unop.p0);
-    case op_com:
-      return ~evaluate(p->value.unop.p0);
     default:
       assert(0);
     }
@@ -374,8 +343,9 @@ evaluate(tree *p)
     case op_ne:    return p0 != p1;
     case op_gte:   return p0 >= p1;
     case op_lte:   return p0 <= p1;
+/* FIXME: straighten out the logical operators
     case op_land:  return p0 && p1;
-    case op_lor:   return p0 || p1;
+    case op_lor:   return p0 || p1; */
     default:
       assert(0); /* Unhandled binary operator */
     }
@@ -485,10 +455,9 @@ arg_to_symbol(char *proc_name, tree *arg)
 
   /* mangle the definition argument so it doesn't collide with the local
      name space */
-  sprintf(buffer, "_%s_%s", proc_name, ARG_NAME(arg));
+  sprintf(buffer, "%s.%s", proc_name, ARG_NAME(arg));
   symbol = mk_symbol(buffer, NULL);
-  symbol->file_id = arg->file_id;
-  symbol->line_number = arg->line_number;
+  COPY_DEBUG(arg, symbol);
 
   return symbol;
 }
@@ -548,10 +517,15 @@ analyze_call(tree *call, gp_boolean in_expr, enum size_tag codegen_size)
   /* local symbol table */
   state.top = push_symbol_table(state.top, 1);
 
-  /* FIXME: udata_default won't work because multiple publics could exist */
+  /* FIXME: udata_default won't work because multiple publics could exist.
+            put the default in the file symbol. var->module.udata_default */
 
   /* add the function's arguments to the symbol table */
-  add_arg_symbols(var->node, CALL_NAME(call), true, state.section.udata_default);
+  add_arg_symbols(var->node,
+                  var->alias,
+                  NULL,
+                  true,
+                  state.section.udata_default);
 
   /* write data into the in/inout of the function or procedure */
   while (call_args) {
@@ -562,8 +536,7 @@ analyze_call(tree *call, gp_boolean in_expr, enum size_tag codegen_size)
       assignment = mk_binop(op_eq,
                             arg_to_symbol(var->alias, def_args),
                             call_args);
-      assignment->file_id = call_args->file_id;
-      assignment->line_number = call_args->line_number;
+      COPY_DEBUG(call_args, assignment);
       analyze_expr(assignment);
     }
 
@@ -571,7 +544,7 @@ analyze_call(tree *call, gp_boolean in_expr, enum size_tag codegen_size)
     call_args = call_args->next;
   }
 
-  codegen_call(var->alias, var->class);
+  codegen_call(var->alias, var->storage);
 
   /* read data from the inout/out of the function or procedure */
   call_args = CALL_ARGS(call);
@@ -585,8 +558,7 @@ analyze_call(tree *call, gp_boolean in_expr, enum size_tag codegen_size)
         assignment = mk_binop(op_eq,
                               call_args,
                               arg_to_symbol(var->alias, def_args));
-        assignment->file_id = call_args->file_id;
-        assignment->line_number = call_args->line_number;
+        COPY_DEBUG(call_args, assignment);
         analyze_expr(assignment);
       } else {
         analyze_error(call_args, "call argument must be a symbol");
@@ -600,9 +572,14 @@ analyze_call(tree *call, gp_boolean in_expr, enum size_tag codegen_size)
   /* put the result in the working register */
   if (load_result) {
     char buffer[BUFSIZ];
+    tree *symbol;
 
-    sprintf(buffer, "_%s_return", CALL_NAME(call));
-    codegen_expr(mk_symbol(buffer, NULL), codegen_size);
+    sprintf(buffer, "%s.%s.return",
+            FILE_NAME(var->module),
+            CALL_NAME(call));
+    symbol = mk_symbol(buffer, NULL);
+    COPY_DEBUG(call, symbol);
+    codegen_expr(symbol, codegen_size);
   }
 
   /* remove the local table */
@@ -635,6 +612,8 @@ analyze_test(tree *test, char *end_label)
   if (scan_tree(test, size)) {
     return 1;
   }
+
+  codegen_line_number(test);
 
   /* optimize the expression */
   test = optimize_expr(test);
@@ -815,6 +794,8 @@ analyze_expr(tree *expr)
     }
   }
 
+  codegen_line_number(right);
+
   /* optimize the expression */
   right = optimize_expr(right);
 
@@ -834,6 +815,7 @@ analyze_return(tree *ret)
   if (generating_function) {
     if (scan_tree(ret->value.ret, return_size))
       return;
+    codegen_line_number(ret);
     ret->value.ret = optimize_expr(ret->value.ret);
     codegen_expr(ret->value.ret, return_size);
     codegen_store(return_var, false, 0, NULL);
@@ -847,7 +829,7 @@ static void
 analyze_assembly(tree *assembly)
 {
   /* FIXME: need to figure out how to check the asm blocks */
-
+  codegen_line_number(assembly);
   codegen_assembly(assembly);
 }
 
@@ -922,37 +904,42 @@ analyze_procedure(tree *procedure, gp_boolean is_func)
   decl = BODY_DECL(body);
   statements = BODY_STATEMENTS(body); 
 
-  var = get_global(find_node_name(procedure));
+  proc_name = find_node_name(procedure);
+  var = get_global(proc_name);
   assert(var != NULL);
-  proc_name = var->alias;
 
   /* add the procedure arguments */
-  add_arg_symbols(procedure, proc_name, false, var->class);     
+  add_arg_symbols(procedure,
+                  proc_name,
+                  FILE_NAME(state.module),
+                  false,
+                  var->storage);     
 
   /* add the return */
   if (is_func) {
     return_var = add_global_symbol("return",
                                    proc_name,
+                                   FILE_NAME(state.module),
                                    true,
                                    procedure,
                                    sym_udata,
-                                   var->class,
+                                   var->storage,
                                    FUNC_RET(procedure));
-    add_link(return_var);
   }
 
   /* local data */
   while (decl) {
     assert(decl->tag == node_decl);
-    if (DECL_KEY(decl) == key_var) {
-      add_link(add_global_symbol(DECL_NAME(decl), 
-                                 proc_name,
-                                 false,
-                                 decl,
-                                 sym_udata,
-                                 storage_private,
-                                 DECL_TYPE(decl)));
-    } else if (DECL_KEY(decl) == key_const) {
+    if (DECL_KEY(decl) == key_variable) {
+      add_global_symbol(DECL_NAME(decl), 
+                        proc_name,
+                        FILE_NAME(state.module),
+                        false,
+                        decl,
+                        sym_udata,
+                        storage_private,
+                        DECL_TYPE(decl));
+    } else if (DECL_KEY(decl) == key_constant) {
       if (DECL_INIT(decl)) {
         add_constant(DECL_NAME(decl),
                      maybe_evaluate(DECL_INIT(decl)),
@@ -969,8 +956,8 @@ analyze_procedure(tree *procedure, gp_boolean is_func)
   }
 
   /* write the procedure to the assembly file */
-  codegen_init_proc(proc_name, var->class, is_func);
-  if (var->class == storage_public) {
+  codegen_init_proc(var->alias, var->storage, is_func);
+  if (var->storage == storage_public) {
     codegen_write_asm("banksel %s", LOCAL_DATA_LABEL);
     codegen_write_asm("bankisel %s", LOCAL_DATA_LABEL);
   }
@@ -996,16 +983,71 @@ analyze_procedure(tree *procedure, gp_boolean is_func)
 void
 analyze_declarations(void)
 {
-  gp_linked_list *list = data_memory;
+  int i;
+  struct symbol *sym;
   struct variable *var;
+  gp_boolean first_time;
 
-  while(list) {
-    var = gp_list_get(list);
-    assert(var != NULL);
-    assert(var->type != NULL);
-    codegen_write_data(var->alias, type_size(var->type), var->class);
-    list = list->next;
+  /* write the data memory section */
+
+  first_time = true;
+
+  for (i = 0; i < HASH_SIZE; i++) {
+    for (sym = state.memory->hash_table[i]; sym; sym = sym->next) {
+      var = get_symbol_annotation(sym);
+      assert(var != NULL);
+      if ((var->storage == storage_public) || 
+          (var->storage == storage_private)) {
+        codegen_write_data(var->alias, type_size(var->type), var->storage);
+        first_time = false;
+      }      
+    }
   }
+
+  if (first_time == false)
+    codegen_write_comment(" ");
+
+  /* write the external symbols for procedures and functions */
+
+  first_time = true;
+
+  for (i = 0; i < HASH_SIZE; i++) {
+    for (sym = state.top->hash_table[i]; sym; sym = sym->next) {
+      var = get_symbol_annotation(sym);
+      assert(var != NULL);
+      if (((var->tag == sym_proc) || (var->tag == sym_func)) &&
+          is_extern(var)) {
+        if (first_time == true)  {
+          codegen_write_comment("external procedures and functions");
+          first_time = false;
+        }
+        fprintf(state.output.f, "  extern %s\n", var->alias);
+      }
+    }
+  }
+
+  if (first_time == false)
+    codegen_write_comment(" ");
+
+  /* write the external symbols for data memory */
+
+  first_time = true;
+
+  for (i = 0; i < HASH_SIZE; i++) {
+    for (sym = state.memory->hash_table[i]; sym; sym = sym->next) {
+      var = get_symbol_annotation(sym);
+      if (var && has_address(var) && is_extern(var)) {
+        if (first_time == true)  {
+          codegen_write_comment("external data memory");
+          first_time = false;
+        }
+        fprintf(state.output.f, "  extern %s\n", var->alias);
+      }
+    }
+  }
+
+  if (first_time == false)
+    codegen_write_comment(" ");
 
 }
 
@@ -1015,7 +1057,6 @@ void
 analyze_select_processor(tree *expr, char *name)
 {
   struct px *found = NULL;
-  char file_name[LINE_SIZ];
 
   if (state.cmd_processor) {
     analyze_warning(expr, "processor superseded by command line");
@@ -1026,10 +1067,6 @@ analyze_select_processor(tree *expr, char *name)
         state.processor = found->tag;
         state.class = gp_processor_class(state.processor);
         state.processor_info = found;
-        sprintf(file_name, "%s.inc", found->names[1]);
-        if (state.read_header) {
-          scan_header(file_name);
-        }
       } else if (state.processor != found->tag ) {
         analyze_warning(expr, "redefining processor");
       }
@@ -1087,6 +1124,16 @@ analyze_pragma(tree *expr, enum source_type type)
               state.section.code = rhs->value.string;
             }
           }        
+        }
+      } else if (strcasecmp(lhs->value.string, "header") == 0) {
+        if (rhs->tag != node_string) {
+          analyze_error(expr, "header file name must be a string");        
+        } else {
+          if (state.processor_chosen) {
+            scan_header(rhs->value.string);
+          } else {
+            analyze_error(expr, "processor must be selected");        
+          }
         }
       } else if (strcasecmp(lhs->value.string, "udata_section") == 0) {
         if (rhs->tag != node_string) {
@@ -1187,6 +1234,8 @@ analyze_module(tree *file)
   char *name;
   struct variable *var;
 
+  state.module = file;
+
   current = FILE_BODY(file);
   while (current) {
     switch (current->tag) {
@@ -1213,15 +1262,15 @@ analyze_module(tree *file)
       analyze_type(current);
       break;
     case node_decl:
-      if (DECL_KEY(current) == key_var) {
+      if (DECL_KEY(current) == key_variable) {
         var = add_global_symbol(DECL_NAME(current), 
                                 NULL,
+                                FILE_NAME(file),
                                 false,
                                 current, 
                                 sym_udata,
                                 storage_private,
                                 DECL_TYPE(current));
-        add_link(var);
       } else {
         if (DECL_INIT(current)) {
           add_constant(DECL_NAME(current),
@@ -1237,6 +1286,7 @@ analyze_module(tree *file)
       name = find_node_name(current);
       add_global_symbol(name,
                         NULL,
+                        FILE_NAME(file),
                         false,
                         current,
                         sym_proc,
@@ -1251,6 +1301,7 @@ analyze_module(tree *file)
       name = find_node_name(current);
       add_global_symbol(name,
                         NULL,
+                        FILE_NAME(file),
                         false,
                         current,
                         sym_func,
@@ -1276,6 +1327,8 @@ analyze_public(tree *file)
   tree *current;
   char *name;
   struct variable *var;
+
+  state.module = file;
 
   current = FILE_BODY(file);
   while (current) {
@@ -1304,17 +1357,29 @@ analyze_public(tree *file)
       break;
     case node_decl:
       name = find_node_name(current);
-      if (FILE_TYPE(file) == source_public) {
-        var = get_global(name);
-        if (var) {
-          var->class = storage_public;       
+      if (DECL_KEY(current) == key_constant) {
+        if (DECL_INIT(current)) {
+          add_constant(DECL_NAME(current),
+                       maybe_evaluate(DECL_INIT(current)),
+                       current,
+                       DECL_TYPE(current));
         } else {
-          analyze_error(current, "missing definition for %s", name); 
+          analyze_error(current, "missing constant value");
+        }
+      } else if (FILE_TYPE(file) == source_public) {
+        if (DECL_KEY(current) == key_variable) {
+          var = get_global(name);
+          if (var) {
+            var->storage = storage_public;       
+          } else {
+            analyze_error(current, "missing definition for %s", name); 
+          }
         }
       } else if (FILE_TYPE(file) == source_with) {
         add_global_symbol(name,
                           NULL,
-                          false,
+                          FILE_NAME(file),
+                          true,
                           current,
                           sym_udata,
                           state.section.code_default,
@@ -1339,7 +1404,8 @@ analyze_public(tree *file)
       } else if (FILE_TYPE(file) == source_with) {
         add_global_symbol(name,
                           NULL,
-                          false,
+                          FILE_NAME(file),
+                          true,
                           current,
                           sym_proc,
                           state.section.code_default,
@@ -1364,7 +1430,8 @@ analyze_public(tree *file)
       } else if (FILE_TYPE(file) == source_with) {
         add_global_symbol(name,
                           NULL,
-                          false,
+                          FILE_NAME(file),
+                          true,
                           current,
                           sym_func,
                           state.section.code_default,
@@ -1387,6 +1454,8 @@ static void
 analyze_module_contents(tree *file)
 {
   tree *current = FILE_BODY(file);
+
+  state.module = file;
 
   while (current) {
     switch (current->tag) {
@@ -1418,7 +1487,6 @@ analyze(void)
   gp_boolean found_module = false;
 
   /* FIXME: manage memory better or at least try */
-  data_memory = NULL;
   generating_function = false;
   found_return = false;
   return_size = size_unknown;
@@ -1457,14 +1525,16 @@ analyze(void)
   if (gp_num_errors)
     return;
 
-  /* open the output file */
-  codegen_init_asm();
-
   /* scan though each procedure and function */
   current = state.root;
   while (current) {
     if (FILE_TYPE(current) == source_module) {
+      /* open the output file */
+      codegen_init_asm();
+      
+      /* scan the module and exit */
       analyze_module_contents(current);
+      break;
     }
     current = current->next;
   }

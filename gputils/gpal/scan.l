@@ -70,14 +70,14 @@ DECCHAR [0-9]
 	  		    exit(1);
 			  }
 			}
+"and"			{ return AND; }
 "array"			{ return ARRAY; }
-"case"			{ return CASE; }
-"const"			{ return CONST_KEY; }
 "begin"			{ return BEGIN_KEY; }
+"case"			{ return CASE; }
+"constant"		{ return CONSTANT_KEY; }
 "else"			{ return ELSE; }
 "elsif"			{ return ELSIF; }
 "end"			{ return END; }
-"extern"		{ return EXTERN_STORAGE; }
 "for"			{ return FOR; }
 "function"		{ return FUNCTION_TOK; }
 "if"			{ return IF; }
@@ -85,9 +85,12 @@ DECCHAR [0-9]
 "inout"			{ return INOUT; }
 "is"			{ return IS; }
 "loop"			{ return LOOP; }
+"mod"			{ return MOD; }
 "module"		{ return MODULE; }
+"not"			{ return NOT; }
 "null"			{ return NULL_TOK; }
 "of"			{ return OF; }
+"or"			{ return OR; }
 "others"		{ return OTHERS; }
 "out"			{ return OUT; }
 "pragma"		{ return PRAGMA; }
@@ -97,17 +100,17 @@ DECCHAR [0-9]
 "then"			{ return THEN; }
 "to"			{ return TO; }
 "type"			{ return TYPE; }
-"var"			{ return VAR_KEY; }
-"volatile"		{ return VOLATILE_STORAGE; }
+"variable"		{ return VARIABLE_KEY; }
 "when"			{ return WHEN; }
 "while"			{ return WHILE; }
 "with"			{ return WITH; }
+"xor"			{ return XOR; }
 \"[^;\n\"]+\"		{
 			  yytext[yyleng - 1] = '\0';
 			  yylval.s = strdup(yytext + 1);
                           return STRING;
 			}
-[_a-z][_0-9a-z]*	{
+[a-z][_.0-9a-z]*	{
 			  yylval.s = strdup(yytext);
 			  return IDENT;
 			}
@@ -124,10 +127,7 @@ DECCHAR [0-9]
 ">>"			OPERATOR(RSH);
 ">="			OPERATOR(GREATER_EQUAL);
 "<="			OPERATOR(LESS_EQUAL);
-"=="			OPERATOR(EQUAL);
-"!="			OPERATOR(NOT_EQUAL);
-"&&"			OPERATOR(LOGICAL_AND);
-"||"			OPERATOR(LOGICAL_OR);
+"/="			OPERATOR(NOT_EQUAL);
 
 --[^\n]*		{ }
 [\n]			{ state.src->line_number++; }
@@ -183,7 +183,7 @@ void open_src(char *name, enum source_type type)
 
   new->f = fopen(file_name, "rt");
   if (new->f == NULL) {
-    if (type == source_with) {
+    if (type == source_public) {
       /* source files aren't required to have public files */
       free(new);
       free(file_name);
@@ -210,7 +210,7 @@ void open_src(char *name, enum source_type type)
   }
 
   new->type = type;
-  new->file_id = add_compile(file_name);
+  new->file_id = add_file(file_name, NULL, false, false);
   new->line_number = 1;
   new->prev = state.src;
   
@@ -314,8 +314,13 @@ scan_header(char *file_name)
   char *linept = linebuf;
   char *array[NUM_TOKENS];
   int i;
+  int value;
 
   open_src(file_name, source_header);
+
+  if (gp_debug_disable == 0) {
+    gp_debug("adding symbols from %s", file_name);
+  }
 
   /* scan the file looking for the equates */
   while(fgets(linept, LINESIZ, state.src->f)) {
@@ -329,15 +334,18 @@ scan_header(char *file_name)
       }
 
       if (array[0] && array[1] && array[2] && 
+          (array[0][0] != ';') &&
           (strcasecmp(array[1], "equ") == 0)) {
-        add_equ(array[0], convert_number(array[2])); 
+        value = convert_number(array[2]);
+        add_equ(array[0], value); 
+        gp_debug("  %s = %#x", array[0], value);
       }
     }
 
     /* set the line pointer to the beginning of the line buffer */
     linept = linebuf;
     
-    state.src->line_number++;;
+    state.src->line_number++;
 
   }
 

@@ -53,106 +53,65 @@ add_path(char *path)
   return;
 }
 
-static gp_linked_list *last_input;
-
-static void
-add_input(char *input)
-{
-  gp_linked_list *new;
-
-  new = gp_list_make();
-  gp_list_annotate(new, strdup(input));
-
-  if (state.input) {
-    new->prev = last_input;
-    last_input->next = new;
-    last_input = new;
-  } else {
-    state.input = new;
-    last_input = new;
-  }
-
-  return;
-}
-
-static gp_linked_list *last_compile;
+static gp_linked_list *last_file;
+static int next_file_id;
 
 int
-add_compile(char *compile)
+add_file(char *name,
+         char *extension,
+         gp_boolean is_temp,
+         gp_boolean is_link)
 {
-  gp_linked_list *list = state.compile;
+  char *file_name;
   gp_linked_list *new;
-  int id = 1;
+  struct file_struct *file_data;
 
-  /* search the list for the file name */
-  while(list) {
-    if (strcmp(gp_list_get(list), compile) == 0) {
-      return id;
-    }
-    id++;
-    list = list->next;
+  if (extension != NULL) {
+    file_name = malloc(strlen(name) + strlen(extension)+ 2);
+    strcpy(file_name, name);
+    strcat(file_name, ".");
+    strcat(file_name, extension);
+  } else {
+    file_name = strdup(name);
   }
 
   new = gp_list_make();
-  gp_list_annotate(new, strdup(compile));
+  file_data = malloc(sizeof(*file_data));  
+  file_data->name = file_name;
+  file_data->file_id = next_file_id++;
+  file_data->is_temp = is_temp;
+  file_data->is_link = is_link;
+  gp_list_annotate(new, file_data);
 
-  if (state.compile) {
-    new->prev = last_compile;
-    last_compile->next = new;
-    last_compile = new;
+  if (state.file) {
+    new->prev = last_file;
+    last_file->next = new;
+    last_file = new;
   } else {
-    state.compile = new;
-    last_compile = new;
+    state.file = new;
+    last_file = new;
   }
 
-  return id;
+  return file_data->file_id;
 }
 
 char *
-get_compile(int id)
+get_file_name(int id)
 {
-  gp_linked_list *list = state.compile;
-  int count = 1;
+  gp_linked_list *list = state.file;
+  struct file_struct *file_data;
  
   while(list) {
-    if (count == id) {
-      return gp_list_get(list);
+    file_data = gp_list_get(list);
+    if (file_data->file_id == id) {
+      return file_data->name;
     }
-    count++;
     list = list->next;
   }  
 
   assert(0);
 
   return NULL;
-}
-
-static gp_linked_list *last_link;
-
-static void
-add_link(char *base, char *extension)
-{
-  gp_linked_list *new;
-  char *name;
-
-  name = malloc(strlen(base) + strlen(extension)+ 2);
-  strcpy(name, base);
-  strcat(name, ".");
-  strcat(name, extension);
-
-  new = gp_list_make();
-  gp_list_annotate(new, name);
-
-  if (state.link) {
-    new->prev = last_link;
-    last_link->next = new;
-    last_link = new;
-  } else {
-    state.link = new;
-    last_link = new;
-  }
-
-  return;
 }
 
 static tree *last_node;
@@ -214,7 +173,7 @@ set_optimize_level(void)
   return;
 }
 
-#define GET_OPTIONS "?I:acdDhH:k:lo:O:p:Stqv"
+#define GET_OPTIONS "?I:acdhH:k:lo:O:p:Stqv"
 
 /* Used: acdDehiIlmopqrwv */
 static struct option longopts[] =
@@ -222,7 +181,6 @@ static struct option longopts[] =
   { "archive",     0, 0, 'a' },
   { "object",      0, 0, 'c' },
   { "debug",       0, 0, 'd' },
-  { "skip-header", 0, 0, 'D' },
   { "include",     1, 0, 'I' },
   { "help",        0, 0, 'h' },
   { "header",      1, 0, 'H' },
@@ -246,7 +204,6 @@ show_usage(void)
   printf("  -a, --archive                  Compile or assemble, then archive.\n");
   printf("  -c, --object                   Compile or assemble, but don't link.\n");
   printf("  -d, --debug                    Output debug messages.\n");
-  printf("  -D, --skip-header              Don't read the default processor header file.\n");
   printf("  -h, --help                     Show this usage message.\n");
   printf("  -H FILE, --header FILE         Scan the specified processor header file.\n");
   printf("  -I DIR, --include DIR          Specify include directory.\n");
@@ -284,11 +241,12 @@ process_args( int argc, char *argv[])
   /* first pass through options */
   while ((c = getopt_long(argc, argv, GET_OPTIONS, longopts, 0)) != EOF) {
     switch (c) {
-    case 'D':
-      state.read_header = false;
-      break;
     case 'O':
       state.optimize.level = atoi(optarg);
+      break;
+    case 'p':
+      analyze_select_processor(NULL, optarg);
+      state.cmd_processor = true;
       break;
     }
   }
@@ -309,9 +267,6 @@ process_args( int argc, char *argv[])
       break;    
     case 'd':
       gp_debug_disable = 0;
-      break;
-    case 'D':
-      /* do nothing */
       break;
     case '?':
     case 'h':
@@ -337,8 +292,7 @@ process_args( int argc, char *argv[])
       /* do nothing */
       break;
     case 'p':
-      analyze_select_processor(NULL, optarg);
-      state.cmd_processor = true;
+      /* do nothing */
       break;
     case 'q':
       gp_quiet = 1;
@@ -358,12 +312,9 @@ process_args( int argc, char *argv[])
     if (usage)
       break;
   }
-  
-  if (optind < argc) {
-    for ( ; optind < argc; optind++) {
-      add_input(argv[optind]);
-    }
-  } else {
+
+  if (optind >= argc) {
+    /* there are no files in the list */
     usage = 1;
   }
 
@@ -428,11 +379,19 @@ compile(void)
   /* free all the memory */
   free_nodes();
 
+  if (!gp_num_errors) {
+    if (state.compile_only == true) {
+      add_file(state.basefilename, "asm", false, false);
+    } else {
+      add_file(state.basefilename, "asm", true, false);
+    }
+  }
+
   return;
 }
 
 static void
-assemble(char *file_name, gp_boolean asm_source)
+assemble(void)
 {
   char command[BUFSIZ];
 
@@ -450,21 +409,22 @@ assemble(char *file_name, gp_boolean asm_source)
     strcat(command, "-q ");
   }  
 
-  strcat(command, file_name);
+  strcat(command, state.basefilename);
   strcat(command, ".asm ");
 
   if (!gp_debug_disable) {
     printf("%s\n", command);
   }
+  
   if (system(command)) {
     gp_num_errors++;
-  } else if (state.delete_temps == true) {
-    if (asm_source == false) {
-      sprintf(command, "%s.asm", file_name);
-      unlink(command);
+  } else {
+    add_file(state.basefilename, "lst", true, false);  
+    if (state.no_link == true) {
+      add_file(state.basefilename, "o", false, true);
+    } else {
+      add_file(state.basefilename, "o", true, true);
     }
-    sprintf(command, "%s.lst", file_name);
-    unlink(command);
   }
 
   return;
@@ -477,6 +437,7 @@ combine_output(void)
 {
   char command[BUFSIZ];
   gp_linked_list *list;
+  struct file_struct *file_data;
 
   /* only link if commanded */
   if ((state.compile_only == true) || (state.no_link == true))
@@ -522,30 +483,22 @@ combine_output(void)
     list = list->next;
   }  
   
-  list = state.link;
-  if (list == NULL) {
-    gp_error("no files to link or archive");
-  } else {
-    while(list) {
-      strcat(command, gp_list_get(list)); 
+  list = state.file;
+  while(list) {
+    file_data = gp_list_get(list);
+    if (file_data->is_link) {
+      strcat(command, file_data->name); 
       strcat(command, " ");
-      list = list->next;
     }
+    list = list->next;
   }
   
   if (!gp_debug_disable) {
     printf("%s\n", command);
   }
+  
   if (system(command)) {
     gp_num_errors++;
-  } else if (state.delete_temps == true) {
-    /* FIXME: this will delete any objects or libs passed as inputs */
-    list = state.link;
-    while(list != NULL) {
-      unlink(gp_list_get(list));
-      list = list->next;
-    }    
-  
   }
 
   return;
@@ -554,19 +507,17 @@ combine_output(void)
 static void
 init(void)
 {
+
   /* restore gpal to its initialized state */
   state.compile_only = false;
   state.no_link = false;
   state.archive = false;
   state.delete_temps = true;
-  state.read_header = true;
   state.options = NULL;
   state.optimize.level = 1;
   state.verbose_asm = false;
   state.path = NULL;
-  state.input = NULL;
-  state.compile = NULL;
-  state.link = NULL;
+  state.file = NULL;
   state.cmd_processor = false;
   state.processor = no_processor;
   state.class = PROC_CLASS_GENERIC;
@@ -577,7 +528,13 @@ init(void)
   state.top = state.global = push_symbol_table(NULL, 1);
 
   /* create the type symbol table that is case insensitive */
-  state.type = push_symbol_table(NULL, 1);
+  state.memory = push_symbol_table(NULL, 1);
+
+  /* create the memory symbol table that is case sensitive */
+  state.type = push_symbol_table(NULL, 0);
+
+  /* local data */
+  next_file_id = 1;
 
   add_type_prims();
 
@@ -594,17 +551,17 @@ init(void)
 int 
 main(int argc, char *argv[])
 {
-  gp_linked_list *input;
+  extern char *optarg;
+  extern int optind;
   char *pc;
+  gp_linked_list *list;
+  struct file_struct *file_data;
 
   init();
   process_args(argc, argv);
 
-  input = state.input;
-
-  while(input) {
-    state.srcfilename = gp_list_get(input);
-    
+  for ( ; optind < argc; optind++) {
+    state.srcfilename = argv[optind];
     state.basefilename = strdup(state.srcfilename);
     pc = strrchr(state.basefilename, '.');
     if (pc) {
@@ -613,20 +570,18 @@ main(int argc, char *argv[])
       if (strcasecmp(pc, "pal") == 0) {
         /* compile it */
         compile();
-        assemble(state.basefilename, false);
-        add_link(state.basefilename, "o");
+        assemble();
       } else if (strcasecmp(pc, "pub") == 0) {
         gp_error("public files are not compiled %s", state.srcfilename);
       } else if (strcasecmp(pc, "asm") == 0) {
         /* assemble it */
-        assemble(state.basefilename, true);
-        add_link(state.basefilename, "o");
+        assemble();
       } else if (strcasecmp(pc, "o") == 0) {
         /* add the object to the list for linking */
-        add_link(state.basefilename, "o");
+        add_file(state.basefilename, "o", false, true);
       } else if (strcasecmp(pc, "a") == 0) {
         /* add the archive to the list for linking */
-        add_link(state.basefilename, "a");
+        add_file(state.basefilename, "a", false, true);
       } else {
         gp_error("unknown extension of %s", state.srcfilename);
         exit(1);
@@ -638,11 +593,22 @@ main(int argc, char *argv[])
     /* free the new filename */
     if (state.basefilename)
       free(state.basefilename);
-  
-    input = input->next;
+ 
   }
 
   combine_output();
+
+  /* delete temps if no errors */
+  if ((state.delete_temps == true) && (gp_num_errors == 0)) {
+    list = state.file;
+    while(list != NULL) {
+      file_data = gp_list_get(list);
+      if (file_data->is_temp) {
+        unlink(file_data->name);
+      }
+      list = list->next;
+    }    
+  }
 
   if (gp_num_errors > 0)
     return EXIT_FAILURE;
