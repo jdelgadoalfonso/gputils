@@ -902,7 +902,6 @@ Boston, MA 02111-1307, USA.  */
 #include "scan.h"
 #include "gperror.h"
 #include "directive.h"
-#include "evaluate.h"
 #include "macro.h"
 #include "coff.h"
 
@@ -917,14 +916,12 @@ static void push_string(char *str);
 static int found_end();
 static int found_eof();
 
-static char *check_defines(char *symbol);
-
 static struct symbol *current_definition;	/* Used in #define */
 static int quoted; /* Used to prevent #define expansion in ifdef and 
                       ifndef... */
 static int force_decimal; /* Used to force decimal in errorlevel */
 
-#line 928 "scan.c"
+#line 925 "scan.c"
 
 /* Macros after this point can all be overridden by user definitions in
  * section 1.
@@ -1078,9 +1075,9 @@ YY_DECL
 	register char *yy_cp = NULL, *yy_bp = NULL;
 	register int yy_act;
 
-#line 67 "scan.l"
+#line 64 "scan.l"
 
-#line 1084 "scan.c"
+#line 1081 "scan.c"
 
 	if ( yy_init )
 		{
@@ -1166,12 +1163,12 @@ do_action:	/* This label is used only to access EOF actions. */
 
 case 1:
 YY_RULE_SETUP
-#line 68 "scan.l"
+#line 65 "scan.l"
 { BEGIN(incl); }
 	YY_BREAK
 case 2:
 YY_RULE_SETUP
-#line 69 "scan.l"
+#line 66 "scan.l"
 { /* got the include file name */
 			   char *pc = &yytext[yyleng - 1];
 			   if ((*pc == '"') || (*pc == '>'))
@@ -1187,7 +1184,7 @@ case YY_STATE_EOF(define):
 case YY_STATE_EOF(definition):
 case YY_STATE_EOF(title):
 case YY_STATE_EOF(subtitle):
-#line 77 "scan.l"
+#line 74 "scan.l"
 {
 			   if (found_eof())
 			     yyterminate();
@@ -1195,7 +1192,7 @@ case YY_STATE_EOF(subtitle):
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
-#line 81 "scan.l"
+#line 78 "scan.l"
 {
 			   found_end();
 			   yyterminate();
@@ -1203,12 +1200,12 @@ YY_RULE_SETUP
 	YY_BREAK
 case 4:
 YY_RULE_SETUP
-#line 85 "scan.l"
+#line 82 "scan.l"
 { BEGIN(title); }
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
-#line 86 "scan.l"
+#line 83 "scan.l"
 { /* got the title text */
 #define LEN sizeof(state.lst.title_name)
                            yytext[yyleng - 1] = '\0';
@@ -1220,22 +1217,22 @@ YY_RULE_SETUP
 	YY_BREAK
 case 6:
 YY_RULE_SETUP
-#line 94 "scan.l"
+#line 91 "scan.l"
 { BEGIN(subtitle); }
 	YY_BREAK
 case 7:
 YY_RULE_SETUP
-#line 95 "scan.l"
+#line 92 "scan.l"
 { BEGIN(subtitle); }
 	YY_BREAK
 case 8:
 YY_RULE_SETUP
-#line 96 "scan.l"
+#line 93 "scan.l"
 { BEGIN(subtitle); }
 	YY_BREAK
 case 9:
 YY_RULE_SETUP
-#line 97 "scan.l"
+#line 94 "scan.l"
 { /* got the subtitle text */
 #define LEN sizeof(state.lst.subtitle_name)
                            yytext[yyleng - 1] = '\0';
@@ -1247,14 +1244,14 @@ YY_RULE_SETUP
 	YY_BREAK
 case 10:
 YY_RULE_SETUP
-#line 105 "scan.l"
+#line 102 "scan.l"
 {
 			   return CBLOCK;
 			 }
 	YY_BREAK
 case 11:
 YY_RULE_SETUP
-#line 108 "scan.l"
+#line 105 "scan.l"
 {
 			   /* Force decimal interpretation for errorlevel*/
 			   force_decimal = 1;
@@ -1264,14 +1261,14 @@ YY_RULE_SETUP
 	YY_BREAK
 case 12:
 YY_RULE_SETUP
-#line 114 "scan.l"
+#line 111 "scan.l"
 {
 			   return ENDC;
 			 }
 	YY_BREAK
 case 13:
 YY_RULE_SETUP
-#line 117 "scan.l"
+#line 114 "scan.l"
 {
 			   /* fill with ( ) as first argument */
 			   yylval.i = FILL;
@@ -1280,14 +1277,14 @@ YY_RULE_SETUP
 	YY_BREAK
 case 14:
 YY_RULE_SETUP
-#line 122 "scan.l"
+#line 119 "scan.l"
 {
                            BEGIN(define);
 			 }
 	YY_BREAK
 case 15:
 YY_RULE_SETUP
-#line 125 "scan.l"
+#line 122 "scan.l"
 {
                            if((asm_enabled()) && (!state.mac_prev)) {
 			     if ((get_symbol(state.stDefines, yytext) != NULL)
@@ -1308,7 +1305,7 @@ case 16:
 yy_c_buf_p = yy_cp -= 1;
 YY_DO_BEFORE_ACTION; /* set up yytext again */
 YY_RULE_SETUP
-#line 139 "scan.l"
+#line 136 "scan.l"
 {
                            if((asm_enabled()) && (!state.mac_prev)) {
 			     char *string_ptr = yytext;
@@ -1340,7 +1337,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 17:
 YY_RULE_SETUP
-#line 167 "scan.l"
+#line 164 "scan.l"
 {
 			   yylval.i = UPPER;
 			   return UPPER;
@@ -1348,7 +1345,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 18:
 YY_RULE_SETUP
-#line 171 "scan.l"
+#line 168 "scan.l"
 {
 			   yylval.i = HIGH;
 			   return HIGH;
@@ -1356,7 +1353,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 19:
 YY_RULE_SETUP
-#line 175 "scan.l"
+#line 172 "scan.l"
 {
 			   yylval.i = LOW;
 			   return LOW;
@@ -1364,7 +1361,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 20:
 YY_RULE_SETUP
-#line 179 "scan.l"
+#line 176 "scan.l"
 {
 			  /* Force decimal interpretation for list*/
 			  force_decimal = 1;
@@ -1374,7 +1371,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 21:
 YY_RULE_SETUP
-#line 185 "scan.l"
+#line 182 "scan.l"
 {
 			   /* #else and else can appear in column 1 */
 			   yylval.s = strdup(yytext);
@@ -1383,7 +1380,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 22:
 YY_RULE_SETUP
-#line 190 "scan.l"
+#line 187 "scan.l"
 {
 			   /* only #endif can appear in column 1 */
 			   yylval.s = strdup(yytext);
@@ -1392,7 +1389,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 23:
 YY_RULE_SETUP
-#line 195 "scan.l"
+#line 192 "scan.l"
 {
 			   /* #ifdef and ifdef can appear in column 1 */
 			   quoted = 1;
@@ -1402,7 +1399,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 24:
 YY_RULE_SETUP
-#line 201 "scan.l"
+#line 198 "scan.l"
 {
 			   /* #ifndef and ifndef can appear in column 1 */
 			   quoted = 1;
@@ -1412,7 +1409,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 25:
 YY_RULE_SETUP
-#line 207 "scan.l"
+#line 204 "scan.l"
 {
 			   /* #undefine can appear in column 1 */
 			   quoted = 1;
@@ -1422,24 +1419,16 @@ YY_RULE_SETUP
 	YY_BREAK
 case 26:
 YY_RULE_SETUP
-#line 213 "scan.l"
+#line 210 "scan.l"
 {
-			   char *symbol;
-
                            yytext[strlen(yytext) - 3] = '\0';
-
-			   symbol = check_defines(yytext);
-			   if (symbol) {
-                             yylval.s = strdup(symbol);
-			   } else {
-                             yylval.s = strdup(yytext);
-			   }
+                           yylval.s = strdup(yytext);
                            return VARLAB_BEGIN;
                          }
 	YY_BREAK
 case 27:
 YY_RULE_SETUP
-#line 226 "scan.l"
+#line 215 "scan.l"
 { 
 			   int has_collon = 0;
 			   struct symbol *sym;
@@ -1500,59 +1489,55 @@ YY_RULE_SETUP
 	YY_BREAK
 case 28:
 YY_RULE_SETUP
-#line 283 "scan.l"
+#line 272 "scan.l"
 {
-			   char *symbol;
-
                            yytext[strlen(yytext) - 3] = '\0';
-
-			   symbol = check_defines(yytext);
-			   if (symbol) {
-                             yylval.s = strdup(symbol);
-			   } else {
-                             yylval.s = strdup(yytext);
-			   }
+                           yylval.s = strdup(yytext);
                            return VAR_BEGIN;
                          }
 	YY_BREAK
 case 29:
 YY_RULE_SETUP
-#line 296 "scan.l"
+#line 277 "scan.l"
 {
-			   char *symbol;
-
-			   symbol = check_defines(yytext+1);
-			   if (symbol) {
-                             yylval.s = strdup(symbol);
-			   } else {
-                             yylval.s = strdup(yytext+1);
-			   }
+                           yylval.s = strdup(yytext+1);
                            return VAR_END;
                          }
 	YY_BREAK
 case 30:
 YY_RULE_SETUP
-#line 307 "scan.l"
+#line 281 "scan.l"
 {
-			   char *symbol;
+			   struct symbol *sym;
 
-			   symbol = check_defines(yytext);
-			   if (symbol) {
- 			     char buffer[BUFSIZ];
+			   /* If not quoted, check for #define substitution */
+			   if (!quoted &&
+                               (sym = get_symbol(state.stTopDefines, yytext)) != NULL) {
+			     char *subst = get_symbol_annotation(sym);
+			     assert(subst != NULL);
+ 			     if (strcmp(yytext, subst) == 0) {
+ 			       /* if check for bad subsitution */
+ 			       yylval.s = strdup(yytext);
+ 			       return IDENTIFIER;
+ 			     } else {
+ 			       char buffer[BUFSIZ];
                                
-                             /* Make the substitution with a leading space,
-                                so it won't be a label */
-                             sprintf(buffer, " %s", symbol); 
-                             push_string(buffer);
-                           } else {
+                               /* Make the substitution with a leading space,
+                                  that way it won't be a label */
+                               buffer[0] = ' ';
+                               buffer[1] = '\0';
+                               strcat(buffer, subst);
+                               push_string(buffer);
+ 			     }
+			   } else {
                              yylval.s = strdup(yytext);
 			     return IDENTIFIER;
-                           }
+			   }
 			 }
 	YY_BREAK
 case 31:
 YY_RULE_SETUP
-#line 323 "scan.l"
+#line 308 "scan.l"
 {
 /* Ugh.  As a special case, treat processor names, such as 16C84
 as identifiers rather than as hex numbers. */
@@ -1562,7 +1547,7 @@ as identifiers rather than as hex numbers. */
 	YY_BREAK
 case 32:
 YY_RULE_SETUP
-#line 329 "scan.l"
+#line 314 "scan.l"
 {
                            yylval.i = stringtolong(yytext + 2, 16);
 			   return NUMBER;
@@ -1570,7 +1555,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 33:
 YY_RULE_SETUP
-#line 333 "scan.l"
+#line 318 "scan.l"
 {
                            if (state.radix == 16) {
                              yylval.i = stringtolong(yytext, 16);                           
@@ -1583,7 +1568,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 34:
 YY_RULE_SETUP
-#line 342 "scan.l"
+#line 327 "scan.l"
 {
                            yytext[yyleng - 1] = '\0';
 			   yylval.i = stringtolong(yytext + 2, 2);
@@ -1592,7 +1577,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 35:
 YY_RULE_SETUP
-#line 347 "scan.l"
+#line 332 "scan.l"
 {			 
                            yytext[yyleng - 1] = '\0';
                            yylval.i = stringtolong(yytext, 8);
@@ -1601,7 +1586,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 36:
 YY_RULE_SETUP
-#line 352 "scan.l"
+#line 337 "scan.l"
 {
                            yytext[yyleng - 1] = '\0';
 			   yylval.i = stringtolong(yytext + 2, 8);
@@ -1610,7 +1595,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 37:
 YY_RULE_SETUP
-#line 357 "scan.l"
+#line 342 "scan.l"
 {
                            if (state.radix == 16) {
                              yylval.i = stringtolong(yytext, 16);                           
@@ -1623,7 +1608,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 38:
 YY_RULE_SETUP
-#line 366 "scan.l"
+#line 351 "scan.l"
 {
                            yytext[yyleng - 1] = '\0';
 			   yylval.i = stringtolong(yytext + 2, 10);
@@ -1632,7 +1617,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 39:
 YY_RULE_SETUP
-#line 371 "scan.l"
+#line 356 "scan.l"
 {
                            yylval.i = stringtolong(yytext + 1, 10);
 			   return NUMBER;
@@ -1640,7 +1625,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 40:
 YY_RULE_SETUP
-#line 375 "scan.l"
+#line 360 "scan.l"
 {			 
                            yytext[yyleng - 1] = '\0';
                            yylval.i = stringtolong(yytext, 16);
@@ -1649,7 +1634,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 41:
 YY_RULE_SETUP
-#line 380 "scan.l"
+#line 365 "scan.l"
 {
                            yytext[yyleng - 1] = '\0';
 			   yylval.i = stringtolong(yytext + 2, 16);
@@ -1658,7 +1643,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 42:
 YY_RULE_SETUP
-#line 385 "scan.l"
+#line 370 "scan.l"
 {
                            if (force_decimal) {
                              yylval.i = stringtolong(yytext, 10);
@@ -1670,7 +1655,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 43:
 YY_RULE_SETUP
-#line 393 "scan.l"
+#line 378 "scan.l"
 {
                            yylval.i = gpasm_magic(yytext + 1);
 			   return NUMBER;
@@ -1678,7 +1663,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 44:
 YY_RULE_SETUP
-#line 397 "scan.l"
+#line 382 "scan.l"
 {
 			   char *pc = &yytext[yyleng - 1];
 			   if (*pc == '"')
@@ -1691,7 +1676,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 45:
 YY_RULE_SETUP
-#line 406 "scan.l"
+#line 391 "scan.l"
 {
                            yylval.i = gpasm_magic(yytext + 1);
 			   return NUMBER;
@@ -1699,7 +1684,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 46:
 YY_RULE_SETUP
-#line 410 "scan.l"
+#line 395 "scan.l"
 {
                            yylval.i = yytext[2];
 			   return NUMBER;
@@ -1707,127 +1692,127 @@ YY_RULE_SETUP
 	YY_BREAK
 case 47:
 YY_RULE_SETUP
-#line 414 "scan.l"
+#line 399 "scan.l"
 OPERATOR(LSH);
 	YY_BREAK
 case 48:
 YY_RULE_SETUP
-#line 415 "scan.l"
+#line 400 "scan.l"
 OPERATOR(RSH);
 	YY_BREAK
 case 49:
 YY_RULE_SETUP
-#line 416 "scan.l"
+#line 401 "scan.l"
 OPERATOR(GREATER_EQUAL);
 	YY_BREAK
 case 50:
 YY_RULE_SETUP
-#line 417 "scan.l"
+#line 402 "scan.l"
 OPERATOR(LESS_EQUAL);
 	YY_BREAK
 case 51:
 YY_RULE_SETUP
-#line 418 "scan.l"
+#line 403 "scan.l"
 OPERATOR(EQUAL);
 	YY_BREAK
 case 52:
 YY_RULE_SETUP
-#line 419 "scan.l"
+#line 404 "scan.l"
 OPERATOR(NOT_EQUAL);
 	YY_BREAK
 case 53:
 YY_RULE_SETUP
-#line 420 "scan.l"
+#line 405 "scan.l"
 OPERATOR(LOGICAL_AND);
 	YY_BREAK
 case 54:
 YY_RULE_SETUP
-#line 421 "scan.l"
+#line 406 "scan.l"
 OPERATOR(LOGICAL_OR);
 	YY_BREAK
 case 55:
 YY_RULE_SETUP
-#line 423 "scan.l"
+#line 408 "scan.l"
 OPERATOR(ASSIGN_PLUS);
 	YY_BREAK
 case 56:
 YY_RULE_SETUP
-#line 424 "scan.l"
+#line 409 "scan.l"
 OPERATOR(ASSIGN_MINUS);
 	YY_BREAK
 case 57:
 YY_RULE_SETUP
-#line 425 "scan.l"
+#line 410 "scan.l"
 OPERATOR(ASSIGN_MULTIPLY);
 	YY_BREAK
 case 58:
 YY_RULE_SETUP
-#line 426 "scan.l"
+#line 411 "scan.l"
 OPERATOR(ASSIGN_DIVIDE);
 	YY_BREAK
 case 59:
 YY_RULE_SETUP
-#line 427 "scan.l"
+#line 412 "scan.l"
 OPERATOR(ASSIGN_MODULUS);
 	YY_BREAK
 case 60:
 YY_RULE_SETUP
-#line 428 "scan.l"
+#line 413 "scan.l"
 OPERATOR(ASSIGN_LSH);
 	YY_BREAK
 case 61:
 YY_RULE_SETUP
-#line 429 "scan.l"
+#line 414 "scan.l"
 OPERATOR(ASSIGN_RSH);
 	YY_BREAK
 case 62:
 YY_RULE_SETUP
-#line 430 "scan.l"
+#line 415 "scan.l"
 OPERATOR(ASSIGN_AND);
 	YY_BREAK
 case 63:
 YY_RULE_SETUP
-#line 431 "scan.l"
+#line 416 "scan.l"
 OPERATOR(ASSIGN_OR);
 	YY_BREAK
 case 64:
 YY_RULE_SETUP
-#line 432 "scan.l"
+#line 417 "scan.l"
 OPERATOR(ASSIGN_XOR);
 	YY_BREAK
 case 65:
 YY_RULE_SETUP
-#line 434 "scan.l"
+#line 419 "scan.l"
 OPERATOR(INCREMENT);
 	YY_BREAK
 case 66:
 YY_RULE_SETUP
-#line 435 "scan.l"
+#line 420 "scan.l"
 OPERATOR(DECREMENT);
 	YY_BREAK
 case 67:
 YY_RULE_SETUP
-#line 437 "scan.l"
+#line 422 "scan.l"
 OPERATOR(TBL_POST_INC);
 	YY_BREAK
 case 68:
 YY_RULE_SETUP
-#line 438 "scan.l"
+#line 423 "scan.l"
 OPERATOR(TBL_POST_DEC);
 	YY_BREAK
 case 69:
 YY_RULE_SETUP
-#line 439 "scan.l"
+#line 424 "scan.l"
 OPERATOR(TBL_PRE_INC);
 	YY_BREAK
 case 70:
 YY_RULE_SETUP
-#line 441 "scan.l"
+#line 426 "scan.l"
 
 	YY_BREAK
 case 71:
 YY_RULE_SETUP
-#line 442 "scan.l"
+#line 427 "scan.l"
 {
 			   quoted = 0;
 			   force_decimal = 0;
@@ -1836,12 +1821,12 @@ YY_RULE_SETUP
 	YY_BREAK
 case 72:
 YY_RULE_SETUP
-#line 447 "scan.l"
+#line 432 "scan.l"
 {  }
 	YY_BREAK
 case 73:
 YY_RULE_SETUP
-#line 448 "scan.l"
+#line 433 "scan.l"
 { 
 			   yylval.i = yytext[0];
 		           return yytext[0];
@@ -1849,10 +1834,10 @@ YY_RULE_SETUP
 	YY_BREAK
 case 74:
 YY_RULE_SETUP
-#line 452 "scan.l"
+#line 437 "scan.l"
 ECHO;
 	YY_BREAK
-#line 1856 "scan.c"
+#line 1841 "scan.c"
 
 	case YY_END_OF_BUFFER:
 		{
@@ -2734,24 +2719,8 @@ int main()
 	return 0;
 	}
 #endif
-#line 452 "scan.l"
+#line 437 "scan.l"
 
-
-static char *
-to_lower_case(char *name)
-{
-  char *new;
-  char *ptr;
-
-  ptr = new = strdup(name);
-
-  while (*ptr != '\0') {
-    *ptr = tolower(*ptr);
-    ptr++;
-  }
-
-  return new;
-}
 
 static void
 search_pathes(struct source_context *new, char *name)
@@ -2792,7 +2761,7 @@ void open_src(char *name, int isinclude)
       /* We didn't find a match so check for lower case.  This is mainly for 
          Microchip examples and some includes in which filenames were written
          without regard to case */    
-      char *lower_case_name = to_lower_case(name);
+      char *lower_case_name = gp_lower_case(name);
       search_pathes(new, lower_case_name);      
       free(lower_case_name);  
 
@@ -2834,10 +2803,8 @@ void open_src(char *name, int isinclude)
   }
 #endif
 
-  new->type = src_file;
-  new->h = NULL;
+  new->type = file;
   new->line_number = 1;
-  new->loop_number = 1;
   new->file_symbol = coff_add_filesym(new->name, isinclude);
   new->prev = state.src;
 
@@ -2845,7 +2812,7 @@ void open_src(char *name, int isinclude)
   state.src->fc = add_file(ft_src, new->name); 
 }
 
-void execute_macro(struct macro_head *h, int is_while)
+void execute_macro(struct macro_head *h)
 {
   struct source_context *new = malloc(sizeof(*new));
   yy_size_t macro_src_size = 0;
@@ -2861,43 +2828,16 @@ void execute_macro(struct macro_head *h, int is_while)
 
   /* create new source_context */
   new->name = strdup(h->src_name);
-  if (is_while) {
-    new->type = src_while;
-  } else {
-    new->type = src_macro;
-  }
+  new->type = macro;
   new->line_number = h->line_number + 1;
-  new->loop_number = 1;
   new->file_symbol = h->file_symbol;
   new->f = NULL;
-  new->h = h;
   new->lst.m = h->body;
   
   new->prev = state.src;
   state.src = new;
 
   state.src->fc = add_file(ft_src, new->name); /* scan list for fc */
-  YY_CURRENT_BUFFER = yy_scan_buffer(macro_src, macro_src_size);
-
-}
-
-void repeat_while(void)
-{
-  struct macro_head *h;
-  yy_size_t macro_src_size = 0;
-  char *macro_src;
-
-  h = state.src->h;
-
-  /* rebuild the macro buffer, because it may have been modified */
-  macro_src = make_macro_buffer(h);
-  macro_src_size = strlen(macro_src) + 2;
-
-  state.src->line_number = h->line_number + 1;
-  state.src->loop_number++;
-  state.src->lst.m = h->body;
-
-  yy_delete_buffer(YY_CURRENT_BUFFER);
   YY_CURRENT_BUFFER = yy_scan_buffer(macro_src, macro_src_size);
 
 }
@@ -2910,12 +2850,10 @@ static void push_string(char *str)
   state.src->yybuf = YY_CURRENT_BUFFER;
 
   new->name = strdup(state.src->name);
-  new->type = src_substitution;
+  new->type = substitution;
   new->line_number = state.src->line_number;
-  new->loop_number = 1;
   new->file_symbol = state.src->file_symbol;
   new->f = NULL;
-  new->h = NULL;
   new->lst.f = NULL;
   new->fc = add_file(ft_src, new->name); /* scan list for fc */
 
@@ -2932,7 +2870,7 @@ void close_file()
   old = state.src;
   state.src = state.src->prev;
 
-  if (old->type == src_file) {
+  if (old->type == file) {
     if (old->f != NULL) {
       fclose(old->f);
     }
@@ -2940,7 +2878,7 @@ void close_file()
       fclose(old->lst.f);
     free(old->name);
     coff_add_eofsym();
-  } else if (old->type == src_macro) {
+  } else if (old->type == macro) {
     state.stTop = pop_symbol_table(state.stTop);
     state.stTopDefines = pop_symbol_table(state.stTopDefines);
     if (state.src->astack != state.astack) {
@@ -2948,8 +2886,6 @@ void close_file()
     }
     assert(state.stTop != NULL);
     assert(state.stTopDefines != NULL);
-    free(old->name);
-  } else if (old->type == src_while) {
     free(old->name);
   }  
   free(old);
@@ -3018,18 +2954,6 @@ static int found_eof()
 {
   int terminate = 0;
 
-  if (state.src->type == src_while) {
-    if (maybe_evaluate(state.src->h->parms)) {
-      if (state.src->loop_number > 255) {
-        gperror(GPE_BAD_WHILE_LOOP, NULL);
-      } else {
-        /* repeat the while loop */
-        repeat_while();
-        return 0;
-      }
-    }
-  }
-
   close_file();
   if (state.src) {
     /* Just an include file */
@@ -3066,22 +2990,3 @@ enum identtype identify(char *text)
   return type;
 }
 
-static char *
-check_defines(char *symbol)
-{
-  struct symbol *sym;
-  char *subst = NULL;
-
-  /* If not quoted, check for #define substitution */
-  if (!quoted &&
-     (sym = get_symbol(state.stTopDefines, yytext)) != NULL) {
-    subst = get_symbol_annotation(sym);
-    assert(subst != NULL);
-    if (strcmp(yytext, subst) == 0) {
-      /* check for a bad subsitution */
-      subst = NULL;
-    }
-  }
-
-  return subst;
-}
