@@ -22,22 +22,28 @@ Boston, MA 02111-1307, USA.  */
 #ifndef __CODEGEN_H__
 #define __CODEGEN_H__
 
-struct variable {
-  char *alias;
-  tree *node;
-  gp_boolean is_constant;		/* true if constant symbol */
-  gp_boolean is_public;			/* true if public symbol */
-  gp_boolean is_external;		/* true if defined elsewere */
-  gp_boolean is_equ;			/* true if processor header equate */
-  int value;				/* value if constant symbol */
-};
+#define LOCAL_DATA_LABEL "_local_data"
 
-struct variable *add_global(char *name, char *alias, tree *object);
-struct variable *get_global(char *name);
-void write_asm_line(const char *format, ...);
-void write_label(char *label);
 extern int temp_number;
-extern char *code_name;
-void write_asm(void);
+
+void codegen_write_asm(const char *format, ...);
+char *codegen_next_label(void);
+void codegen_write_label(char *label);
+void codegen_jump(char *label);
+
+void codegen_call(char *label, enum node_storage storage);
+void codegen_banksel(char *label);
+void codegen_test(tree *node, char *label);
+void codegen_expr(tree *statement);
+void codegen_put_mem(struct variable *var, gp_boolean add_banksel);
+void codegen_init_proc(char *name, 
+                       enum node_storage storage,
+                       gp_boolean is_func);
+void codegen_finish_proc(void);
+void codegen_init_data(void);
+void codegen_write_data(char *label, enum node_storage storage);
+void codegen_finish_data(void);
+void codegen_init_asm(void);
+void codegen_close_asm(void);
 
 #endif

@@ -95,12 +95,14 @@ bin_PROGRAMS = gpal
 CPPFLAGS = @CPPFLAGS@ -I${top_srcdir}/libgputils -I${top_srcdir}/include
 
 gpal_SOURCES = \
+	analyze.c \
 	codegen.c \
 	codegen14.c \
 	gpal.c \
 	parse.y \
 	scan.l \
 	tree.c \
+	analyze.h \
 	codegen.h \
 	codegen14.h \
 	gpal.h \
@@ -121,8 +123,9 @@ CONFIG_CLEAN_FILES =
 bin_PROGRAMS = gpal$(EXEEXT)
 PROGRAMS = $(bin_PROGRAMS)
 
-am_gpal_OBJECTS = codegen.$(OBJEXT) codegen14.$(OBJEXT) gpal.$(OBJEXT) \
-	parse.$(OBJEXT) scan.$(OBJEXT) tree.$(OBJEXT)
+am_gpal_OBJECTS = analyze.$(OBJEXT) codegen.$(OBJEXT) \
+	codegen14.$(OBJEXT) gpal.$(OBJEXT) parse.$(OBJEXT) \
+	scan.$(OBJEXT) tree.$(OBJEXT)
 gpal_OBJECTS = $(am_gpal_OBJECTS)
 gpal_DEPENDENCIES = ${top_builddir}/@LIBGPUTILS@ \
 	${top_builddir}/@LIBIBERTY@
@@ -134,9 +137,10 @@ LDFLAGS = @LDFLAGS@
 LIBS = @LIBS@
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
-@AMDEP_TRUE@DEP_FILES = ./$(DEPDIR)/codegen.Po ./$(DEPDIR)/codegen14.Po \
-@AMDEP_TRUE@	./$(DEPDIR)/gpal.Po ./$(DEPDIR)/parse.Po \
-@AMDEP_TRUE@	./$(DEPDIR)/scan.Po ./$(DEPDIR)/tree.Po
+@AMDEP_TRUE@DEP_FILES = ./$(DEPDIR)/analyze.Po ./$(DEPDIR)/codegen.Po \
+@AMDEP_TRUE@	./$(DEPDIR)/codegen14.Po ./$(DEPDIR)/gpal.Po \
+@AMDEP_TRUE@	./$(DEPDIR)/parse.Po ./$(DEPDIR)/scan.Po \
+@AMDEP_TRUE@	./$(DEPDIR)/tree.Po
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
 CCLD = $(CC)
@@ -191,6 +195,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/analyze.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/codegen.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/codegen14.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gpal.Po@am__quote@

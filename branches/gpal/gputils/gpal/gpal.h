@@ -29,9 +29,11 @@ Boston, MA 02111-1307, USA.  */
 
 #include "tree.h"
 
-typedef struct list_struct file_list;
+typedef struct list_struct linked_list;
+
 struct list_struct {
-  char *name;
+  void *item;
+  struct list_struct *prev;
   struct list_struct *next;
 };
 
@@ -40,12 +42,23 @@ extern struct gpal_state {
   gp_boolean no_link;			/* compile and assemble, but don't link */
   gp_boolean archive;			/* compile and assemble, then link */
   gp_boolean delete_temps;			/* delete temporary files */
-  char *options;			/* extre link or lib options */
+  char *options;			/* extra link or lib options */
+  struct {
+    int level;
+    gp_boolean auto_inline;
+    gp_boolean constant_folding;
+    gp_boolean dead_code;
+    gp_boolean peep;
+    gp_boolean strength_reduction;
+    gp_boolean tail_calls;
+    gp_boolean tree_shape;
+    gp_boolean trival_expressions;
+  } optimize;
   int path_num;                 	/* number of paths in the list */
   char *paths[MAX_PATHS];       	/* the list of include paths */
   int num_files;               		/* number of filenames in the list */
   char *file_name[MAX_FILE_NAMES];  	/* the list of file names */
-  file_list *link_list;			/* list of files to link */
+  linked_list *file_list;		/* list of files to link */
   gp_boolean cmd_processor;		/* processor chose on command line */
   enum pic_processor processor;
   struct px *processor_info;    	/* Processor identifiers (e.g. name) */
@@ -59,7 +72,8 @@ extern struct gpal_state {
   } device;
   struct symbol_table
     *type,				/* Symbol Types */
-    *global;				/* Global symbols */
+    *global,				/* Global symbols */
+    *data;				/* Data memory symbols */
   tree *root;				/* start of tree */
   struct source_context *src;		/* Top of the stack of source files */
   char *basefilename;			/* base filename */
@@ -85,5 +99,20 @@ struct source_context {
 void select_processor(char *name);
 void process_pragma(tree *expr);
 void add_entity(tree *node);
+
+/* symbol data */
+
+struct variable {
+  char *alias;
+  enum node_storage class;		/* storage class */
+  int size;				/* size in bytes */
+  int bitsize;				/* size in bits */
+  int nelts;				/* number of elements */
+  gp_boolean is_init;			/* the symbol has been initialized */
+  gp_boolean is_equ;			/* true if processor header equate */
+  gp_boolean is_constant;		/* true if constant symbol */
+  int value;				/* value if constant symbol */
+  tree *node;
+};
 
 #endif
