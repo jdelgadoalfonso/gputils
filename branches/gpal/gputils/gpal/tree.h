@@ -65,12 +65,12 @@ enum node_op {
   op_rsh,      /* right shift */
   op_land,     /* logical and */
   op_lor,      /* logical or */
+  op_eq,       /* branch if equal */
+  op_ne,       /* branch if not equal */
   op_gt,       /* branch if greater than */
   op_lt,       /* branch if less than */
   op_gte,      /* branch if greater than or equal */
-  op_lte,      /* branch if less than or equal */
-  op_eq,       /* branch if equal */
-  op_ne        /* branch if not equal */
+  op_lte       /* branch if less than or equal */
 };
 
 enum node_key { 
@@ -214,6 +214,7 @@ typedef struct node_struct {
 #define FILE_TYPE(F)       (F)->value.file.type
 #define FILE_BODY(F)       (F)->value.file.body
 #define FUNC_HEAD(F)       (F)->value.func.head
+#define FUNC_RET(F)        (F)->value.func.ret
 #define FUNC_BODY(F)       (F)->value.func.body
 #define HEAD_NAME(H)       (H)->value.head.name
 #define HEAD_ARGS(H)       (H)->value.head.args

@@ -27,8 +27,8 @@ Boston, MA 02111-1307, USA.  */
 
 #include "libgputils.h"
 #include "gpal.h"
-#include "parse.h"
 #include "symbol.h"
+#include "parse.h"
 
 #define OPERATOR(x)  return (yylval.i = (x))
 /* YY_UNPUT not used, suppress the warning */

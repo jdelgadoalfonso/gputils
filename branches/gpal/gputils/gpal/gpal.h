@@ -50,6 +50,7 @@ extern struct gpal_state {
   gp_linked_list *link;			/* list of files to link */
   gp_boolean cmd_processor;		/* processor chose on command line */
   enum pic_processor processor;
+  enum proc_class class;      		/* Processor class */
   struct px *processor_info;    	/* Processor identifiers (e.g. name) */
   gp_boolean processor_chosen;		/* Nonzero after processor-specific init */
   struct {				/* Processor data */
@@ -62,13 +63,6 @@ extern struct gpal_state {
     gp_boolean udata_addr_valid;	/* is udata address valid? */
     enum node_storage udata_default;	/* udata storage from pub file */
   } section;
-  struct {				/* Processor data */
-    enum proc_class class;      	/* Processor class */
-    int core_size;			/* Processor core size  */
-    int config_address;			/* configuration address */
-    int id_location;			/* location for idlocs for 12 and 14 bit proc */
-    int bsr_boundary;			/* 18xx bsr boundary location */
-  } device;
   struct symbol_table
     *global,				/* Base of Global symbols */
     *top,				/* Top of Global symbols */
@@ -97,49 +91,5 @@ struct source_context {
 void add_entity(tree *node);
 int add_compile(char *compile);
 char *get_compile(int id);
-
-/* type data */
-
-enum type_tag {
-  type_unknown,
-  type_prim,				/* primative (bit, byte, ...) */
-  type_array,				/* array of other types */
-  type_enum,				/* enumeration */
-  type_alias				/* type alias */
-};
-
-struct type {
-  enum type_tag tag;                    /* which type */
-  int size;				/* size in bytes */
-  int bitsize;				/* size in bits */
-  int nelts;				/* number of elements or enums */
-  int start;				/* first element number or value */
-  int end;				/* last element number or value */
-  struct type *prim;			/* primative type it is derived from */  
-};
-
-/* symbol data */
-
-enum sym_tag {
-  sym_unknown,
-  sym_proc,				/* procedure */
-  sym_func,				/* function */
-  sym_udata,				/* uninitialized data */
-  sym_idata,				/* initialized data */
-  sym_const,				/* constant */
-  sym_equ				/* equate */
-};
-
-struct variable {
-  char *alias;
-  enum sym_tag tag;			/* symbol tag */
-  enum node_storage class;		/* storage class */
-  struct type *type;			/* symbol type */
-  gp_boolean is_init;			/* the symbol has been initialized */
-  int value;				/* value if constant symbol */
-  int file_id;				/* file symbol was defined in */
-  int line_number;			/* line number symbol was defined on */
-  tree *node;
-};
 
 #endif
