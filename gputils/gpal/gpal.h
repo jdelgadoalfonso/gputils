@@ -64,6 +64,12 @@ extern struct gpal_state {
   struct px *processor_info;    	/* Processor identifiers (e.g. name) */
   gp_boolean processor_chosen;		/* Nonzero after processor-specific init */
   struct {				/* Processor data */
+    char *code;      			/* code section name */
+    enum node_storage code_default;	/* pub file code on same page */
+    char *udata;      			/* uninitialized data section name */
+    enum node_storage udata_default;	/* pub file udata on same bank */
+  } section;
+  struct {				/* Processor data */
     enum proc_class class;      	/* Processor class */
     int core_size;			/* Processor core size  */
     int config_address;			/* configuration address */
@@ -97,7 +103,6 @@ struct source_context {
 };
 
 void select_processor(char *name);
-void process_pragma(tree *expr);
 void add_entity(tree *node);
 
 /* symbol data */

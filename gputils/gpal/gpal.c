@@ -118,40 +118,6 @@ select_processor(char *name)
   }
 }
 
-void
-process_pragma(tree *expr)
-{
-  tree *lhs;
-  tree *rhs;
-
-  switch (expr->tag) {
-  case node_binop:
-    lhs = expr->value.binop.p0;
-    rhs = expr->value.binop.p1;
-    if ((expr->value.binop.op != op_eq) ||
-        (lhs->tag != node_symbol)) {
-      gp_error("unknown pragma");
-    } else {
-      if (strcasecmp(lhs->value.symbol, "processor") == 0) {
-        if (rhs->tag != node_symbol) {
-          gp_error("invalid processor name");        
-        } else {
-          if (state.processor_chosen == false) {
-            select_processor(rhs->value.symbol);
-          }        
-        }
-      } else {
-        gp_error("unknown pragma \"%s\"", lhs->value.symbol);
-      }
-    }
-    break;
-  default:
-    gp_error("unknown pragma");
-  }
-  
-  return;
-}
-
 static tree *last_node;
 
 void
@@ -335,7 +301,13 @@ compile(void)
 
   init_nodes();
   state.root = NULL;
-  
+
+  /* remove section names */
+  state.section.code = NULL;
+  state.section.code_default = storage_extern;
+  state.section.udata = NULL;
+  state.section.udata_default = storage_extern;
+ 
   /* open and parse the source public file */
   state.src = NULL;
   open_src(state.basefilename, source_with);
