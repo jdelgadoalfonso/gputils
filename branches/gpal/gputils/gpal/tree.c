@@ -37,6 +37,10 @@ static tree_block *head_block;
 static tree_block *current_block;
 static unsigned int next_node;
 
+/* If a node is constructed while parser not running use these values. */
+int file_id = 0;
+int line_number = 0;
+
 static tree_block *
 create_block(void)
 {
@@ -187,10 +191,11 @@ mk_decl(enum node_key key,
 }
 
 tree *
-mk_file(tree *body, enum source_type type)
+mk_file(tree *body, char *name, enum source_type type)
 {
   tree *new = mk_node(node_file);
   new->value.file.body = body;
+  new->value.file.name = name;
   new->value.file.type = type;
   
   return new;
@@ -441,7 +446,7 @@ print_node(tree *node, int level)
     break;
   case node_file:
     print_space(level);
-    printf("node_file\n");
+    printf("node_file %s\n", FILE_NAME(node));
     if (FILE_BODY(node) != NULL)  
       print_node(FILE_BODY(node), level);
     break;

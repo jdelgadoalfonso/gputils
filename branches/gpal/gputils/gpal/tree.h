@@ -57,15 +57,12 @@ enum node_op {
   op_div,      /* divide */
   op_mod,      /* modulus */
   op_neg,      /* negative */
-  op_com,      /* complement */
   op_and,      /* and */
   op_or,       /* or */
   op_xor,      /* exclusive or */
   op_not,      /* not */
   op_lsh,      /* left shift */
   op_rsh,      /* right shift */
-  op_land,     /* logical and */
-  op_lor,      /* logical or */
   op_eq,       /* branch if equal */
   op_ne,       /* branch if not equal */
   op_lt,       /* branch if less than */
@@ -82,8 +79,8 @@ enum node_op {
 
 enum node_key { 
   key_unknown,
-  key_var,
-  key_const
+  key_variable,
+  key_constant
 };
 
 enum node_dir { 
@@ -148,8 +145,9 @@ typedef struct node_struct {
       tree *init;
     } decl;
     struct {
-      enum source_type type;
       tree *body;
+      char *name;
+      enum source_type type;
     } file;
     struct {
       tree *head;
@@ -218,8 +216,9 @@ typedef struct node_struct {
 #define DECL_TYPE(D)       (D)->value.decl.type
 #define DECL_NAME(D)       (D)->value.decl.name
 #define DECL_INIT(D)       (D)->value.decl.init
-#define FILE_TYPE(F)       (F)->value.file.type
 #define FILE_BODY(F)       (F)->value.file.body
+#define FILE_NAME(F)       (F)->value.file.name
+#define FILE_TYPE(F)       (F)->value.file.type
 #define FUNC_HEAD(F)       (F)->value.func.head
 #define FUNC_RET(F)        (F)->value.func.ret
 #define FUNC_BODY(F)       (F)->value.func.body
@@ -241,6 +240,12 @@ typedef struct node_struct {
 #define UNOP_OP(B)         (B)->value.unop.op
 #define UNOP_ARG(B)        (B)->value.unop.p0
 
+#define COPY_DEBUG(x, y) y->line_number = x->line_number;\
+                         y->file_id = x->file_id;
+
+extern int file_id;
+extern int line_number;
+
 void init_nodes(void);
 void free_nodes(void);
 
@@ -254,7 +259,7 @@ tree *mk_call(char *name, tree *args);
 tree *mk_constant(int value);
 tree *mk_cond(tree *cond, tree *body, tree *next);
 tree *mk_decl(enum node_key key, char *type, char *name, tree *init);
-tree *mk_file(tree *body, enum source_type type);
+tree *mk_file(tree *body, char *name, enum source_type type);
 tree *mk_func(tree *head, char *ret, tree *body);
 tree *mk_head(char *name, tree *args);
 tree *mk_loop(tree *init, tree *exit, tree *incr, tree *body);

@@ -29,6 +29,7 @@ extern int codegen_bytes;
 
 void codegen_write_asm(const char *format, ...);
 void codegen_write_comment(const char *format, ...);
+void codegen_line_number(tree *node);
 char *codegen_next_label(void);
 void codegen_write_label(char *label);
 

@@ -68,11 +68,11 @@ static tree *case_ident;
 }
 
 /* keywords */
-%token <i> ARRAY, CASE, CONST_KEY, BEGIN_KEY, ELSE, ELSIF
-%token <i> END, EXTERN_STORAGE, FOR, FUNCTION_TOK, IF, IN, INOUT, IS, LOOP
-%token <i> MODULE, NULL_TOK, OF, OTHERS, PRAGMA, PROCEDURE, PUBLIC_STORAGE,
-%token <i> RETURN, THEN, TO, TYPE, OUT, VAR_KEY, VOLATILE_STORAGE, WHEN
-%token <i> WHILE, WITH
+%token <i> AND, ARRAY, CASE, CONSTANT_KEY, BEGIN_KEY, ELSE, ELSIF
+%token <i> END, FOR, FUNCTION_TOK, IF, IN, INOUT, IS, LOOP
+%token <i> MOD, MODULE, NOT, NULL_TOK, OF, OR, OTHERS, PRAGMA, PROCEDURE
+%token <i> PUBLIC_STORAGE, RETURN, THEN, TO, TYPE, OUT, VARIABLE_KEY
+%token <i> WHEN, WHILE, WITH, XOR
 
 /* general */
 %token <s> ASM
@@ -93,8 +93,8 @@ static tree *case_ident;
 %type <t> element_list
 %type <t> element
 %type <i> '+', '-', '*', '/', '%', '!', '~'
-%type <t> expr, e0, e1, e2, e3, e4, e5, e6, e7, e8,
-%type <o> e1op, e2op, e3op, e4op, e5op, e6op, e7op, e8op
+%type <t> expr, e0, e1, e2, e3, e4, e5, e6, e7,
+%type <o> e1op, e2op, e3op, e4op, e5op, e6op, e7op,
 %type <t> type
 %type <t> head
 %type <t> arg_list
@@ -131,24 +131,24 @@ entity:
 	  open_src($2, source_with);
 	}
 	|
-	MODULE IS END MODULE ';'
+	MODULE IDENT IS END MODULE ';'
 	{
 	  gp_warning("empty module");
 	}
 	|
-	MODULE IS element_list END MODULE ';'
+	MODULE IDENT IS element_list END MODULE ';'
 	{
-	  add_entity(mk_file($3, state.src->type));
+	  add_entity(mk_file($4, $2, state.src->type));
 	}
 	|
-	PUBLIC_STORAGE IS END PUBLIC_STORAGE ';'
+	PUBLIC_STORAGE IDENT IS END PUBLIC_STORAGE ';'
 	{
 	  gp_warning("empty public");
 	}
 	|
-	PUBLIC_STORAGE IS element_list END PUBLIC_STORAGE ';'
+	PUBLIC_STORAGE IDENT IS element_list END PUBLIC_STORAGE ';'
 	{
-	  add_entity(mk_file($3, state.src->type));
+	  add_entity(mk_file($4, $2, state.src->type));
 	}
         ;
 
@@ -296,14 +296,14 @@ decl:
 	;
 
 decl_key:
-	CONST_KEY
+	CONSTANT_KEY
 	{
-	  $$ = key_const;
+	  $$ = key_constant;
 	}
 	|
-	VAR_KEY
+	VARIABLE_KEY
 	{
-	  $$ = key_var;
+	  $$ = key_variable;
 	}
 	;
 
@@ -450,18 +450,7 @@ parameter_list:
 	}
 	;
 
-expr:	e8;
-
-e8:
-	e7
-	|
-	e8 e8op e7
-	{
-	  $$ = mk_binop($2, $1, $3);
-	}
-	;
-
-e8op:	'=' { $$ = op_eq; };
+expr:	e7;
 
 e7:
 	e6
@@ -472,8 +461,7 @@ e7:
 	}
 	;
 
-e7op:	  LOGICAL_AND { $$ = op_land; }
-	| LOGICAL_OR  { $$ = op_lor; };
+e7op:	'=' { $$ = op_eq; };
 
 e6:
 	e5
@@ -484,9 +472,9 @@ e6:
 	}
 	;
 
-e6op:	  '&' { $$ = op_and; }
-	| '|' { $$ = op_or; }
-	| '^' { $$ = op_xor; };
+e6op:	  AND { $$ = op_and; }
+	| OR  { $$ = op_or; }
+	| XOR { $$ = op_xor; };
 
 e5:
 	e4
@@ -539,7 +527,7 @@ e2:
 
 e2op:     '*' { $$ = op_mult; }
 	| '/' { $$ = op_div; }
-	| '%' { $$ = op_mod; };
+	| MOD { $$ = op_mod; };
 
 e1:
 	e0
@@ -551,8 +539,7 @@ e1:
 	;
 
 e1op:	  '-' { $$ = op_neg; }
-	| '!' { $$ = op_not; }
-	| '~' { $$ = op_com; }
+	| NOT { $$ = op_not; }
 	| '+' { $$ = op_add; };
 
 e0:
