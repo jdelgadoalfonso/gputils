@@ -32,8 +32,8 @@ Boston, MA 02111-1307, USA.  */
 #endif
 
 /* used for naming temporary data registers */
-int temp_number;
-int max_temp_number;
+static int temp_number;
+static int max_temp_number;
 
 void 
 codegen_write_asm(const char *format, ...)
@@ -48,6 +48,12 @@ codegen_write_asm(const char *format, ...)
   fprintf(state.output.f, "  %s\n", buffer);
 
   return;
+}
+
+static void
+codegen_line_number(tree *node)
+{
+  fprintf(state.output.f, ";#CSRC %s %d\n", node->file_name, node->line_number);
 }
 
 static int label_number;
@@ -93,9 +99,7 @@ void
 codegen_test(tree *node, char *label)
 {
 
-  fprintf(state.output.f, ";#CSRC %s %d\n", 
-          node->file_name,
-          node->line_number);
+  codegen_line_number(node);
 
   temp_number = 0;
 
@@ -110,9 +114,7 @@ void
 codegen_expr(tree *statement)
 {
 
-  fprintf(state.output.f, ";#CSRC %s %d\n", 
-          statement->file_name,
-          statement->line_number);
+  codegen_line_number(statement);
 
   temp_number = 0;
 
@@ -120,6 +122,15 @@ codegen_expr(tree *statement)
 
   if (temp_number > max_temp_number)
     max_temp_number = temp_number;
+
+  return;
+}
+
+void
+codegen_assembly(tree *assembly)
+{
+
+  fprintf(state.output.f, "%s\n", assembly->value.assembly);
 
   return;
 }
@@ -171,7 +182,13 @@ void
 codegen_init_data(void)
 {
   fprintf(state.output.f, "; declarations \n");
-  fprintf(state.output.f, ".udata_%s udata\n", state.basefilename);
+
+  if (state.section.udata) {
+    fprintf(state.output.f, "%s udata\n", state.section.udata);
+  } else {
+    fprintf(state.output.f, ".udata_%s udata\n", state.basefilename);
+  }
+
   codegen_write_label(LOCAL_DATA_LABEL);
 }
 
@@ -198,6 +215,16 @@ codegen_finish_data(void)
 
 }
 
+char *
+codegen_get_temp(void)
+{
+  char temp_name[BUFSIZ];
+ 
+  sprintf(temp_name, "%s_temp_%d", state.basefilename, temp_number++);
+
+  return strdup(temp_name);
+}
+
 static void
 write_header(void)
 {
@@ -217,7 +244,11 @@ write_header(void)
     gp_error("processor not selected");
   } 
 
-  fprintf(state.output.f, ".code_%s code\n", state.basefilename);
+  if (state.section.code) {
+    fprintf(state.output.f, "%s code\n", state.section.code);
+  } else {
+    fprintf(state.output.f, ".code_%s code\n", state.basefilename);
+  }
 
   return;
 }
@@ -236,6 +267,7 @@ codegen_init_asm(void)
   }
 
   label_number = 0;
+  max_temp_number = 0;
 
   write_header();
 
@@ -255,7 +287,9 @@ write_externs(void)
   for (i = 0; i < HASH_SIZE; i++) {
     for (sym = state.global->hash_table[i]; sym; sym = sym->next) {
       var = get_symbol_annotation(sym);
-      if ((var) && (var->class == storage_extern)) {
+      if ((var) && 
+          ((var->class == storage_extern) ||
+           (var->class == storage_local))){
         if (first_time == true)  {
           fprintf(state.output.f, "; external symbols\n");
           first_time = false;

@@ -1,7 +1,5 @@
 %option noyywrap
-%x incl
-%x define
-%x definition
+%x asm_block
 
 %{
 /* lexical analyser
@@ -38,6 +36,10 @@ Boston, MA 02111-1307, USA.  */
 static int found_eof(void);
 int stringtolong(char *string, int radix);
 
+#define ASM_BUF_SIZ 8096
+static char asm_buffer[ASM_BUF_SIZ];
+static int asm_index;
+
 %}
 
 HEXCHAR [0-9a-f]
@@ -47,6 +49,25 @@ DECCHAR [0-9]
 <<EOF>>			{ 
 			  if (found_eof())
 			    yyterminate();
+			}
+"asm"	 		{
+			  asm_index = 0;
+			  BEGIN(asm_block);
+			}
+<asm_block>"end"[ \t]+"asm" {
+			  BEGIN(INITIAL);
+			  asm_buffer[asm_index++] = '\0';
+			  yylval.s = strdup(asm_buffer);
+                          return ASM;
+			}
+<asm_block>(.|\n)	{
+			  if (asm_index < ASM_BUF_SIZ) {
+			    asm_buffer[asm_index++] = *yytext;
+			  } else {
+	  		    gp_error("asm block exceeds %i bytes",
+	  		             ASM_BUF_SIZ);
+	  		    exit(1);
+			  }
 			}
 "const"			{ return CONST_TYPE; }
 "begin"			{ return BEGIN_KEY; }
@@ -69,7 +90,7 @@ DECCHAR [0-9]
 "volatile"		{ return VOLATILE_STORAGE; }
 "while"			{ return WHILE; }
 "with"			{ return WITH; }
-[_a-z][_0-9a-z]*		{
+[_a-z][_0-9a-z]*	{
 			  yylval.s = strdup(yytext);
 			  return IDENT;
 			}

@@ -257,7 +257,7 @@ make_proc_public(struct variable *var, tree *prot)
    global symbol table */
 
 static void
-add_arg_symbols(tree *node, char *name, enum node_storage class)
+add_arg_symbols(tree *node, char *name)
 {
   tree *head;
   tree *arg;
@@ -280,7 +280,7 @@ add_arg_symbols(tree *node, char *name, enum node_storage class)
 
   while (arg) {
     assert(arg->tag == node_decl);
-    var = add_global_symbol(DECL_NAME(arg), name, arg, class);
+    var = add_global_symbol(DECL_NAME(arg), name, arg, DECL_STOR(arg));
     if ((var->class == storage_private) ||
         (var->class == storage_public)) {    
       add_link(var);
@@ -458,7 +458,7 @@ analyze_call(tree *call)
   tree *head;
   tree *def_args;
   tree *call_args;
-  struct variable *arg_var;
+  struct variable *def_var;
 
   var = get_global(CALL_NAME(call));
   if (var) {
@@ -492,23 +492,18 @@ analyze_call(tree *call)
   while (call_args) {
     assert(def_args->tag == node_decl);
 
-    /* select the local bank */
-    if (var->class == storage_extern) {
-      codegen_banksel(LOCAL_DATA_LABEL);
-    }
-
     /* write the expression */
     codegen_expr(call_args);
 
     /* store the result in the memory mapped argument */
-    arg_var = get_global(DECL_NAME(def_args));
-    assert(arg_var != NULL);
-    if (var->class == storage_extern) {
-      codegen_put_mem(arg_var, true);
+    def_var = get_global(DECL_NAME(def_args));
+    assert(def_var != NULL);
+    if (def_var->class == storage_extern) {
+      codegen_put_mem(def_var, true);
+      codegen_banksel(LOCAL_DATA_LABEL);
     } else {
-      codegen_put_mem(arg_var, false);
+      codegen_put_mem(def_var, false);
     }
-  
   
     def_args = def_args->next;
     call_args = call_args->next;
@@ -617,6 +612,14 @@ analyze_expr(tree *expr)
   }
 }
 
+static void
+analyze_assembly(tree *assembly)
+{
+  /* FIXME: need to figure out how to check the asm blocks */
+
+  codegen_assembly(assembly);
+}
+
 void
 analyze_statements(tree *statement)
 {
@@ -626,6 +629,9 @@ analyze_statements(tree *statement)
 
   while(statement) {
     switch(statement->tag) {
+    case node_assembly:
+      analyze_assembly(statement);
+      break;
     case node_call:
       analyze_call(statement);
       break;
@@ -757,7 +763,7 @@ analyze(void)
     case node_func:
       name = find_node_name(current);
       add_global_symbol(name, NULL, current, storage_private);
-      add_arg_symbols(current, name, storage_private);     
+      add_arg_symbols(current, name);     
       break;
     case node_decl_prot:
     case node_proc_prot:
@@ -798,7 +804,12 @@ analyze(void)
       } else if (class == storage_extern) {
         add_global_symbol(name, NULL, current, storage_extern);
         if (current->tag != node_decl_prot) {
-          add_arg_symbols(current, name, storage_extern);
+          add_arg_symbols(current, name);
+        }
+      } else if (class == storage_local) {
+        add_global_symbol(name, NULL, current, storage_local);
+        if (current->tag != node_decl_prot) {
+          add_arg_symbols(current, name);
         }
       } else {
         assert(0);
