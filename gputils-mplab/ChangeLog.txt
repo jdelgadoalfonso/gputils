@@ -1,2 +1,0 @@
-2004-11-14 Craig Franklin <craigfranklin@users.sourceforge.net>
-  * gputils-mplab 0.1 Released.
