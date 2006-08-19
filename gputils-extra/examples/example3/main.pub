@@ -1,5 +1,0 @@
-public main is
-
-  pragma code_section = "PROG1";
-  
-end public;
