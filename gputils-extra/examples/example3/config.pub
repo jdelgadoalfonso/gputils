@@ -1,8 +1,0 @@
-public config is
-
-  pragma processor = "16f877";
-  with p16f877;
-
-  with types;
-  
-end public;
