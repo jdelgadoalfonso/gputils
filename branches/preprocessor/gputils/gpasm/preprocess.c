@@ -336,6 +336,7 @@ preprocess(char *buf, int n, int max_size, int (*substitute)(char *buf, int star
   int start = -1;
   int state = 0;    /* '"': in double quotes; '\'': in single quotes; ';': in comment */
   int prev_esc = 0; /* prev char was escape */
+  int number_start = 0; /* possible start of a x'nnn' formatted number */
   int i;
 
   DBG_printf("---%*.*s\n", n, n, buf);
@@ -345,17 +346,35 @@ preprocess(char *buf, int n, int max_size, int (*substitute)(char *buf, int star
 
     if (0 == state) {
       if (-1 == start && is_first_iden(c)) {
-        start = i;
-      }
-      if (-1 != start && !is_iden(c)) {
-        if (0 == level && no_process_iden(&buf[start], i - start)) {
-          start = -1;
+        switch (c) {
+        case 'a': case 'A':
+        case 'b': case 'B':
+        case 'd': case 'D':
+        case 'h': case 'H':
+        case 'o': case 'O':
+          number_start = 1;
+          break;
+
+        default:
+          number_start = 0;
           break;
         }
+        start = i;
+      }
+      else {
+        if (-1 != start && !is_iden(c)) {
+          if (0 == level && no_process_iden(&buf[start], i - start)) {
+            start = -1;
+            break;
+          }
 
-        DBG_printf("@@@Preprocessing identifier: %*.*s\n", i - start, i - start, &buf[start]);
-        (*substitute)(buf, start, &i, &n, max_size);
-        start = -1;
+          if (c != '\'' || !number_start) {
+            DBG_printf("@@@Preprocessing identifier: %*.*s\n", i - start, i - start, &buf[start]);
+           (*substitute)(buf, start, &i, &n, max_size);
+          }
+          start = -1;
+        }
+        number_start = 0;
       }
     }
 
