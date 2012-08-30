@@ -18,6 +18,7 @@ libgpasm_a_SOURCES=\
 	gperror.c \
 	lst.c \
 	macro.c \
+	preprocess.c \
 	processor.c \
 	special.c \
 	util.c \
@@ -31,6 +32,7 @@ libgpasm_a_SOURCES=\
 	libgpasm.h \
 	lst.h \
 	macro.h \
+	preprocess.h \
 	processor.h \
 	scan.h \
 	special.h

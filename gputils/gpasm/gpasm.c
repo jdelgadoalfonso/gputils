@@ -260,7 +260,7 @@ process_args( int argc, char *argv[])
         if (sym == NULL)
           sym = add_symbol(state.stDefines, lhs);
         if (rhs)
-          annotate_symbol(sym, rhs);
+          annotate_symbol(sym, mk_list(mk_string(rhs), NULL));
       }
       break;
     case 'e':

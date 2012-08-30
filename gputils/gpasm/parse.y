@@ -32,6 +32,90 @@ Boston, MA 02111-1307, USA.  */
 #include "coff.h"
 #include "scan.h"
 
+/* #define DEBUG */
+#ifdef DEBUG
+/* enable debugging */
+#include "parse.h"
+
+int yydebug = 1;
+
+#define YYPRINT(file, type, value)   yyprint (file, type, value)
+
+static void
+yyprint (FILE *file, int type, YYSTYPE value)
+{
+  switch (type) {
+  case LABEL:
+  case IDENTIFIER:
+  case IDENT_BRACKET:
+  case DEBUG_LINE:
+  case ERRORLEVEL:
+  case FILL:
+  case LIST:
+  case PROCESSOR:
+  case DEFINE:
+  case VARLAB_BEGIN:
+  case VAR_BEGIN:
+    fprintf (file, "%s", value.s);
+    break;
+
+  case STRING:
+    fprintf (file, "\"%s\"", value.s);
+    break;
+
+  case NUMBER:
+  case UPPER:
+  case HIGH:
+  case LOW:
+  case LSH:
+  case RSH:
+  case GREATER_EQUAL:
+  case LESS_EQUAL:
+  case EQUAL:
+  case NOT_EQUAL:
+  case '<':
+  case '>':
+  case '&':
+  case '|':
+  case '^':
+  case LOGICAL_AND:
+  case LOGICAL_OR:
+  case '=':
+  case ASSIGN_PLUS:
+  case ASSIGN_MINUS:
+  case ASSIGN_MULTIPLY:
+  case ASSIGN_DIVIDE:
+  case ASSIGN_MODULUS:
+  case ASSIGN_LSH:
+  case ASSIGN_RSH:
+  case ASSIGN_AND:
+  case ASSIGN_OR:
+  case ASSIGN_XOR:
+  case INCREMENT:
+  case DECREMENT:
+  case POSTINCREMENT:
+  case POSTDECREMENT:
+  case INDFOFFSET:
+  case TBL_NO_CHANGE:
+  case TBL_POST_INC:
+  case TBL_POST_DEC:
+  case TBL_PRE_INC:
+  case CONCAT:
+  case VAR:
+  case VAR_END:
+  case '[':
+  case ']':
+    fprintf (file, "%d", value.i);
+    break;
+
+  case CBLOCK:
+  case ENDC:
+  default:
+    break;
+  }
+}
+#endif
+
 void yyerror(char *message)
 {
   gperror(103, message);
@@ -64,14 +148,14 @@ struct pnode *mk_offset(struct pnode *p)
   return new;
 }
 
-static struct pnode *mk_symbol(char *value)
+struct pnode *mk_symbol(char *value)
 {
   struct pnode *new = mk_pnode(symbol);
   new->value.symbol = value;
   return new;
 }
 
-static struct pnode *mk_string(char *value)
+struct pnode *mk_string(char *value)
 {
   struct pnode *new = mk_pnode(string);
   new->value.string = value;
@@ -86,7 +170,7 @@ struct pnode *mk_list(struct pnode *head, struct pnode *tail)
   return new;
 }
 
-static struct pnode *mk_2op(int op, struct pnode *p0, struct pnode *p1)
+struct pnode *mk_2op(int op, struct pnode *p0, struct pnode *p1)
 {
   struct pnode *new = mk_pnode(binop);
   new->value.binop.op = op;
@@ -95,7 +179,7 @@ static struct pnode *mk_2op(int op, struct pnode *p0, struct pnode *p1)
   return new;
 }
 
-static struct pnode *mk_1op(int op, struct pnode *p0)
+struct pnode *mk_1op(int op, struct pnode *p0)
 {
   struct pnode *new = mk_pnode(unop);  new->value.unop.op = op;
   new->value.unop.p0 = p0;
@@ -195,7 +279,6 @@ void next_line(int value)
     default:
       break;
   }
-
 }
 
 
@@ -213,6 +296,7 @@ void next_line(int value)
 
 %token <s> LABEL
 %token <s> IDENTIFIER
+%token <s> IDENT_BRACKET
 %token <s> CBLOCK
 %token <s> DEBUG_LINE
 %token <s> ENDC
@@ -302,6 +386,7 @@ void next_line(int value)
 %type <i> assign_equal_ops
 %type <p> list_block
 %type <p> list_expr
+%type <p> list_args
 
 %%
 /* Grammar rules */
@@ -525,7 +610,19 @@ statement:
               mk_list(mk_string($3), NULL)));
         }
         |
-        DEFINE IDENTIFIER '\n'
+        DEFINE IDENT_BRACKET list_args ')' STRING '\n'
+        {
+          $$ = do_or_append_insn($1, mk_list(mk_string($2),
+              mk_list(mk_string($5), $3)));
+        }
+        |
+        DEFINE IDENT_BRACKET ')' STRING '\n'
+        {
+          $$ = do_or_append_insn($1, mk_list(mk_string($2),
+              mk_list(mk_string($4), NULL)));
+        }
+        |
+         DEFINE IDENTIFIER '\n'
         {
           $$ = do_or_append_insn($1, mk_list(mk_string($2), NULL));
         }
@@ -985,6 +1082,17 @@ list_expr:
         }
         ;
 
+list_args:
+        IDENTIFIER
+        {
+          $$ = mk_list(mk_symbol($1), NULL);
+        }
+        |
+        IDENTIFIER ',' list_args
+        {
+          $$ = mk_list(mk_symbol($1), $3);
+        }
+        ;
 %%
 
 int return_op(int operation)
