@@ -1,3 +1,9 @@
+2012-08-30  Borut Razem  <borutr@users.sourceforge.net>
+  * gpasm/Makefile.am, gpasm/Makefile.in, gpasm/preprocess.c,
+    gpasm/preprocess.h, gpasm/scan.l, gpasm/parse.y, gpasm/macro.c,
+    gpasm/lst.c, gpasm/gpasm.c, gpasm/directive.c, gpasm/gpasm.h.in:
+    #define preprocessing performed before tokenization
+
 2012-08-28  Borut Razem  <borutr@users.sourceforge.net>
   * gpasm/directive.c: terative reimplementation of macro_parms_simple(),
     macro_parms_unique(), macro_parms_ok();

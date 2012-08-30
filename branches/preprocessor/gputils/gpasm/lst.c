@@ -22,6 +22,7 @@ Boston, MA 02111-1307, USA.  */
 #include "stdhdr.h"
 
 #include "libgputils.h"
+#include "directive.h"
 #include "gpasm.h"
 #include "cod.h"
 #include "coff.h"
@@ -836,11 +837,14 @@ lst_defines_table(struct symbol_table *table)
   qsort(lst, table->count, sizeof(lst[0]), symbol_compare);
 
   for (i = 0; i < table->count; i++) {
-    char *defined_as;
+    struct pnode *p = get_symbol_annotation(lst[i]);
 
-    defined_as = get_symbol_annotation(lst[i]);
+    if (p) {
+      assert(list == p->tag);
+      assert(string == HEAD(p)->tag);
+    }
     lst_line(symbol_format,
              get_symbol_name(lst[i]),
-             defined_as);
+             p ? HEAD(p)->value.string : "");
   }
 }

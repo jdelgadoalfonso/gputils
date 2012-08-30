@@ -131,7 +131,7 @@ extern struct gpasm_state {
   unsigned int c_memory_base;   /* Base address of configuration memory */
   char badram[MAX_RAM];         /* nonzero indicates illegal memory */
   struct symbol_table
-  *stBuiltin,                   /* Built-ins: instructions, pseudo-ops */
+    *stBuiltin,                 /* Built-ins: instructions, pseudo-ops */
     *stDirective,               /* bottom half of Builtin with directives */
     *stGlobal,                  /* Global symbols */
     *stTop,                     /* Top of locals stack (stGlobal is base) */
@@ -301,6 +301,8 @@ struct source_context {
 };
 
 void yyerror(char *s);
+
+/* util.c */
 int stringtolong(const char *string, int radix);
 int gpasm_magic(const char *);
 const char *convert_escape_chars(const char *ps, int *value);
@@ -320,7 +322,18 @@ struct file_context *add_file(unsigned int type, const char *name);
 void free_files(void);
 void macro_append(void);
 void hex_init(void);
+
+/* gpasm.c */
 void add_path(const char *path);
+
+/* parse.y */
+struct pnode *mk_constant(int value);
+struct pnode *mk_offset(struct pnode *p);
+struct pnode *mk_symbol(char *value);
+struct pnode *mk_string(char *value);
+struct pnode *mk_list(struct pnode *head, struct pnode *tail);
+struct pnode *mk_2op(int op, struct pnode *p0, struct pnode *p1);
+struct pnode *mk_1op(int op, struct pnode *p0);
 
 /************************************************************************/
 
