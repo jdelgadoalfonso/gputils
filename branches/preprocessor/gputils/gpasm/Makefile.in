@@ -54,8 +54,8 @@ libgpasm_a_LIBADD =
 am_libgpasm_a_OBJECTS = parse.$(OBJEXT) cod.$(OBJEXT) coff.$(OBJEXT) \
 	deps.$(OBJEXT) directive.$(OBJEXT) evaluate.$(OBJEXT) \
 	gpasm.$(OBJEXT) scan.$(OBJEXT) gperror.$(OBJEXT) lst.$(OBJEXT) \
-	macro.$(OBJEXT) processor.$(OBJEXT) special.$(OBJEXT) \
-	util.$(OBJEXT)
+	macro.$(OBJEXT) preprocess.$(OBJEXT) processor.$(OBJEXT) \
+	special.$(OBJEXT) util.$(OBJEXT)
 libgpasm_a_OBJECTS = $(am_libgpasm_a_OBJECTS)
 am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
@@ -206,6 +206,7 @@ libgpasm_a_SOURCES = \
 	gperror.c \
 	lst.c \
 	macro.c \
+	preprocess.c \
 	processor.c \
 	special.c \
 	util.c \
@@ -219,6 +220,7 @@ libgpasm_a_SOURCES = \
 	libgpasm.h \
 	lst.h \
 	macro.h \
+	preprocess.h \
 	processor.h \
 	scan.h \
 	special.h
@@ -338,6 +340,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/macro.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/parse.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/preprocess.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/processor.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/scan.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/special.Po@am__quote@

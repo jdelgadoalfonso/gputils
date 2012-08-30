@@ -4,6 +4,7 @@
 %x lnquote
 %x define
 %x definition
+%x defargs
 
 %{
 /* lexical analyser for gpasm
@@ -48,6 +49,7 @@ Boston, MA 02111-1307, USA.  */
 #include "evaluate.h"
 #include "macro.h"
 #include "coff.h"
+#include "preprocess.h"
 
 #define OPERATOR(x)  return (yylval.i = (x))
 /* YY_UNPUT not used, suppress the warning */
@@ -59,47 +61,45 @@ enum identtype identify(char *);
 static void push_string(char *str);
 static int found_eof(void);
 
-static char *check_defines(char *symbol);
-
-static int quoted; /* Used to prevent #define expansion in ifdef and
-                      ifndef... */
 int force_decimal; /* Used to force radix to decimal for some directives */
 int force_ident;   /* Used to force numbers to identifiers for processor names */
 
 #define GP_INPUT(buf,result,max_size) \
-  if ( YY_CURRENT_BUFFER_LVALUE->yy_is_interactive ) \
+{ \
+  if (YY_CURRENT_BUFFER_LVALUE->yy_is_interactive) \
     { \
       int c = '*'; \
       size_t n; \
-      for ( n = 0; n < max_size && \
-        (c = getc(yyin)) != EOF && c != '\n'; ++n ) \
+      for (n = 0; n < max_size && \
+        (c = getc(yyin)) != EOF && c != '\n'; ++n) \
         buf[n] = (char) c; \
       if (c == '\n') \
         buf[n++] = (char) c; \
       if (c == EOF && ferror(yyin)) \
         YY_FATAL_ERROR("input in flex scanner failed"); \
-      result = n; \
+      result = preprocess_line(buf, n, max_size); \
     } \
   else \
     { \
       YY_FATAL_ERROR("internal error: interactive scanner should be used"); \
       result = 0; \
-    }
+    } \
+}
 
 #define YY_INPUT(buf,result,max_size) \
-  { \
-    GP_INPUT(buf,result,max_size); \
-    if (result) \
-      { \
-        state.src->last_char_is_nl = (buf[result - 1] == '\n'); \
-      } \
-    else if (!state.src->last_char_is_nl) \
-      { \
-        *buf = '\n'; \
-        result = 1; \
-        state.src->last_char_is_nl = true; \
-      } \
-  }
+{ \
+  GP_INPUT(buf, result, max_size); \
+  if (result) \
+    { \
+      state.src->last_char_is_nl = (buf[result - 1] == '\n'); \
+     } \
+  else if (!state.src->last_char_is_nl) \
+    { \
+      *buf = '\n'; \
+      result = 1; \
+      state.src->last_char_is_nl = true; \
+    } \
+}
 %}
 
 IDENT  [.]?[a-z_\x80-\xff?@#][a-z_0-9\x80-\xff.?@#]*
@@ -148,6 +148,20 @@ fill[ \t]*\(             {
                            yylval.s = "#define";
                            return DEFINE;
                          }
+<define>{IDENT}\(        {
+                           BEGIN(defargs);
+                           yylval.s = strndup(yytext, yyleng - 1);
+                           return IDENT_BRACKET;
+                         }
+<defargs>{IDENT}         {
+                           yylval.s = strdup(yytext);
+                           return IDENTIFIER;
+                         }
+<defargs>\)              {
+                           BEGIN(definition);
+                           yylval.i = yytext[0];
+                           return ')';
+                         }
 <define>{IDENT}          {
                            BEGIN(definition);
                            yylval.s = strdup(yytext);
@@ -190,19 +204,16 @@ processor                {
                          }
 #?ifdef                  {
                            /* #ifdef and ifdef can appear in column 1 */
-                           quoted = 1;
                            yylval.s = strdup(yytext);
                            return IDENTIFIER;
                          }
 #?ifndef                 {
                            /* #ifndef and ifndef can appear in column 1 */
-                           quoted = 1;
                            yylval.s = strdup(yytext);
                            return IDENTIFIER;
                          }
 #undefine                {
                            /* #undefine can appear in column 1 */
-                           quoted = 1;
                            yylval.s = strdup(yytext);
                            return IDENTIFIER;
                          }
@@ -211,16 +222,7 @@ processor                {
                            return DEBUG_LINE;
                          }
 ^{IDENT}#v\(             {
-                           char *symbol;
-
-                           yytext[strlen(yytext) - 3] = '\0';
-
-                           symbol = check_defines(yytext);
-                           if (symbol) {
-                             yylval.s = strdup(symbol);
-                           } else {
-                             yylval.s = strdup(yytext);
-                           }
+                           yylval.s = strndup(yytext, yyleng - 3);
                            return VARLAB_BEGIN;
                          }
 ^{IDENT}:?               {
@@ -281,44 +283,16 @@ processor                {
                            }
                          }
 {IDENT}#v\(              {
-                           char *symbol;
-
-                           yytext[strlen(yytext) - 3] = '\0';
-
-                           symbol = check_defines(yytext);
-                           if (symbol) {
-                             yylval.s = strdup(symbol);
-                           } else {
-                             yylval.s = strdup(yytext);
-                           }
+                           yylval.s = strndup(yytext, yyleng - 3);
                            return VAR_BEGIN;
                          }
 \)[a-z_0-9\x80-\xff?.]+  {
-                           char *symbol;
-
-                           symbol = check_defines(yytext+1);
-                           if (symbol) {
-                             yylval.s = strdup(symbol);
-                           } else {
-                             yylval.s = strdup(yytext+1);
-                           }
+                           yylval.s = strdup(yytext + 1);
                            return VAR_END;
                          }
 {IDENT}                  {
-                           char *symbol;
-
-                           symbol = check_defines(yytext);
-                           if (symbol) {
-                             char buffer[BUFSIZ];
-
-                             /* Make the substitution with a leading space,
-                                so it won't be a label */
-                             sprintf(buffer, " %s", symbol);
-                             push_string(buffer);
-                           } else {
-                             yylval.s = strdup(yytext);
-                             return IDENTIFIER;
-                           }
+                           yylval.s = strdup(yytext);
+                           return IDENTIFIER;
                          }
 0x{NUMCHAR}+             {
                            yylval.i = stringtolong(yytext + 2, 16);
@@ -407,12 +381,11 @@ h'-?{NUMCHAR}+'          {
                            }
                          }
 <INITIAL,bquote>\"{STR_QCHAR}*\"?        {
-                           char *pc = &yytext[yyleng - 1];
-                           if ((yyleng > 1) && (*pc == '"'))
-                             *pc = '\0';
+                           if ((yyleng > 1) && (yytext[yyleng - 1] == '"'))
+                             --yyleng;
                            else
                              gpwarning(GPW_MISSING_QUOTE, NULL);
-                           yylval.s = strdup(yytext + 1);
+                           yylval.s = strndup(yytext + 1, yyleng - 1);
                            BEGIN(INITIAL);
                            return STRING;
                          }
@@ -426,8 +399,7 @@ A'{STR_QCHAR}'           {
                            return NUMBER;
                          }
 <bquote>\<{STR_BCHAR}*\> {
-                           yytext[yyleng - 1] = '\0';
-                           yylval.s = strdup(&yytext[1]);
+                           yylval.s = strndup(yytext + 1, yyleng - 2);
                            BEGIN(INITIAL);
                            return STRING;
                          }
@@ -439,8 +411,7 @@ A'{STR_QCHAR}'           {
                          }
 <lnquote>\"{STR_QCHAR}*\" {
                            /* if valid, must match with length >= unquoted token below */
-                           yytext[yyleng - 1] = '\0';
-                           yylval.s = strdup(&yytext[1]);
+                           yylval.s = strndup(yytext + 1, yyleng - 2);
                            BEGIN(INITIAL);
                            return STRING;
                          }
@@ -478,9 +449,8 @@ A'{STR_QCHAR}'           {
 "*-"                     OPERATOR(TBL_POST_DEC);
 "+*"                     OPERATOR(TBL_PRE_INC);
 
-<INITIAL,bquote,lnquote,definition>[ \t\r]*
+<INITIAL,bquote,lnquote,definition,defargs>[ \t\r]*
 <*>[\n]                  {
-                           quoted = 0;
                            force_decimal = 0;
                            force_ident = 0;
                            BEGIN(INITIAL);  /* no multiline states yet */
@@ -581,7 +551,6 @@ void open_src(const char *name, int isinclude)
 
   if (!isinclude) {
     /* it is the top level file so initialize the lexer */
-    quoted = 0;
     force_decimal = 0;
     force_ident = 0;
   }
@@ -787,25 +756,4 @@ enum identtype identify(char *text)
   }
 
   return type;
-}
-
-static char *
-check_defines(char *symbol)
-{
-  struct symbol *sym;
-  char *subst = NULL;
-
-  /* If not quoted, check for #define substitution */
-  if (!quoted &&
-     (sym = get_symbol(state.stTopDefines, symbol)) != NULL) {
-    subst = get_symbol_annotation(sym);
-    if (subst == NULL)
-      subst = "";
-    if (strcmp(symbol, subst) == 0) {
-      /* check for a bad subsitution */
-      subst = NULL;
-    }
-  }
-
-  return subst;
 }

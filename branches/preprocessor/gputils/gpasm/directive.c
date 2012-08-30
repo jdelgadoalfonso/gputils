@@ -1273,24 +1273,25 @@ static gpasmVal do_define(gpasmVal r,
     gperror(GPE_MISSING_ARGU, NULL);
     exit(1);
   }
-  assert(arity <= 2);
 
+  assert(list == parms->tag);
   p = HEAD(parms);
-  if (p->tag == string) {
-    if((asm_enabled()) && (!state.mac_prev)) {
-      if ((get_symbol(state.stDefines, p->value.string) != NULL)
-          && (state.pass == 1)) {
-        /* FIXME: find a more elegant way to do this */
-        state.pass = 2;
-        gperror(GPE_DUPLAB, NULL);
-        exit(1);
-      }
-      current_definition = add_symbol(state.stDefines, p->value.string);
-      if (TAIL(parms)) {
-        struct pnode *p2 = HEAD(TAIL(parms));
-        assert(p2->tag == string);
-        annotate_symbol(current_definition, strdup(p2->value.string));
-      }
+  assert(string == p->tag);
+  if ((asm_enabled()) && (!state.mac_prev)) {
+    if ((get_symbol(state.stDefines, p->value.string) != NULL)
+        && (state.pass == 1)) {
+      /* FIXME: find a more elegant way to do this */
+      state.pass = 2;
+      gperror(GPE_DUPLAB, NULL);
+      exit(1);
+    }
+      
+    current_definition = add_symbol(state.stDefines, p->value.string);
+
+    p = TAIL(parms);
+    if (p) {
+      assert(list == p->tag);
+      annotate_symbol(current_definition, p);
     }
   }
 
