@@ -81,18 +81,49 @@ check_code(int code)
   return print;
 }
 
+enum err_type_e {
+  et_error,
+  et_warning,
+  et_message
+};
+
 static void
-verr(const char *type, unsigned int code, const char *message, va_list ap)
+verr(enum err_type_e err_type, unsigned int code, const char *message, va_list ap)
 {
   /* standard output */
   if (!state.quiet) {
     if (state.src)
-      printf("%s:%d:%s[%03d]   ",
-             state.src->name, state.src->line_number, type, code);
+      printf("%s:%d:%s[%03d] %s", state.src->name, state.src->line_number,
+        (et_error == err_type) ? "Error" : (et_warning == err_type) ? "Warning" : "Message",
+        code,
+        ((et_error == err_type) ? "  " : ""));
     else
-      printf("%s[%03d]   ", type, code);
+      printf("%s[%03d] %s",
+        (et_error == err_type) ? "Error" : (et_warning == err_type) ? "Warning" : "Message",
+        code,
+        ((et_error == err_type) ? "  " : ""));
     vprintf(message, ap);
     putchar('\n');
+  }
+}
+
+static void
+err(enum err_type_e err_type, unsigned int code, const char *message)
+{
+  /* standard output */
+  if (!state.quiet) {
+    if (state.src)
+      printf("%s:%d:%s[%03d] %s%s\n", state.src->name, state.src->line_number,
+        (et_error == err_type) ? "Error" : (et_warning == err_type) ? "Warning" : "Message",
+        code,
+        ((et_error == err_type) ? "  " : ""),
+        message);
+    else
+      printf("%s[%03d] %s%s\n",
+        (et_error == err_type) ? "Error" : (et_warning == err_type) ? "Warning" : "Message",
+        code,
+        ((et_error == err_type) ? "  " : ""),
+        message);
   }
 }
 
@@ -195,21 +226,8 @@ gperror(unsigned int code, char *message)
     if(message == NULL)
       message = gp_geterror(code);
 
-#ifndef GP_USER_ERROR
     /* standard output */
-    if (!state.quiet) {
-      if (state.src)
-        printf("%s:%d:Error[%03d]   %s\n",
-         state.src->name,
-         state.src->line_number,
-         code,
-         message);
-      else
-        printf("Error[%03d]   %s\n", code, message);
-    }
-#else
-    user_error(code, message);
-#endif
+    err(et_error, code, message);
 
     /* list file output */
     lst_line("Error[%03d]  : %s", code, message);
@@ -227,9 +245,10 @@ gpverror(unsigned int code, ...)
 
     /* standard output */
     va_start(ap, code);
-    verr("Error", code, message, ap);
+    verr(et_error, code, message, ap);
     va_end(ap);
 
+    /* list file output */
     va_start(ap, code);
     lst_err_line("Error", code, message, ap);
     va_end(ap);
@@ -295,23 +314,8 @@ gpwarning(unsigned int code, char *message)
       if (message == NULL)
         message = gp_getwarning(code);
 
-#ifndef GP_USER_WARNING
       /* standard output */
-      if (!state.quiet) {
-        if (state.src)
-          printf("%s:%d:Warning[%03d] %s\n",
-     state.src->name,
-     state.src->line_number,
-     code,
-     message);
-        else
-          printf("Warning[%03d] %s\n",
-     code,
-     message);
-      }
-#else
-      user_warning(code, message);
-#endif
+      err(et_warning, code, message);
 
       /* list file output */
       lst_line("Warning[%03d]: %s", code, message);
@@ -333,7 +337,7 @@ gpvwarning(unsigned int code, ...)
 
       /* standard output */
       va_start(ap, code);
-      verr("Warning", code, message, ap);
+      verr(et_warning, code, message, ap);
       va_end(ap);
 
       va_start(ap, code);
@@ -386,31 +390,15 @@ gp_getmessage(unsigned int code)
 }
 
 void
-gpmessage(unsigned int code,
-         char *message)
+gpmessage(unsigned int code, char *message)
 {
   if (state.pass==2) {
     if ((state.error_level == 0) && check_code(code)){
       if(message == NULL)
         message = gp_getmessage(code);
 
-#ifndef GP_USER_MESSAGE
       /* standard output */
-      if (!state.quiet) {
-        if (state.src)
-          printf("%s:%d:Message[%03d] %s\n",
-     state.src->name,
-     state.src->line_number,
-     code,
-     message);
-        else
-          printf("Message[%03d] %s\n",
-     code,
-     message);
-      }
-#else
-      user_message(code, message);
-#endif
+      err(et_message, code, message);
 
       /* list file output */
       lst_line("Message[%03d]: %s", code, message);
@@ -433,9 +421,10 @@ gpvmessage(unsigned int code, ...)
 
       /* standard output */
       va_start(ap, code);
-      verr("Message", code, message, ap);
+      verr(et_message, code, message, ap);
       va_end(ap);
 
+      /* list file output */
       va_start(ap, code);
       lst_err_line("Message", code, message, ap);
       va_end(ap);

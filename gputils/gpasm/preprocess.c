@@ -176,7 +176,7 @@ substitute_param(char *buf, int start, int *i, int *n, int max_size)
   return 0; /* no substitutuon */
 }
 
-static int preprocess(char *buf, int n, int max_size, int (*substitute)(char *buf, int start, int *i, int *n, int max_size), int level);
+static int preprocess(char *buf, int *n, int max_size, int (*substitute)(char *buf, int start, int *i, int *n, int max_size), int level);
 
 static int
 substitute_macro(char *buf, int start, int *i, int *n, int max_size)
@@ -238,11 +238,10 @@ substitute_macro(char *buf, int start, int *i, int *n, int max_size)
             case ')':
               if (n_args == n_params) {
                 char buf1[1024];
-                int n1 = strlen(sub);
-                int len;
+                int len = strlen(sub);
 
-                memcpy(buf1, sub, n1);
-                len = preprocess(buf1, n1, sizeof(buf1), substitute_param, 1);
+                memcpy(buf1, sub, len);
+                preprocess(buf1, &len, sizeof(buf1), substitute_param, 1);
                 free_arg_list();
 
                 DBG_printf("@@@substituting %*.*s with %*.*s\n", mlen, mlen, &buf[start], len, len, buf1);
@@ -320,40 +319,37 @@ enum no_process_type {
 static enum no_process_type
 no_process_iden(const char *iden, int len)
 {
-  static struct iden_tbl_s {
-    const char *iden;
-    enum no_process_type type;
-  } iden_tbl[] = {
-    { "#define", np_next_iden },
-    { "#ifdef", np_eol },
-    { "#ifndef", np_eol },
-    { "#undefine", np_eol },
-    { "define", np_eol },
-    { "ifdef", np_next_iden },
-    { "ifndef", np_eol },
+  static const char * const iden_tbl[] = {
+    "#define",
+    "#ifdef",
+    "#ifndef",
+    "#undefine",
+    "define",
+    "ifdef",
+    "ifndef",
   };
   int i;
 
   for (i = 0; i < NELEM(iden_tbl); ++i) {
-    if (strlen(iden_tbl[i].iden) == len && 0 == strncasecmp(iden, iden_tbl[i].iden, len))
-      return iden_tbl[i].type;
+    if (strlen(iden_tbl[i]) == len && 0 == strncasecmp(iden, iden_tbl[i], len))
+      return 1;
   }
   return 0;
 }
 
 static int
-preprocess(char *buf, int n, int max_size, int (*substitute)(char *buf, int start, int *i, int *n, int max_size), int level)
+preprocess(char *buf, int *n, int max_size, int (*substitute)(char *buf, int start, int *i, int *n, int max_size), int level)
 {
   int start = -1;
   int state = 0;    /* '"': in double quotes; '\'': in single quotes; ';': in comment */
   int prev_esc = 0; /* 1: prev char was escape */
   int number_start = 0; /* 1: possible start of a x'nnn' formatted number */
-  int preproc_iden = 1; /* don't preprocess (next) identifier */
+  int substituted = 0;
   int i;
 
-  DBG_printf("---%*.*s\n", n, n, buf);
+  DBG_printf("---%*.*s\n", *n, *n, buf);
 
-  for (i = 0; i < n; ++i) {
+  for (i = 0; i < *n; ++i) {
     int c = buf[i];
 
     if (0 == state) {
@@ -375,24 +371,16 @@ preprocess(char *buf, int n, int max_size, int (*substitute)(char *buf, int star
       }
       else {
         if (-1 != start && !is_iden(c)) {
-          enum no_process_type npi = no_process_iden(&buf[start], i - start);
-
-          if (0 == level && np_eol == npi) {
+          if (0 == level && no_process_iden(&buf[start], i - start)) {
             start = -1;
             break;
           }
 
-          if (0 == level && np_next_iden == npi)
-            preproc_iden = 0;
-          else {
-            if (preproc_iden && (c != '\'' || !number_start)) {
-              DBG_printf("@@@Preprocessing identifier: %*.*s\n", i - start, i - start, &buf[start]);
-              (*substitute)(buf, start, &i, &n, max_size);
-            }
-            else
-              preproc_iden = 1;
-            start = -1;
+          if (c != '\'' || !number_start) {
+            DBG_printf("@@@Preprocessing identifier: %*.*s\n", i - start, i - start, &buf[start]);
+            substituted |= (*substitute)(buf, start, &i, n, max_size);
           }
+          start = -1;
         }
         number_start = 0;
       }
@@ -421,16 +409,19 @@ preprocess(char *buf, int n, int max_size, int (*substitute)(char *buf, int star
 
   if (-1 != start) {
     DBG_printf("@@@Preprocessing identifier: %*.*s\n", i - start, i - start, &buf[start]);
-   (*substitute)(buf, start, &i, &n, max_size);
+    substituted |= (*substitute)(buf, start, &i, n, max_size);
   }
 
-  DBG_printf("+++%*.*s\n", n, n, buf);
+  DBG_printf("+++%*.*s\n", *n, *n, buf);
 
-  return n;
+  return substituted;
 }
 
 int
 preprocess_line(char *buf, int n, int max_size)
 {
-  return preprocess(buf, n, max_size, substitute_macro, 0);
+  while (preprocess(buf, &n, max_size, substitute_macro, 0))
+    ;
+
+  return n;
 }
