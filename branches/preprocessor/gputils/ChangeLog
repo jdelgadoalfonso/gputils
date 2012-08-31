@@ -1,4 +1,13 @@
+2012-08-31  Borut Razem  <borutr@users.sourceforge.net>
+  * gpasm/directive.c: don't die on symbol redefindefinition
+  * gpasm/preprocess.c, gpasm/scan.l: #define preprocessing
+  * gpasm/gperror.c, gpasm/gperror.h, gpasm/special.c,
+    gpasm/processor.c, gpasm/lst.c, gpasm/evaluate.c,
+    gpasm/lst.h, gpasm/coff.c, gpasm/util.c:
+    error handling reorganization
+
 2012-08-30  Borut Razem  <borutr@users.sourceforge.net>
+  * Created preprocess branch
   * gpasm/Makefile.am, gpasm/Makefile.in, gpasm/preprocess.c,
     gpasm/preprocess.h, gpasm/scan.l, gpasm/parse.y, gpasm/macro.c,
     gpasm/lst.c, gpasm/gpasm.c, gpasm/directive.c, gpasm/gpasm.h.in:
