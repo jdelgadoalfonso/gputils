@@ -64,6 +64,34 @@ static int found_eof(void);
 int force_decimal; /* Used to force radix to decimal for some directives */
 int force_ident;   /* Used to force numbers to identifiers for processor names */
 
+/* #define DEBUG */
+
+#ifdef DEBUG
+size_t
+gp_input(char *buf, size_t max_size)
+{
+  if (YY_CURRENT_BUFFER_LVALUE->yy_is_interactive)
+    {
+      int c = '*';
+      size_t n;
+      for (n = 0; n < max_size &&
+        (c = getc(yyin)) != EOF && c != '\n'; ++n)
+        buf[n] = (char) c;
+      if (c == '\n')
+        buf[n++] = (char) c;
+      if (c == EOF && ferror(yyin))
+        gperror(103, "input in flex scanner failed");
+      return preprocess_line(buf, n, max_size);
+    }
+  else
+    {
+      gperror(103, "internal error: interactive scanner should be used");
+      return 0;
+    }
+}
+
+#define GP_INPUT(buf,result,max_size) result = gp_input(buf, max_size)
+#else
 #define GP_INPUT(buf,result,max_size) \
 { \
   if (YY_CURRENT_BUFFER_LVALUE->yy_is_interactive) \
@@ -85,6 +113,7 @@ int force_ident;   /* Used to force numbers to identifiers for processor names *
       result = 0; \
     } \
 }
+#endif
 
 #define YY_INPUT(buf,result,max_size) \
 { \
@@ -142,6 +171,10 @@ fill[ \t]*\(             {
                            /* fill with ( ) as first argument */
                            yylval.i = FILL;
                            return FILL;
+                         }
+^[ \t]*#define[ \t]*$    {
+                           yylval.s = "#define";
+                           return DEFINE;
                          }
 ^[ \t]*#define[ \t]+     {
                            BEGIN(define);

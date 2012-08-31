@@ -311,21 +311,32 @@ substitute_macro(char *buf, int start, int *i, int *n, int max_size)
 
 #define NELEM(x) (sizeof(x) / sizeof(*x))
 
-static int
+enum no_process_type {
+  np_none = 0,
+  np_eol,
+  np_next_iden
+};
+
+static enum no_process_type
 no_process_iden(const char *iden, int len)
 {
-  static const char * const iden_tbl[] = {
-   "#ifdef",
-   "#ifndef",
-   "#undefine",
-   "ifdef",
-   "ifndef",
+  static struct iden_tbl_s {
+    const char *iden;
+    enum no_process_type type;
+  } iden_tbl[] = {
+    { "#define", np_next_iden },
+    { "#ifdef", np_eol },
+    { "#ifndef", np_eol },
+    { "#undefine", np_eol },
+    { "define", np_eol },
+    { "ifdef", np_next_iden },
+    { "ifndef", np_eol },
   };
   int i;
 
   for (i = 0; i < NELEM(iden_tbl); ++i) {
-    if (strlen(iden_tbl[i]) == len && 0 == strncasecmp(iden, iden_tbl[i], len))
-      return 1;
+    if (strlen(iden_tbl[i].iden) == len && 0 == strncasecmp(iden, iden_tbl[i].iden, len))
+      return iden_tbl[i].type;
   }
   return 0;
 }
@@ -335,8 +346,9 @@ preprocess(char *buf, int n, int max_size, int (*substitute)(char *buf, int star
 {
   int start = -1;
   int state = 0;    /* '"': in double quotes; '\'': in single quotes; ';': in comment */
-  int prev_esc = 0; /* prev char was escape */
-  int number_start = 0; /* possible start of a x'nnn' formatted number */
+  int prev_esc = 0; /* 1: prev char was escape */
+  int number_start = 0; /* 1: possible start of a x'nnn' formatted number */
+  int preproc_iden = 1; /* don't preprocess (next) identifier */
   int i;
 
   DBG_printf("---%*.*s\n", n, n, buf);
@@ -363,16 +375,24 @@ preprocess(char *buf, int n, int max_size, int (*substitute)(char *buf, int star
       }
       else {
         if (-1 != start && !is_iden(c)) {
-          if (0 == level && no_process_iden(&buf[start], i - start)) {
+          enum no_process_type npi = no_process_iden(&buf[start], i - start);
+
+          if (0 == level && np_eol == npi) {
             start = -1;
             break;
           }
 
-          if (c != '\'' || !number_start) {
-            DBG_printf("@@@Preprocessing identifier: %*.*s\n", i - start, i - start, &buf[start]);
-           (*substitute)(buf, start, &i, &n, max_size);
+          if (0 == level && np_next_iden == npi)
+            preproc_iden = 0;
+          else {
+            if (preproc_iden && (c != '\'' || !number_start)) {
+              DBG_printf("@@@Preprocessing identifier: %*.*s\n", i - start, i - start, &buf[start]);
+              (*substitute)(buf, start, &i, &n, max_size);
+            }
+            else
+              preproc_iden = 1;
+            start = -1;
           }
-          start = -1;
         }
         number_start = 0;
       }
