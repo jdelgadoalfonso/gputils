@@ -1,3 +1,6 @@
+2012-09-01  Borut Razem  <borutr@users.sourceforge.net>
+  * gpasm/preprocess.c: recursive call preprocess()
+
 2012-08-31  Borut Razem  <borutr@users.sourceforge.net>
   * gpasm/directive.c: don't die on symbol redefindefinition
   * gpasm/preprocess.c, gpasm/scan.l: #define preprocessing
