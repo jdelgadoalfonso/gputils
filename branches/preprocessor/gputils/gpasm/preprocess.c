@@ -155,7 +155,7 @@ substitute_param(char *buf, int start, int *i, int *n, int max_size)
       /* substitute */
       int len = strlen(argp->str);
 
-      DBG_printf("@@@substituting %*.*s with %s\n", mlen, mlen, &buf[start], argp->str);
+      DBG_printf("@@@substituting parameter %*.*s with %s\n", mlen, mlen, &buf[start], argp->str);
 
       if (*n + len - mlen >= max_size) {
         gperror(103, "internal error: flex buffer too small");
@@ -240,11 +240,15 @@ substitute_macro(char *buf, int start, int *i, int *n, int max_size)
                 char buf1[1024];
                 int len = strlen(sub);
 
+                /* substitute parameters */
                 memcpy(buf1, sub, len);
-                preprocess(buf1, &len, sizeof(buf1), substitute_param, 1);
+                preprocess(buf1, &len, sizeof(buf1), &substitute_param, 1);
                 free_arg_list();
 
-                DBG_printf("@@@substituting %*.*s with %*.*s\n", mlen, mlen, &buf[start], len, len, buf1);
+                /* substitute macros */
+                preprocess(buf1, &len, sizeof(buf1), &substitute_macro, 1);
+
+                DBG_printf("@1@substituting macro %*.*s with %*.*s\n", mlen, mlen, &buf[start], len, len, buf1);
 
                 mlen = *i - start;
                 if (*n + len - mlen >= max_size) {
@@ -288,9 +292,15 @@ substitute_macro(char *buf, int start, int *i, int *n, int max_size)
       }
     }
     else {
-      int len = strlen(sub);
+      char buf1[1024];
+      int oldlen = strlen(sub);
+      int len = oldlen;
 
-      DBG_printf("@@@substituting %*.*s with %s\n", mlen, mlen, &buf[start], sub);
+      /* substitute macros */
+      memcpy(buf1, sub, len);
+      preprocess(buf1, &len, sizeof(buf1), &substitute_macro, 1);
+
+      DBG_printf("@2@substituting macro %*.*s with %*.*s\n", mlen, mlen, &buf[start], len, len, buf1);
 
       if (*n + len - mlen >= max_size) {
         gperror(103, "internal error: flex buffer too small");
@@ -298,7 +308,7 @@ substitute_macro(char *buf, int start, int *i, int *n, int max_size)
       }
       else {
         memmove(&buf[start + len], &buf[*i], *n - *i);
-        memcpy(&buf[start], sub, len);
+        memcpy(&buf[start], buf1, len);
         *i = start + len;
         *n = *n + len - mlen;
         return 1;
@@ -310,13 +320,7 @@ substitute_macro(char *buf, int start, int *i, int *n, int max_size)
 
 #define NELEM(x) (sizeof(x) / sizeof(*x))
 
-enum no_process_type {
-  np_none = 0,
-  np_eol,
-  np_next_iden
-};
-
-static enum no_process_type
+static int
 no_process_iden(const char *iden, int len)
 {
   static const char * const iden_tbl[] = {
@@ -341,10 +345,10 @@ static int
 preprocess(char *buf, int *n, int max_size, int (*substitute)(char *buf, int start, int *i, int *n, int max_size), int level)
 {
   int start = -1;
-  int state = 0;    /* '"': in double quotes; '\'': in single quotes; ';': in comment */
-  int prev_esc = 0; /* 1: prev char was escape */
+  int state = 0;        /* '"': in double quotes; '\'': in single quotes; ';': in comment */
+  int prev_esc = 0;     /* 1: prev char was escape */
   int number_start = 0; /* 1: possible start of a x'nnn' formatted number */
-  int substituted = 0;
+  int substituted = 0;  /* if there was a substitution in the preprocess run */
   int i;
 
   DBG_printf("---%*.*s\n", *n, *n, buf);
@@ -420,8 +424,7 @@ preprocess(char *buf, int *n, int max_size, int (*substitute)(char *buf, int sta
 int
 preprocess_line(char *buf, int n, int max_size)
 {
-  while (preprocess(buf, &n, max_size, substitute_macro, 0))
-    ;
+  preprocess(buf, &n, max_size, substitute_macro, 0);
 
   return n;
 }
