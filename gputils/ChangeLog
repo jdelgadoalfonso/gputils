@@ -1,3 +1,6 @@
+2012-09-02  Borut Razem  <borutr@users.sourceforge.net>
+  * gpasm/scan.l: removed unused code
+
 2012-09-01  Borut Razem  <borutr@users.sourceforge.net>
   * gpasm/preprocess.c: recursive call preprocess()
 
