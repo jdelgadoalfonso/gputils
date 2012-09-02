@@ -58,7 +58,6 @@ Boston, MA 02111-1307, USA.  */
 enum identtype { defines, directives, globals, macros, opcodes, unknown_type };
 enum identtype identify(char *);
 
-static void push_string(char *str);
 static int found_eof(void);
 
 int force_decimal; /* Used to force radix to decimal for some directives */
@@ -270,11 +269,6 @@ processor                {
                            }
                            yylval.s = strdup(yytext);
                            switch(identify(yytext)) {
-                             case defines:
-                               sym = get_symbol(state.stTopDefines, yytext);
-                               subst = get_symbol_annotation(sym);
-                               push_string(subst);
-                               break;
                              case directives:
                                gpwarning(GPW_DIR_COLUMN_ONE, NULL);
                                if (has_collon)
@@ -646,29 +640,6 @@ void repeat_while(void)
 
   yy_delete_buffer(YY_CURRENT_BUFFER);
   yy_scan_buffer(macro_src, macro_src_size);
-}
-
-static void push_string(char *str)
-{
-  struct source_context *new = malloc(sizeof(*new));
-
-  assert(state.src != NULL);
-  state.src->yybuf = YY_CURRENT_BUFFER;
-
-  new->name = strdup(state.src->name);
-  new->type = src_substitution;
-  new->line_number = state.src->line_number;
-  new->loop_number = 1;
-  new->file_symbol = state.src->file_symbol;
-  new->f = NULL;
-  new->h = NULL;
-  new->lst.f = NULL;
-  new->fc = add_file(ft_src, new->name); /* scan list for fc */
-
-  yy_scan_string(str);
-
-  new->prev = state.src;
-  state.src = new;
 }
 
 void close_file(void)
