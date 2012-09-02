@@ -158,7 +158,7 @@ substitute_param(char *buf, int start, int *i, int *n, int max_size)
       DBG_printf("@@@substituting parameter %*.*s with %s\n", mlen, mlen, &buf[start], argp->str);
 
       if (*n + len - mlen >= max_size) {
-        gperror(103, "internal error: flex buffer too small");
+        gpverror(GPE_INTERNAL, "Flex buffer too small.");
         return 0;
       }
       else {
@@ -252,7 +252,7 @@ substitute_macro(char *buf, int start, int *i, int *n, int max_size)
 
                 mlen = *i - start;
                 if (*n + len - mlen >= max_size) {
-                  gperror(103, "internal error: flex buffer too small");
+                  gpverror(GPE_INTERNAL, "Flex buffer too small.");
                   return 0;
                 }
                 else {
@@ -303,7 +303,7 @@ substitute_macro(char *buf, int start, int *i, int *n, int max_size)
       DBG_printf("@2@substituting macro %*.*s with %*.*s\n", mlen, mlen, &buf[start], len, len, buf1);
 
       if (*n + len - mlen >= max_size) {
-        gperror(103, "internal error: flex buffer too small");
+        gpverror(GPE_INTERNAL, "Flex buffer too small.");
         return 0;
       }
       else {

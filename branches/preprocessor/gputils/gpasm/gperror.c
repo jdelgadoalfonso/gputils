@@ -1,6 +1,7 @@
 /* Error handling for gpasm
    Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
    James Bowman, Craig Franklin
+   Copyright (C) 2012 Borut Razem
 
 This file is part of gputils.
 
@@ -132,7 +133,7 @@ gp_geterror(unsigned int code)
 {
   switch(code) {
   case GPE_BADCHAR:
-    return "Illegal character.";
+    return "Illegal character (%c).";
   case GPE_OPENPAR:
     return "Unmatched (";
   case GPE_CLOSEPAR:
@@ -214,6 +215,15 @@ gp_geterror(unsigned int code)
   case GPE_RES_ODD_PIC16EA:
     return "RES directive cannot reserve odd number of bytes in PIC18 absolute mode.";
   case GPE_UNKNOWN:
+
+  /* gputils special errors */
+  case GPE_INTERNAL:
+    return "Internal error: %s";
+  case GPE_PARSER:
+    return "Parser error: %s";
+  case GPE_SCANNER:
+    return "Scanner error: %s";
+
   default:
     return "UNKNOWN";
   }
