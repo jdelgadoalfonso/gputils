@@ -229,58 +229,6 @@ void setup_macro(struct macro_head *h, int arity, struct pnode *parms)
   }
 }
 
-/* Copy the macro body to a buffer. */
-
-size_t copy_macro_body(struct macro_body *b, char *buffer, size_t sizeof_buffer)
-{
-  size_t len = 0;
-  while (b) {
-    if (b->src_line != NULL) {
-      size_t l = strlen(b->src_line);
-
-      l = (l <= sizeof_buffer - len - 1) ? l : sizeof_buffer - len - 1;
-      memcpy(buffer + len, b->src_line, l);
-      buffer[len + l++] = '\n';
-      len += preprocess_line(buffer + len, l, sizeof_buffer - len);
-    }
-    b = b->next;
-  }
-  return len;
-}
-
-
-/* Create a buffer for parser from the macro definition. */
-
-char *
-make_macro_buffer(struct macro_head *h)
-{
-  struct macro_body *b;
-  char *macro_src;
-  size_t macro_src_size = 0, macro_dest_size;
-
-  /* determine the length of the macro body */
-  b = h->body;
-  while (b) {
-    if (b->src_line != NULL)
-      macro_src_size += strlen(b->src_line) + 1; /* add one for \n */
-    b = b->next;
-  }
-
-  /* Allocate memory for the new buffer. yy_delete_buffer frees it */
-  macro_dest_size = ((2 * macro_src_size) > 16384) ? 2 * macro_src_size : 16384;
-  macro_src = (char *)malloc(macro_dest_size);
-
-  if (macro_src) {
-    /* build the string to be scanned */
-    macro_src_size = copy_macro_body(h->body, macro_src, macro_dest_size);
-    /* Flex requires the two extra chars at end to be nuls */
-    macro_src[macro_src_size++] = 0;
-    macro_src[macro_src_size] = 0;
-  }
-
-  return macro_src;
-}
-
 /* The symbol table is pushed at each macro call.  This makes local symbols
    possible.  Each symbol table is created once on pass 1.  On pass two the
    old symbol table is reloaded so forward references to the local symbols
@@ -343,4 +291,3 @@ push_macro_symbol_table(struct symbol_table *table)
 
   return new;
 }
-
