@@ -1,3 +1,9 @@
+2012-09-03  Borut Razem  <borutr@users.sourceforge.net>
+  * gpasm/gpasm.h.in, gpasm/scan.l, gpasm/parse.y, gpasm/macro.c,
+    gpasm/macro.h: implemented enhancement request
+    #16 - "macro argument expansion in lists": expanded macros contain
+    actual macro args instead of formal parameters.
+
 2012-09-02  Borut Razem  <borutr@users.sourceforge.net>
   * gpasm/scan.l: removed unused code
   * gpasm/gperror.c, gpasm/gperror.h, gpasm/scan.l, gpasm/parse.y,
