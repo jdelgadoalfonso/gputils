@@ -193,104 +193,105 @@ substitute_macro(char *buf, int start, int *i, int *n, int max_size)
     int n_params = list_length(param_list);
 
     if (0 != n_params) {
-      /* has arguments */
+      /* has parameters: collect arguments */
+      int bracket;
+      int n_args = 0;
+
       skip_spaces(buf, i);
-      if (buf[(*i)++] == '(') {
-        int n_args = 0;
+      if (buf[*i] == '(') {
+        ++(*i);
+        bracket = 1;
+      }
 
-        for (; ; ) {
-          int start1;
-          int end1;
-          int state = 0;
-          int prev_esc = 0;
+      for (; ; ) {
+        int start1;
+        int end1;
+        int state = 0;
+        int prev_esc = 0;
 
-          skip_spaces(buf, i);
-          start1 = *i;
+        skip_spaces(buf, i);
+        start1 = *i;
 
-          while (*i < *n && (0 != state || (buf[*i] != ',' && buf[*i] != ')'))) {
-            switch (buf[*i]) {
-            case '\\':
-              prev_esc = (0 != state) ? !prev_esc : 0;
-              break;
+        while (*i < *n && (0 != state || (buf[*i] != ',' && ((bracket && buf[*i] != ')') || (!bracket && buf[*i] != '\n'))))) {
+          switch (buf[*i]) {
+          case '\\':
+            prev_esc = (0 != state) ? !prev_esc : 0;
+            break;
 
-            case '"':
-            case '\'':
-              if (!prev_esc)
-                state = (0 == state) ? buf[*i] : ((state == buf[*i]) ? 0 : state);
-            default:
-              prev_esc = 0;
-              break;
-            }
-            ++(*i);
+          case '"':
+          case '\'':
+            if (!prev_esc)
+              state = (0 == state) ? buf[*i] : ((state == buf[*i]) ? 0 : state);
+          default:
+            prev_esc = 0;
+            break;
           }
+          ++(*i);
+        }
 
-          /* right trim */
-          end1 = *i - 1;
-          while (end1 >= 0 && isspace(buf[end1]))
-            --end1;
-          ++end1;
+        /* right trim */
+        end1 = *i - 1;
+        while (end1 >= 0 && isspace(buf[end1]))
+          --end1;
+        ++end1;
 
-          add_arg(strndup(&buf[start1], end1 - start1));
-          ++n_args;
+        add_arg(strndup(&buf[start1], end1 - start1));
+        ++n_args;
 
-          if (*i < *n) {
-            switch (buf[(*i)++]) {
-            case ')':
-              if (n_args == n_params) {
-                char buf1[1024];
-                int len = strlen(sub);
+        if (*i < *n) {
+          if ((bracket && ')' == buf[*i]) || (!bracket && '\n' == buf[*i])) {
+            /* Don't eat newline! */
+            if ('\n' != buf[*i])
+              ++(*i);
 
-                /* substitute parameters */
-                memcpy(buf1, sub, len);
-                preprocess(buf1, &len, sizeof(buf1), &substitute_param, 1);
-                free_arg_list();
+            if (n_args == n_params) {
+              char buf1[1024];
+              int len = strlen(sub);
 
-                /* substitute macros */
-                preprocess(buf1, &len, sizeof(buf1), &substitute_macro, 1);
+              /* substitute parameters */
+              memcpy(buf1, sub, len);
+              preprocess(buf1, &len, sizeof(buf1), &substitute_param, 1);
+              free_arg_list();
 
-                DBG_printf("@1@substituting macro %*.*s with %*.*s\n", mlen, mlen, &buf[start], len, len, buf1);
+              /* substitute macros */
+              preprocess(buf1, &len, sizeof(buf1), &substitute_macro, 1);
 
-                mlen = *i - start;
-                if (*n + len - mlen >= max_size) {
-                  gpverror(GPE_INTERNAL, "Flex buffer too small.");
-                  return 0;
-                }
-                else {
-                  memmove(&buf[start + len], &buf[*i], *n - *i);
-                  memcpy(&buf[start], buf1, len);
-                  *i = start + len;
-                  *n = *n + len - mlen;
-                  return 1;
-                }
-              }
-              else {
-                /* error n_args != n_params: no substitution */
-                free_arg_list();
+              DBG_printf("@1@substituting macro %*.*s with %*.*s\n", mlen, mlen, &buf[start], len, len, buf1);
+
+              mlen = *i - start;
+              if (*n + len - mlen >= max_size) {
+                gpverror(GPE_INTERNAL, "Flex buffer too small.");
                 return 0;
               }
-              break;
-
-            case ',':
-              break;
-
-            default:
-              /* error unknown delimiter: no substitution */
+              else {
+                memmove(&buf[start + len], &buf[*i], *n - *i);
+                memcpy(&buf[start], buf1, len);
+                *i = start + len;
+                *n = *n + len - mlen;
+                return 1;
+              }
+            }
+            else {
+              /* error n_args != n_params: no substitution */
               free_arg_list();
               return 0;
             }
           }
-          else {
-            /* error no ending bracket: no substitution */
+          else if (',' != buf[*i]) {
+            /* error unknown delimiter: no substitution */
             free_arg_list();
             return 0;
           }
+          else
+            ++(*i);
         }
-      }
-      else {
-        /* error no params: no substitution */
-        return 0;
-      }
-    }
+        if (*i >= *n) {
+          /* error no ending bracket or newline: no substitution */
+          free_arg_list();
+          return 0;
+        }
+      } /* for each argument */
+    } /* if has parameters */
     else {
       char buf1[1024];
       int oldlen = strlen(sub);
