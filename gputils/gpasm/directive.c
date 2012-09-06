@@ -1322,7 +1322,7 @@ static gpasmVal do_dim(gpasmVal r,
       symbol_name = p->value.symbol;
       coff_symbol = gp_coffgen_findsymbol(state.obj.object, symbol_name);
       if (coff_symbol == NULL) {
-        gpverror(GPE_NOSYM);
+        gpverror(GPE_NOSYM, symbol_name);
         return r;
       }
     } else {
@@ -1790,11 +1790,7 @@ static gpasmVal do_global(gpasmVal r,
       if (p) {
         s = get_symbol(state.stTop, p);
         if (s == NULL) {
-          snprintf(buf,
-                   sizeof(buf),
-                   "Symbol not previously defined (%s).",
-                   p);
-          gperror(GPE_NOSYM, buf);
+          gpverror(GPE_NOSYM, p);
         } else {
           var = get_symbol_annotation(s);
           if (var == NULL) {
@@ -2769,7 +2765,7 @@ static gpasmVal do_type(gpasmVal r,
       symbol_name = p->value.symbol;
       coff_symbol = gp_coffgen_findsymbol(state.obj.object, symbol_name);
       if (coff_symbol == NULL) {
-        gpverror(GPE_NOSYM);
+        gpverror(GPE_NOSYM, symbol_name);
       } else {
         p = HEAD(TAIL(parms));
         value = maybe_evaluate(p);
