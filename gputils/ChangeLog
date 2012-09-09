@@ -1,3 +1,12 @@
+2012-09-09  Borut Razem  <borutr@users.sourceforge.net>
+  * configure.ac, configure, aclocal.m4, config.h.in, Makefile.in,
+    gpasm/Makefile.in, gplink/Makefile.in, gputils/Makefile.in,
+    header/Makefile.in, lkr/Makefile.in, libgputils/Makefile.in,
+    libiberty/Makefile.am, libiberty/Makefile.in, man/fr/Makefile.in,
+    include/stdhdr.h: updated autotools
+    libiberty/strndup.c: added
+    libiberty/bzero.c: removed
+
 2012-09-06  Borut Razem  <borutr@users.sourceforge.net>
   * gpasm/preprocess.c: preprocessing defines called as macros -
     without parentheses around argumets
