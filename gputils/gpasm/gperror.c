@@ -139,7 +139,7 @@ gp_geterror(unsigned int code)
   case GPE_CLOSEPAR:
     return "Unmatched )";
   case GPE_NOSYM:
-    return "Symbol not previously defined.";
+    return "Symbol not previously defined (%s)";
   case GPE_DIVBY0:
     return "Divide by zero.";
   case GPE_DUPLAB:
@@ -311,6 +311,11 @@ gp_getwarning(unsigned int code)
     return "Destination address must be word aligned.";
   case GPW_INVALID_ROM:
     return "Invalid ROM location specified.";
+
+  /* gputils special warnings */
+  case GPW_BANK_PAGE_SEL_AFTER_SKIP:
+    return "%s after skip instruction. I this really what you intended?";
+
   default:
     return "UNKNOWN";
   }
