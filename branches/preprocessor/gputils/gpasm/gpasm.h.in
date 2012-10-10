@@ -34,6 +34,11 @@ Boston, MA 02111-1307, USA.  */
 
 #define MAX_PATHS 100
 
+#define IN_MACRO_DEFINITION (NULL != state.mac_prev)
+#define IN_MACRO_EXPANSION  (src_macro == state.src->type)
+#define IN_WHILE_EXPANSION  (src_whilw == state.src->type)
+#define IN_FILE_EXPANSION   (src_file == state.src->type)
+
 enum gpasmValTypes {
   gvt_constant,
   gvt_cblock,
@@ -84,6 +89,7 @@ struct src_line_s {
 
 extern struct gpasm_state {
   enum gpasm_modes mode;
+  gp_boolean mpasm_compatible;      /* MAPASM compatibility mode */
   gp_boolean extended_pic16e;
   int radix;
   enum formats hex_format;

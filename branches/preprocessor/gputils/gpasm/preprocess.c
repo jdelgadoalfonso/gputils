@@ -29,26 +29,23 @@ Boston, MA 02111-1307, USA.  */
 #include "gpsymbol.h"
 #include "preprocess.h"
 
-/* #define DEBUG */
+#define DEBUG 0
+#define DBG_printf !DEBUG ? (void)0 : (void)printf
 
-#ifdef DEBUG
-#include <stdarg.h>
+#define BUF_REPLACE(buf, start, end, len, repl_buf, repl_len, buf_size) \
+  do { \
+    memmove(&(buf)[(start) + (repl_len)], &(buf)[(end)], (len) - (end)); \
+    memcpy(&(buf)[(start)], (repl_buf), repl_len); \
+  } \
+  while (0)
 
-int
-DBG_printf(char *fmt, ...)
-{
-  va_list ap;
-  int ret;
-
-  va_start(ap, fmt);
-  ret = vfprintf(stderr, fmt, ap);
-  va_end(ap);
-
-  return ret;
-}
-#else
-#define DBG_printf  1 ? (void)0 : (void)printf
-#endif
+#define BUF_REPLACE_UPDATE(buf, start, end, len, repl_buf, repl_len, buf_size) \
+  do { \
+    BUF_REPLACE((buf), (start), (end), (len), (repl_buf), (repl_len), (buf_size)); \
+    (len) += (repl_len) - ((end) - (start)); \
+    (end) = (start) + (repl_len); \
+  } \
+  while (0)
 
 static struct pnode *param_list = NULL;
 struct arg_list_s {
@@ -148,6 +145,8 @@ substitute_param(char *buf, int start, int *i, int *n, int max_size)
   struct arg_list_s *argp = arg_list;
   struct pnode *parp = param_list;
 
+  assert(mlen > 0);
+
   /* find argument */
   while (parp) {
     assert(HEAD(parp)->tag == symbol);
@@ -162,10 +161,7 @@ substitute_param(char *buf, int start, int *i, int *n, int max_size)
         return 0;
       }
       else {
-        memmove(&buf[start + len], &buf[*i], *n - *i);
-        memcpy(&buf[start], argp->str, len);
-        *i = start + len;
-        *n = *n + len - mlen;
+        BUF_REPLACE_UPDATE(buf, start, *i, *n, argp->str, len, max_size);
         return 1;
       }
     }
@@ -192,6 +188,7 @@ substitute_macro(char *buf, int start, int *i, int *n, int max_size)
   if (NULL != (sub = check_defines(&buf[start], mlen, &param_list))) {
     int n_params = list_length(param_list);
 
+    DBG_printf("macro %*.*s has %d parameters\n", mlen, mlen, &buf[start], n_params);
     if (0 != n_params) {
       /* has parameters: collect arguments */
       int bracket;
@@ -256,7 +253,7 @@ substitute_macro(char *buf, int start, int *i, int *n, int max_size)
               /* substitute macros */
               preprocess(buf1, &len, sizeof(buf1), &substitute_macro, 1);
 
-              DBG_printf("@1@substituting macro %*.*s with %*.*s\n", mlen, mlen, &buf[start], len, len, buf1);
+              DBG_printf("@1@substituting macro parameter %*.*s with %*.*s\n", mlen, mlen, &buf[start], len, len, buf1);
 
               mlen = *i - start;
               if (*n + len - mlen >= max_size) {
@@ -264,10 +261,7 @@ substitute_macro(char *buf, int start, int *i, int *n, int max_size)
                 return 0;
               }
               else {
-                memmove(&buf[start + len], &buf[*i], *n - *i);
-                memcpy(&buf[start], buf1, len);
-                *i = start + len;
-                *n = *n + len - mlen;
+                BUF_REPLACE_UPDATE(buf, start, *i, *n, buf1, len, max_size);
                 return 1;
               }
             }
@@ -301,17 +295,14 @@ substitute_macro(char *buf, int start, int *i, int *n, int max_size)
       memcpy(buf1, sub, len);
       preprocess(buf1, &len, sizeof(buf1), &substitute_macro, 1);
 
-      DBG_printf("@2@substituting macro %*.*s with %*.*s\n", mlen, mlen, &buf[start], len, len, buf1);
+      DBG_printf("@2@substituting macro parameter %*.*s with %*.*s\n", mlen, mlen, &buf[start], len, len, buf1);
 
       if (*n + len - mlen >= max_size) {
         gpverror(GPE_INTERNAL, "Flex buffer too small.");
         return 0;
       }
       else {
-        memmove(&buf[start + len], &buf[*i], *n - *i);
-        memcpy(&buf[start], buf1, len);
-        *i = start + len;
-        *n = *n + len - mlen;
+        BUF_REPLACE_UPDATE(buf, start, *i, *n, buf1, len, max_size);
         return 1;
       }
     }
@@ -332,6 +323,7 @@ no_process_iden(const char *iden, int len)
     "define",
     "ifdef",
     "ifndef",
+    "macro",
   };
   int i;
 
@@ -348,6 +340,7 @@ preprocess(char *buf, int *n, int max_size, int (*substitute)(char *buf, int sta
   int start = -1;
   int state = 0;        /* '"': in double quotes; '\'': in single quotes; ';': in comment */
   int prev_esc = 0;     /* 1: prev char was escape */
+  int in_hv = 0;        /* in #v */
   int number_start = 0; /* 1: possible start of a x'nnn' formatted number */
   int substituted = 0;  /* if there was a substitution in the preprocess run */
   int i;
@@ -358,6 +351,27 @@ preprocess(char *buf, int *n, int max_size, int (*substitute)(char *buf, int sta
     int c = buf[i];
 
     if (0 == state) {
+      if ('#' == c)
+        in_hv = '#';
+      else if ('#' == in_hv && ('v' == c || 'V' == c))
+        in_hv = 'v';
+      else if ('v' == in_hv && '(' == c) {
+        if (-1 != start) {
+          if (start < i - 2) {
+            /* preprocess the identifier before #v */
+            int end = i - 2;
+
+            DBG_printf("@1@Preprocessing identifier: %*.*s\n", end - start, end - start, &buf[start]);
+            substituted |= (*substitute)(buf, start, &end, n, max_size);
+            i = end + 2;
+          }
+          start = -1;
+        }
+        in_hv = '(';
+      }
+      else
+        in_hv = 0;
+
       if (-1 == start && is_first_iden(c)) {
         switch (c) {
         case 'a': case 'A':
@@ -382,7 +396,7 @@ preprocess(char *buf, int *n, int max_size, int (*substitute)(char *buf, int sta
           }
 
           if (c != '\'' || !number_start) {
-            DBG_printf("@@@Preprocessing identifier: %*.*s\n", i - start, i - start, &buf[start]);
+            DBG_printf("@2@Preprocessing identifier: %*.*s\n", i - start, i - start, &buf[start]);
             substituted |= (*substitute)(buf, start, &i, n, max_size);
           }
           start = -1;
@@ -413,19 +427,168 @@ preprocess(char *buf, int *n, int max_size, int (*substitute)(char *buf, int sta
   }
 
   if (-1 != start) {
-    DBG_printf("@@@Preprocessing identifier: %*.*s\n", i - start, i - start, &buf[start]);
+    DBG_printf("@3@Preprocessing identifier: %*.*s\n", i - start, i - start, &buf[start]);
     substituted |= (*substitute)(buf, start, &i, n, max_size);
   }
 
-  DBG_printf("+++%*.*s\n", *n, *n, buf);
+  DBG_printf("+++%*.*s; substituted = %d\n", *n, *n, buf, substituted);
 
   return substituted;
 }
 
 int
-preprocess_line(char *buf, int n, int max_size)
+preprocess_macros(char *buf, int *n, int max_size)
 {
-  preprocess(buf, &n, max_size, substitute_macro, 0);
+  return preprocess(buf, n, max_size, substitute_macro, 0);
+}
 
-  return n;
+static int
+preprocess_hv_params(char *buf, int *n, int max_size)
+{
+  int start = -1;
+  int state = 0;        /* '"': in double quotes; '\'': in single quotes; ';': in comment; '(' in #v argument */
+  int prev_esc = 0;     /* 1: prev char was escape */
+  int in_hv = 0;        /* in #v */
+  int hv_parenth = 0;   /* #v parenthesis nesting depth */
+  int substituted = 0;  /* if there was a substitution in the preprocess run */
+  int i;
+
+  DBG_printf("---preprocess_hv_params: %*.*s\n", *n, *n, buf);
+
+  for (i = 0; i < *n; ++i) {
+    int c = buf[i];
+
+    if ('(' == state) {
+      if ('(' == in_hv) {
+        start = i;
+        in_hv = 0;
+      }
+      if ('(' == c)
+        ++hv_parenth;
+      else if (')' == c) {
+        if (0 <= --hv_parenth) {
+          char buf1[1024];
+          int n1 = i - start;
+
+          memcpy(buf1, &buf[start], n1);
+          if (preprocess(buf1, &n1, sizeof (buf1), substitute_macro, 0)) {
+            preprocess_hv(buf1, &n1, sizeof (buf1));
+            substituted = 1;
+            BUF_REPLACE_UPDATE(buf, start, i, *n, buf1, n1, max_size);
+          }
+          start = -1;
+          state = 0;
+        }
+      }
+    }
+    else if (0 == state) {
+      if ('#' == c)
+        in_hv = '#';
+      else if ('#' == in_hv && ('v' == c || 'V' == c))
+        in_hv = 'v';
+      else if ('v' == in_hv && '(' == c) {
+        in_hv = '(';
+        ++hv_parenth;
+        state = '(';
+      }
+      else
+        in_hv = 0;
+    }
+
+    if (0 == state) {
+      if (-1 == start && is_first_iden(c)) {
+        start = i;
+      }
+      else {
+        if (-1 != start && !is_iden(c)) {
+          if (no_process_iden(&buf[start], i - start)) {
+            start = -1;
+            break;
+          }
+        }
+      }
+    }
+
+    switch (c) {
+    case '\\':
+      prev_esc =  ('"' == state || '\'' == state) ? !prev_esc : 0;
+      break;
+
+    case ';':
+      if (0 == state)
+        state = c;
+      prev_esc = 0;
+      break;
+
+    case '"':
+    case '\'':
+      if (!prev_esc && state != ';')
+        state = (0 == state) ? c : ((state == c) ? 0 : state);
+    default:
+      prev_esc = 0;
+      break;
+    }
+  }
+
+  DBG_printf("+++preprocess_hv_params: %*.*s; substituted = %d\n", *n, *n, buf, substituted);
+
+  return substituted;
+}
+
+int
+preprocess_hv(char *buf, int *n, int max_size)
+{
+  char res_buf[11];
+  char *p = buf;
+  int substituted;
+  int rest;
+
+  substituted = preprocess_hv_params(buf, n, max_size);
+
+  rest = *n;
+
+  for (; ; ) {
+    int res_len;
+
+    DBG_printf ("chunk = %*.*s\n", rest, rest, p);
+    if (ppparse_chunk (p, rest)) {
+      substituted = 1;
+      DBG_printf ("col_begin = %d; col_end = %d; result = %d\n", col_begin, col_end, result);
+      snprintf (res_buf, sizeof res_buf, "%d", result);
+      res_len = strlen (res_buf);
+      if (rest + (col_begin + res_len) - col_end >= max_size) {
+        gpverror(GPE_INTERNAL, "Flex buffer too small.");
+        --(*n);
+        return 0;
+      }
+      else {
+        BUF_REPLACE(p, col_begin, col_end, rest, res_buf, res_len, max_size);
+        p += col_begin + res_len;
+        *n += res_len - (col_end - col_begin);
+        DBG_printf("buf = %*.*s\n", *n, *n, buf);
+        rest -= col_end;
+        max_size -= col_end;
+      }
+    }
+    else
+      break;
+  }
+
+  return substituted;
+}
+
+void
+preprocess_line(char *buf, int *n, int max_size)
+{
+  int res;
+
+  if (0 == strncmp(buf, "Sub3Sub(Name,Sub3Val2)", strlen("Sub3Sub(Name,Sub3Val2)"))) {
+    int x = 1;
+  }
+  do {
+    /* res = preprocess(buf, n, max_size, substitute_macro, 0); */
+    res = preprocess_macros(buf, n, max_size);
+    res |= preprocess_hv(buf, n, max_size);
+  }
+  while (res);
 }
