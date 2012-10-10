@@ -1,4 +1,4 @@
-/* gpasm preprocessor implementation
+/* gpasm preprocessor defines and includes
    Copyright (C) 1012 Borut Razem
 
 This file is part of gputils.
@@ -21,6 +21,18 @@ Boston, MA 02111-1307, USA.  */
 #ifndef __PREPROCESS_H__
 #define __PREPROCESS_H__
 
-int preprocess_line(char *buf, int n, int max_size);
+/* from preprocess.c */
+int preprocess_macros(char *buf, int *n, int max_size);
+int preprocess_hv(char *buf, int *n, int max_size);
+void preprocess_line(char *buf, int *n, int max_size);
 
+/* from ppscan.c */
+int ppparse_chunk(char *line, int len);
+int pplex(void);
+extern int col_begin;
+extern int col_end;
+
+/* from ppparse.c */
+int ppparse(void);
+extern int result;
 #endif

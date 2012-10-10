@@ -92,8 +92,9 @@ set_source_line(const char *line, size_t len, struct src_line_s *src_line)
 static inline size_t
 gp_input(char *buf, size_t max_size)
 {
-  if (src_file == state.src->type)
+  if (IN_FILE_EXPANSION)
     {
+      /* not in macro expansion */
       if (YY_CURRENT_BUFFER_LVALUE->yy_is_interactive)
         {
           int c = '*';
@@ -115,6 +116,7 @@ gp_input(char *buf, size_t max_size)
     }
   else
     {
+      /* in macro expansion */
       if (state.src->m)
         {
           size_t n = strlen(state.src->m->src_line);
@@ -135,16 +137,31 @@ gp_input(char *buf, size_t max_size)
 static inline size_t
 gp_yyinput(char *buf, size_t max_size)
 {
-  size_t result = gp_input(buf, max_size);
+  int result = gp_input(buf, max_size);
   if (result)
     {
-      if (src_file == state.src->type)
-        set_source_line(buf, result, &state.curr_src_line);
+      if (IN_MACRO_DEFINITION)
+        {
+          /* don't preprocess source line if in macro definition */
+          set_source_line(buf, result, &state.curr_src_line);
+        }
+      else
+        {
+          /* preprocess source line if not in macro definition */
+          if (!IN_MACRO_EXPANSION)
+            {
+              /* if not in macro expansion: preprocess #v */
+              preprocess_hv(buf, &result, max_size);
 
-      result = preprocess_line(buf, result, max_size);
+              set_source_line(buf, result, &state.curr_src_line);
+            }
 
-      if (src_file != state.src->type)
-        set_source_line(buf, result, &state.curr_src_line);
+          preprocess_line(buf, &result, max_size);
+
+          /* set processed source line if in macro expansion */
+          if (IN_MACRO_EXPANSION)
+            set_source_line(buf, result, &state.curr_src_line);
+        }
 
       state.src->last_char_is_nl = (buf[result - 1] == '\n');
     }
@@ -283,10 +300,6 @@ processor                {
                            yylval.s = strdup(yytext);
                            return DEBUG_LINE;
                          }
-^{IDENT}#v\(             {
-                           yylval.s = strndup(yytext, yyleng - 3);
-                           return VARLAB_BEGIN;
-                         }
 ^{IDENT}:?               {
                            int has_collon = 0;
                            struct symbol *sym;
@@ -336,14 +349,6 @@ processor                {
                              default:
                                return LABEL;
                            }
-                         }
-{IDENT}#v\(              {
-                           yylval.s = strndup(yytext, yyleng - 3);
-                           return VAR_BEGIN;
-                         }
-\)[a-z_0-9\x80-\xff?.]+  {
-                           yylval.s = strdup(yytext + 1);
-                           return VAR_END;
                          }
 {IDENT}                  {
                            yylval.s = strdup(yytext);
