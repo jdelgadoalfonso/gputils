@@ -159,9 +159,11 @@ node_to_string(struct pnode *p)
     }
     cat_string(constant_buffer);
     break;
+
   case symbol:
     cat_string(p->value.symbol);
     break;
+
   case unop:
     cat_string("(");
     cat_symbol(p->value.unop.op);
@@ -169,22 +171,21 @@ node_to_string(struct pnode *p)
     node_to_string(p->value.unop.p0);
     cat_string(")");
     break;
+
   case binop:
-    if (p->value.binop.op == CONCAT) {
-      cat_string(evaluate_concatenation(p));
-    } else {
-      cat_string("(");
-      node_to_string(p->value.binop.p0);
-      cat_symbol(p->value.binop.op);
-      node_to_string(p->value.binop.p1);
-      cat_string(")");
-    }
+    cat_string("(");
+    node_to_string(p->value.binop.p0);
+    cat_symbol(p->value.binop.op);
+    node_to_string(p->value.binop.p1);
+    cat_string(")");
     break;
+
   case string:
     cat_string("\"");
     cat_string(p->value.string);
     cat_string("\"");
     break;
+
   case list:
   default:
     assert(0);

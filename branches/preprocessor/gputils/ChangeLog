@@ -1,3 +1,19 @@
+2012-10-10  Borut Razem  <borutr@users.sourceforge.net>
+  * libgputils/gpsymbol.c: iterative version of get_symbol() and get_symbol_len()
+  * gpasm/macro.c: removed concatenation functionality
+  * gpasm/lst.c, gpasm/directive.c, gpasm/gpasm.c: merged cnages from HEAD
+  * gpasm/Makefile.am, gpasm/Makefile.in, ppcan.l, ppparse.y:
+    added ppcan.l and ppparse.y to the project: #v evaluation moved to
+    the preprocessor
+  * evaluate.c: fixed list_length() for cases where tail of the list is
+    not a list; removed concatenation functionality, MPASM(X) compatible
+    shift operations in mpasm compatibility mode
+  * preprocess.c, gpasm/preprocess.h, gpasm/scan.l, gpasm/parse.y:
+    #v evaluation moved to the preprocessor
+  * gpasm.h.in: introduced IN_MACRO_DEFINITION, IN_MACRO_EXPANSION,
+    IN_WHILE_EXPANSION and IN_FILE_EXPANSION macros
+  * gpasm/gperror.c: changed GPE_ILLEGAL_DIR message
+
 2012-09-09  Borut Razem  <borutr@users.sourceforge.net>
   * configure.ac, configure, aclocal.m4, config.h.in, Makefile.in,
     gpasm/Makefile.in, gplink/Makefile.in, gputils/Makefile.in,

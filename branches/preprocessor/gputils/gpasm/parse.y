@@ -55,8 +55,6 @@ yyprint (FILE *file, int type, YYSTYPE value)
   case LIST:
   case PROCESSOR:
   case DEFINE:
-  case VARLAB_BEGIN:
-  case VAR_BEGIN:
     fprintf (file, "%s", value.s);
     break;
 
@@ -101,9 +99,7 @@ yyprint (FILE *file, int type, YYSTYPE value)
   case TBL_POST_INC:
   case TBL_POST_DEC:
   case TBL_PRE_INC:
-  case CONCAT:
   case VAR:
-  case VAR_END:
   case '[':
   case ']':
     fprintf (file, "%d", value.i);
@@ -116,11 +112,6 @@ yyprint (FILE *file, int type, YYSTYPE value)
   }
 }
 #endif
-
-void yyerror(char *message)
-{
-  gpverror(GPE_PARSER, message);
-}
 
 int yylex(void);
 
@@ -269,6 +260,13 @@ void next_line(int value)
   }
 }
 
+void yyerror(char *message)
+{
+  if (!state.mac_prev) {
+    /* throw error if not in macro definition */
+    gpverror(GPE_PARSER, message);
+  }
+}
 
 /************************************************************************/
 
@@ -331,11 +329,7 @@ void next_line(int value)
 %token <i> TBL_POST_INC
 %token <i> TBL_POST_DEC
 %token <i> TBL_PRE_INC
-%token <i> CONCAT
 %token <i> VAR
-%token <s> VARLAB_BEGIN
-%token <s> VAR_BEGIN
-%token <s> VAR_END
 %token <i> '['
 %token <i> ']'
 
@@ -347,7 +341,6 @@ void next_line(int value)
 %type <i> '!'
 %type <i> '~'
 %type <s> line
-%type <s> label_concat
 %type <s> decimal_ops
 %type <i> statement
 %type <p> parameter_list
@@ -390,12 +383,17 @@ program:
         } line
         | program error '\n'
         {
+          yyerrok;  /* generate multiple errors */
+          if (state.mac_prev) {
+            /* in macro definition: append the macro */
+            macro_append();
+          }
           next_line(0);
         }
         ;
 
 line:
-        label_concat assign_equal_ops expr '\n'
+        LABEL assign_equal_ops expr '\n'
         {
           struct pnode *parms;
           int exp_result;
@@ -407,7 +405,7 @@ line:
           next_line(set_label($1, parms));
         }
         |
-        label_concat '=' expr '\n'
+        LABEL '=' expr '\n'
         {
           struct pnode *parms;
 
@@ -416,7 +414,7 @@ line:
           next_line(set_label($1, parms));
         }
         |
-        label_concat DECREMENT '\n'
+        LABEL DECREMENT '\n'
         {
           struct pnode *parms;
 
@@ -425,7 +423,7 @@ line:
           next_line(set_label($1, parms));
         }
         |
-        label_concat INCREMENT '\n'
+        LABEL INCREMENT '\n'
         {
           struct pnode *parms;
 
@@ -434,7 +432,7 @@ line:
           next_line(set_label($1, parms));
         }
         |
-        label_concat statement
+        LABEL statement
         {
           if (asm_enabled() && (state.lst.line.linetype == none)) {
             if (IS_RAM_ORG) {
@@ -722,7 +720,7 @@ const_line:
           }
         }
         |
-        label_concat '\n'
+        LABEL '\n'
         {
           if (!state.mac_prev) {
             cblock_expr(mk_symbol($1));
@@ -731,7 +729,7 @@ const_line:
           }
         }
         |
-        label_concat expr '\n'
+        LABEL expr '\n'
         {
           if (!state.mac_prev) {
             cblock_expr_incr(mk_symbol($1), $2);
@@ -1002,40 +1000,6 @@ cidentifier:
         IDENTIFIER
         {
           $$ = mk_symbol($1);
-        }
-        |
-        VAR_BEGIN expr ')'
-        {
-          $$ = mk_2op(CONCAT, mk_symbol($1), mk_1op(VAR, $2));
-        }
-        |
-        VAR_BEGIN expr VAR_END
-        {
-          $$ = mk_2op(CONCAT, mk_symbol($1),
-                        mk_2op(CONCAT, mk_1op(VAR, $2), mk_symbol($3)));
-        }
-        ;
-
-label_concat:
-        LABEL
-        {
-          $$ = $1;
-        }
-        |
-        VARLAB_BEGIN expr ')'
-        {
-          if (asm_enabled() && !state.mac_prev) {
-            $$ = evaluate_concatenation(mk_2op(CONCAT,  mk_symbol($1),
-                           mk_1op(VAR, $2)));
-          }
-        }
-        |
-        VARLAB_BEGIN expr VAR_END
-        {
-          if (asm_enabled() && !state.mac_prev) {
-            $$ = evaluate_concatenation(mk_2op(CONCAT,  mk_symbol($1),
-                      mk_2op(CONCAT, mk_1op(VAR, $2), mk_symbol($3))));
-          }
         }
         ;
 
