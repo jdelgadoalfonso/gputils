@@ -1749,7 +1749,7 @@ static gpasmVal do_extern(gpasmVal r,
     gpverror(GPE_OBJECT_ONLY);
   } else {
     for (; parms; parms = TAIL(parms)) {
-      p = maybe_evaluate_concat(HEAD(parms));
+      p = HEAD(parms)->value.symbol;
       if (p) {
         set_global(p, 0, PERMANENT, gvt_extern);
       }
@@ -1825,7 +1825,7 @@ static gpasmVal do_global(gpasmVal r,
     gpverror(GPE_OBJECT_ONLY);
   } else {
     for (; parms; parms = TAIL(parms)) {
-      p = maybe_evaluate_concat(HEAD(parms));
+      p = HEAD(parms)->value.symbol;
       if (p) {
         s = get_symbol(state.stTop, p);
         if (s == NULL) {
@@ -4483,16 +4483,16 @@ void continue_cblock(void)
 
 void cblock_expr(struct pnode *s)
 {
-  if ((asm_enabled()) && (can_evaluate_concatenation(s))) {
-    set_global(evaluate_concatenation(s), state.cblock, PERMANENT, gvt_cblock);
+  if (asm_enabled()) {
+    set_global(s->value.symbol, state.cblock, PERMANENT, gvt_cblock);
     state.cblock++;
   }
 }
 
 void cblock_expr_incr(struct pnode *s, struct pnode *incr)
 {
-  if ((asm_enabled()) && (can_evaluate_concatenation(s))) {
-    set_global(evaluate_concatenation(s), state.cblock, PERMANENT, gvt_cblock);
+  if (asm_enabled()) {
+    set_global(s->value.symbol, state.cblock, PERMANENT, gvt_cblock);
     state.cblock += maybe_evaluate(incr);
   }
 }

@@ -66,76 +66,6 @@ int list_length(struct pnode *L)
   return (NULL != p) ? n + 1: n;
 }
 
-int can_evaluate_concatenation(struct pnode *p)
-{
-  char buf[BUFSIZ];
-
-  switch (p->tag) {
-  case constant:
-    return 1;
-
-  case offset:
-    return can_evaluate_concatenation(p->value.offset);
-
-  case symbol:
-    return 1;
-
-  case unop:
-    return can_evaluate_concatenation(p->value.unop.p0);
-
-  case binop:
-    return can_evaluate_concatenation(p->value.binop.p0) &&
-           can_evaluate_concatenation(p->value.binop.p1);
-
-  case string:
-    snprintf(buf, sizeof(buf), "Illegal argument (%s).", p->value.string);
-    gperror(GPE_ILLEGAL_ARGU, buf);
-    return 0;
-
-  default:
-    assert(0);
-  }
-
-  return 0;
-}
-
-char *evaluate_concatenation(struct pnode *p)
-{
-  switch (p->tag) {
-  case symbol:
-    return p->value.symbol;
-
-  case unop:
-    assert(p->value.unop.op == VAR);
-    {
-      char buf[80];
-      snprintf(buf, sizeof(buf), "%d", maybe_evaluate(p->value.unop.p0));
-      return (strdup(buf));
-    }
-
-  default:
-    assert(0);
-  }
-
-  return NULL;
-}
-
-/* Attempt to evaluate concatenation 'p'.  Return its value if
- * successful, otherwise generate an error message and return NULL.  */
-
-char *maybe_evaluate_concat(struct pnode *p)
-{
-  char *r = NULL;
-
-  if ((p->tag == unop) && (p->value.unop.op != VAR)) {
-    gpverror(GPE_ILLEGAL_ARGU);
-  } else if (p && can_evaluate_concatenation(p)) {
-    r = evaluate_concatenation(p);
-  }
-
-  return r;
-}
-
 int can_evaluate(struct pnode *p)
 {
   char buf[BUFSIZ];
@@ -251,21 +181,6 @@ gpasmVal evaluate(struct pnode *p)
 {
   struct variable *var;
   gpasmVal p0, p1;
-
-  if ((p->tag == unop) && (p->value.unop.op == VAR)) {
-    char *string = evaluate_concatenation(p);
-    struct symbol *s;
-
-    s = get_symbol(state.stTop, string);
-    if (s == NULL) {
-      gpverror(GPE_NOSYM, string);
-      return 0;
-    } else {
-      var = get_symbol_annotation(s);
-      assert(var != NULL);
-      return var->value;
-    }
-  }
 
   switch (p->tag) {
   case constant:
@@ -384,7 +299,7 @@ gpasmVal evaluate(struct pnode *p)
       }
       else {
       /* x >> n results sign extension for n >= (sizeof(int) * 8) */
-                   return (p1 >= sizeof(int) * 8) ? ((p0 < 0) ? -1 : 0) : p0 >> p1;
+        return (p1 >= sizeof(int) * 8) ? ((p0 < 0) ? -1 : 0) : p0 >> p1;
       }
 
     case EQUAL:
