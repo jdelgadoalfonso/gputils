@@ -99,7 +99,6 @@ yyprint (FILE *file, int type, YYSTYPE value)
   case TBL_POST_INC:
   case TBL_POST_DEC:
   case TBL_PRE_INC:
-  case VAR:
   case '[':
   case ']':
     fprintf (file, "%d", value.i);
@@ -329,7 +328,6 @@ void yyerror(char *message)
 %token <i> TBL_POST_INC
 %token <i> TBL_POST_DEC
 %token <i> TBL_PRE_INC
-%token <i> VAR
 %token <i> '['
 %token <i> ']'
 

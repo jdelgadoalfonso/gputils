@@ -26,10 +26,6 @@ int enforce_arity(int arity, int must_be);
 int enforce_simple(struct pnode *p);
 int list_length(struct pnode *L);
 
-int can_evaluate_concatenation(struct pnode *p);
-char *evaluate_concatenation(struct pnode *p);
-char *maybe_evaluate_concat(struct pnode *p);
-
 int can_evaluate(struct pnode *p);
 int can_evaluate_value(struct pnode *p);
 gpasmVal evaluate(struct pnode *p);

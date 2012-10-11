@@ -51,12 +51,12 @@ LIBRARIES = $(noinst_LIBRARIES)
 ARFLAGS = cru
 libgpasm_a_AR = $(AR) $(ARFLAGS)
 libgpasm_a_LIBADD =
-am_libgpasm_a_OBJECTS = parse.$(OBJEXT) ppparse.$(OBJEXT) \
-	cod.$(OBJEXT) coff.$(OBJEXT) deps.$(OBJEXT) \
+am_libgpasm_a_OBJECTS = cod.$(OBJEXT) coff.$(OBJEXT) deps.$(OBJEXT) \
 	directive.$(OBJEXT) evaluate.$(OBJEXT) gpasm.$(OBJEXT) \
-	scan.$(OBJEXT) ppscan.$(OBJEXT) gperror.$(OBJEXT) \
-	lst.$(OBJEXT) macro.$(OBJEXT) preprocess.$(OBJEXT) \
-	processor.$(OBJEXT) special.$(OBJEXT) util.$(OBJEXT)
+	gperror.$(OBJEXT) lst.$(OBJEXT) macro.$(OBJEXT) \
+	preprocess.$(OBJEXT) processor.$(OBJEXT) special.$(OBJEXT) \
+	util.$(OBJEXT) ppscan.$(OBJEXT) scan.$(OBJEXT) parse.$(OBJEXT) \
+	ppparse.$(OBJEXT)
 libgpasm_a_OBJECTS = $(am_libgpasm_a_OBJECTS)
 am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
@@ -97,14 +97,17 @@ CFLAGS = @CFLAGS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CYGPATH_W = @CYGPATH_W@
+DEFAULT_MPLABX_PATH = @DEFAULT_MPLABX_PATH@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
 ECHO_C = @ECHO_C@
 ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGREP = @EGREP@
+ENABLE_HTML_DOC = @ENABLE_HTML_DOC@
 EXEEXT = @EXEEXT@
 GPUTILS_HEADER_PATH = @GPUTILS_HEADER_PATH@
+GPUTILS_HTMLDOC_PATH = @GPUTILS_HTMLDOC_PATH@
 GPUTILS_LIB_PATH = @GPUTILS_LIB_PATH@
 GPUTILS_LKR_PATH = @GPUTILS_LKR_PATH@
 GREP = @GREP@
@@ -196,16 +199,12 @@ top_srcdir = @top_srcdir@
 noinst_LIBRARIES = libgpasm.a
 AM_CPPFLAGS = -I${top_srcdir}/libgputils -I${top_srcdir}/include
 libgpasm_a_SOURCES = \
-	parse.y \
-	ppparse.y \
 	cod.c \
 	coff.c \
 	deps.c \
 	directive.c \
 	evaluate.c \
 	gpasm.c \
-	scan.l \
-	ppscan.l \
 	gperror.c \
 	lst.c \
 	macro.c \
@@ -218,7 +217,6 @@ libgpasm_a_SOURCES = \
 	deps.h \
 	directive.h \
 	evaluate.h \
-	gpasm.h.in \
 	gperror.h \
 	libgpasm.h \
 	lst.h \
@@ -226,7 +224,12 @@ libgpasm_a_SOURCES = \
 	preprocess.h \
 	processor.h \
 	scan.h \
-	special.h
+	special.h \
+	gpasm.h.in \
+	ppscan.l \
+	scan.l \
+	parse.y \
+	ppparse.y
 
 gpasm_SOURCES = main.c
 gpasm_LDADD = libgpasm.a ${top_builddir}/@LIBGPUTILS@ ${top_builddir}/@LIBIBERTY@
