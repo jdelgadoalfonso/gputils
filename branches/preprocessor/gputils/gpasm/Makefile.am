@@ -32,12 +32,12 @@ libgpasm_a_SOURCES = \
 	preprocess.h \
 	processor.h \
 	scan.h \
-	special.h
+	special.h \
 	gpasm.h.in \
 	ppscan.l \
 	scan.l \
 	parse.y \
-	ppparse.y \
+	ppparse.y
 
 gpasm_SOURCES = main.c
 

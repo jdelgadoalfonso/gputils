@@ -1,3 +1,15 @@
+2012-10-11  Borut Razem  <borutr@users.sourceforge.net>
+  * configure.ac, doc/html-help/*: sync with main branch HEAD
+  * gpasm/Makefile.am: fixed typo
+  * configure, Makefile.in, gpasm/Makefile.in, gplink/Makefile.in,
+    gputils/Makefile.in, header/Makefile.in, doc/Makefile.in,
+    man/Makefile.in, man/fr/Makefile.in, libgputils/Makefile.in,
+    libiberty/Makefile.in, lkr/Makefile.in: regenerated
+  * gpasm/parse.y, gpasm/directive.c, gpasm/evaluate.c, gpasm/evaluate.h:
+    removed concatenation functionality
+  * gpasm/lst.c, gpasm/lst.h, gpasm/gpasm.c: list / sort all symbols,
+    defines and macros
+
 2012-10-10  Borut Razem  <borutr@users.sourceforge.net>
   * libgputils/gpsymbol.c: iterative version of get_symbol() and get_symbol_len()
   * gpasm/macro.c: removed concatenation functionality
