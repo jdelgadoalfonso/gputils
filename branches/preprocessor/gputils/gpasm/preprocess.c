@@ -63,7 +63,7 @@ check_defines(char *symbol, int symlen, struct pnode **param_list_p)
   *param_list_p = NULL;
 
   /* If not quoted, check for #define substitution */
-  if (NULL != (sym = get_symbol_len(state.stTopDefines, symbol, symlen))) {
+  if (NULL != (sym = get_symbol_len(state.stDefines, symbol, symlen))) {
     p = get_symbol_annotation(sym);
     if (p) {
       struct pnode *p2 = HEAD(p);
@@ -75,7 +75,7 @@ check_defines(char *symbol, int symlen, struct pnode **param_list_p)
       *param_list_p = TAIL(p);
       if (subst == NULL)
         subst = "";
-      if (strlen(subst) == symlen && strncmp(symbol, subst, symlen) == 0) {
+      else if (strlen(subst) == symlen && strncmp(symbol, subst, symlen) == 0) {
         /* check for a bad subsitution */
         subst = NULL;
       }
@@ -139,7 +139,7 @@ free_arg_list(void)
 }
 
 static int
-substitute_param(char *buf, int start, int *i, int *n, int max_size)
+substitute_define_param(char *buf, int start, int *i, int *n, int max_size)
 {
   int mlen = *i - start;
   struct arg_list_s *argp = arg_list;
@@ -175,7 +175,7 @@ substitute_param(char *buf, int start, int *i, int *n, int max_size)
 static int preprocess(char *buf, int *n, int max_size, int (*substitute)(char *buf, int start, int *i, int *n, int max_size), int level);
 
 static int
-substitute_macro(char *buf, int start, int *i, int *n, int max_size)
+substitute_define(char *buf, int start, int *i, int *n, int max_size)
 {
   int mlen = *i - start;
   char *sub;
@@ -188,7 +188,7 @@ substitute_macro(char *buf, int start, int *i, int *n, int max_size)
   if (NULL != (sub = check_defines(&buf[start], mlen, &param_list))) {
     int n_params = list_length(param_list);
 
-    DBG_printf("macro %*.*s has %d parameters\n", mlen, mlen, &buf[start], n_params);
+    DBG_printf("define %*.*s has %d parameters\n", mlen, mlen, &buf[start], n_params);
     if (0 != n_params) {
       /* has parameters: collect arguments */
       int bracket;
@@ -245,15 +245,15 @@ substitute_macro(char *buf, int start, int *i, int *n, int max_size)
               char buf1[1024];
               int len = strlen(sub);
 
-              /* substitute parameters */
+              /* substitute define parameters */
               memcpy(buf1, sub, len);
-              preprocess(buf1, &len, sizeof(buf1), &substitute_param, 1);
+              preprocess(buf1, &len, sizeof(buf1), &substitute_define_param, 1);
               free_arg_list();
 
-              /* substitute macros */
-              preprocess(buf1, &len, sizeof(buf1), &substitute_macro, 1);
+              /* substitute defines */
+              preprocess(buf1, &len, sizeof(buf1), &substitute_define, 1);
 
-              DBG_printf("@1@substituting macro parameter %*.*s with %*.*s\n", mlen, mlen, &buf[start], len, len, buf1);
+              DBG_printf("@1@substituting define parameter %*.*s with %*.*s\n", mlen, mlen, &buf[start], len, len, buf1);
 
               mlen = *i - start;
               if (*n + len - mlen >= max_size) {
@@ -291,11 +291,11 @@ substitute_macro(char *buf, int start, int *i, int *n, int max_size)
       int oldlen = strlen(sub);
       int len = oldlen;
 
-      /* substitute macros */
+      /* substitute define */
       memcpy(buf1, sub, len);
-      preprocess(buf1, &len, sizeof(buf1), &substitute_macro, 1);
+      preprocess(buf1, &len, sizeof(buf1), &substitute_define, 1);
 
-      DBG_printf("@2@substituting macro parameter %*.*s with %*.*s\n", mlen, mlen, &buf[start], len, len, buf1);
+      DBG_printf("@2@substituting define parameter %*.*s with %*.*s\n", mlen, mlen, &buf[start], len, len, buf1);
 
       if (*n + len - mlen >= max_size) {
         gpverror(GPE_INTERNAL, "Flex buffer too small.");
@@ -323,7 +323,6 @@ no_process_iden(const char *iden, int len)
     "define",
     "ifdef",
     "ifndef",
-    "macro",
   };
   int i;
 
@@ -436,13 +435,13 @@ preprocess(char *buf, int *n, int max_size, int (*substitute)(char *buf, int sta
   return substituted;
 }
 
-int
-preprocess_macros(char *buf, int *n, int max_size)
+static int
+preprocess_defines(char *buf, int *n, int max_size)
 {
-  return preprocess(buf, n, max_size, substitute_macro, 0);
+  return preprocess(buf, n, max_size, substitute_define, 0);
 }
 
-static int
+void
 preprocess_hv_params(char *buf, int *n, int max_size)
 {
   int start = -1;
@@ -450,7 +449,6 @@ preprocess_hv_params(char *buf, int *n, int max_size)
   int prev_esc = 0;     /* 1: prev char was escape */
   int in_hv = 0;        /* in #v */
   int hv_parenth = 0;   /* #v parenthesis nesting depth */
-  int substituted = 0;  /* if there was a substitution in the preprocess run */
   int i;
 
   DBG_printf("---preprocess_hv_params: %*.*s\n", *n, *n, buf);
@@ -471,9 +469,7 @@ preprocess_hv_params(char *buf, int *n, int max_size)
           int n1 = i - start;
 
           memcpy(buf1, &buf[start], n1);
-          if (preprocess(buf1, &n1, sizeof (buf1), substitute_macro, 0)) {
-            preprocess_hv(buf1, &n1, sizeof (buf1));
-            substituted = 1;
+          if (preprocess(buf1, &n1, sizeof (buf1), substitute_define, 0)) {
             BUF_REPLACE_UPDATE(buf, start, i, *n, buf1, n1, max_size);
           }
           start = -1;
@@ -499,14 +495,6 @@ preprocess_hv_params(char *buf, int *n, int max_size)
       if (-1 == start && is_first_iden(c)) {
         start = i;
       }
-      else {
-        if (-1 != start && !is_iden(c)) {
-          if (no_process_iden(&buf[start], i - start)) {
-            start = -1;
-            break;
-          }
-        }
-      }
     }
 
     switch (c) {
@@ -530,20 +518,16 @@ preprocess_hv_params(char *buf, int *n, int max_size)
     }
   }
 
-  DBG_printf("+++preprocess_hv_params: %*.*s; substituted = %d\n", *n, *n, buf, substituted);
-
-  return substituted;
+  DBG_printf("+++preprocess_hv_params: %*.*s\n", *n, *n, buf);
 }
 
-int
+static int
 preprocess_hv(char *buf, int *n, int max_size)
 {
   char res_buf[11];
   char *p = buf;
   int substituted;
   int rest;
-
-  substituted = preprocess_hv_params(buf, n, max_size);
 
   rest = *n;
 
@@ -582,13 +566,78 @@ preprocess_line(char *buf, int *n, int max_size)
 {
   int res;
 
-  if (0 == strncmp(buf, "Sub3Sub(Name,Sub3Val2)", strlen("Sub3Sub(Name,Sub3Val2)"))) {
-    int x = 1;
-  }
   do {
     /* res = preprocess(buf, n, max_size, substitute_macro, 0); */
-    res = preprocess_macros(buf, n, max_size);
+    res = preprocess_defines(buf, n, max_size);
     res |= preprocess_hv(buf, n, max_size);
   }
   while (res);
+}
+
+static char *
+check_macro_params(char *symbol, int symlen)
+{
+  struct symbol *sym;
+  struct pnode *p;
+  char *subst = NULL;
+
+  if (NULL != (sym = get_symbol_len(state.stMacroParams, symbol, symlen))) {
+    p = get_symbol_annotation(sym);
+    if (p) {
+      struct pnode *p2 = HEAD(p);
+
+      assert(list == p->tag);
+      assert(p2->tag == string);
+      subst = p2->value.string;
+
+      assert(NULL == TAIL(p));
+      if (subst == NULL)
+        subst = "";
+      else if (strlen(subst) == symlen && strncmp(symbol, subst, symlen) == 0) {
+        /* check for a bad subsitution */
+        subst = NULL;
+      }
+    } else {
+      subst = "";
+    }
+  }
+
+  return subst;
+}
+
+static int
+substitute_macro_param(char *buf, int start, int *i, int *n, int max_size)
+{
+  int mlen = *i - start;
+  char *sub;
+
+  if (mlen <= 0) {
+    /* nothing to substitute */
+    return 0;
+  }
+
+  if (NULL != (sub = check_macro_params(&buf[start], mlen))) {
+    char buf1[1024];
+    int len = strlen(sub);
+
+    /* substitute define */
+    memcpy(buf1, sub, len);
+
+    DBG_printf("@@@substituting macro parameter %*.*s with %*.*s\n", mlen, mlen, &buf[start], len, len, buf1);
+
+    if (*n + len - mlen >= max_size) {
+      gpverror(GPE_INTERNAL, "Flex buffer too small.");
+      return 0;
+    }
+    else {
+      BUF_REPLACE_UPDATE(buf, start, *i, *n, buf1, len, max_size);
+      return 1;
+    }
+  }
+  return 0;
+}
+
+void
+preprocess_macro_params(char *buf, int *n, int max_size) {
+  preprocess(buf, n, max_size, &substitute_macro_param, 1);
 }

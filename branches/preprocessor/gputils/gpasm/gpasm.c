@@ -407,9 +407,8 @@ assemble(void)
   state.stMacros = push_symbol_table(NULL, state.case_insensitive);
   state.stTop =
     state.stGlobal = push_symbol_table(NULL, state.case_insensitive);
-  state.stTopDefines =
-    state.stDefines = push_symbol_table(cmd_defines, state.case_insensitive);
-
+  state.stDefines = push_symbol_table(cmd_defines, state.case_insensitive);
+  state.stMacroParams = push_symbol_table(NULL, state.case_insensitive);
   opcode_init(0);
 
   /* the tables are built, select the processor if -p was used */
@@ -429,8 +428,8 @@ assemble(void)
   state.cblock = 0;
   state.cblock_defined = 0;
   /* clean out defines for second pass */
-  state.stTopDefines =
-    state.stDefines = push_symbol_table(cmd_defines, state.case_insensitive);
+  state.stDefines = push_symbol_table(cmd_defines, state.case_insensitive);
+  state.stMacroParams = push_symbol_table(NULL, state.case_insensitive);
   purge_temp_symbols(state.stTop);
   if (!state.cmd_line.radix)
     state.radix = 16;

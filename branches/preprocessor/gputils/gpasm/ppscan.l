@@ -59,7 +59,7 @@ while (0)
 int col_begin;
 int col_end;
 static int column;
-static int brack_depth = 0;
+static int brack_depth;
 static int found_hv;
 %}
 
@@ -77,11 +77,12 @@ NUMCHAR [0-9a-z]
                          }
 <INITIAL>#v\ *\(         {
                            BEGIN(hv);
-                           ++brack_depth;
+                           brack_depth = 1;
                            col_begin = column - yyleng;
                            found_hv = 1;
                            return HV;
                          }
+<hv>#v                   /* ignore inner #v-s */
 <hv>upper                {
                            pplval.i = UPPER;
                            return UPPER;
