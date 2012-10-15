@@ -147,7 +147,7 @@ extern struct gpasm_state {
     *stGlobal,                      /* Global symbols */
     *stTop,                         /* Top of locals stack (stGlobal is base) */
     *stDefines,                     /* Preprocessor #defines */
-    *stTopDefines,                  /* Macro #defines (stDefines is base) */
+    *stMacroParams,                 /* Macro #defines (stDefines is base) */
     *stMacros;                      /* Macros */
   MemBlock *i_memory;               /* Instruction memory linked list */
   MemBlock *c_memory;               /* Configuration memory linked list (shadow) */
