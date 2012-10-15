@@ -1,3 +1,8 @@
+2012-10-15  Borut Razem  <borutr@users.sourceforge.net>
+  * gpasm/macro.c, gpasm/preprocess.c, gpasm/preprocess.h,
+    gpasm/gpasm.c: separate preprocessing step for macro parameters
+  * gpasm/lst.c: fixed warning
+
 2012-10-11  Borut Razem  <borutr@users.sourceforge.net>
   * configure.ac, doc/html-help/*: sync with main branch HEAD
   * gpasm/Makefile.am: fixed typo

@@ -198,7 +198,7 @@ void setup_macro(struct macro_head *h, int arity, struct pnode *parms)
 {
   if (enforce_arity(arity, list_length(h->parms))) {
     /* push table for the marco parms */
-    state.stTopDefines = push_symbol_table(state.stTopDefines,
+    state.stMacroParams = push_symbol_table(state.stMacroParams,
                                         state.case_insensitive);
 
     /* Now add the macro's declared parameter list to the new
@@ -218,7 +218,7 @@ void setup_macro(struct macro_head *h, int arity, struct pnode *parms)
         arg_index = 0;
         arg_buffer[0] = '\0';
         node_to_string(pToH);
-        sym = add_symbol(state.stTopDefines, pFromH->value.symbol);
+        sym = add_symbol(state.stMacroParams, pFromH->value.symbol);
         annotate_symbol(sym, mk_list(mk_string(strdup(arg_buffer)), NULL));
         pTo = TAIL(pTo);
       }

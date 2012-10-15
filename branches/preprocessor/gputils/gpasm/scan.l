@@ -55,7 +55,7 @@ Boston, MA 02111-1307, USA.  */
 /* YY_UNPUT not used, suppress the warning */
 #define YY_NO_UNPUT
 
-enum identtype { defines, directives, globals, macros, opcodes, unknown_type };
+enum identtype { unknown_type, macro_params, defines, directives, globals, macros, opcodes };
 enum identtype identify(char *);
 
 static int found_eof(void);
@@ -87,6 +87,20 @@ set_source_line(const char *line, size_t len, struct src_line_s *src_line)
     }
   else
     src_line->line[0] = '\0';
+}
+
+static inline int
+in_macro_expansion(void)
+{
+  struct source_context *p;
+
+  for (p = state.src; p; p = p->prev)
+    {
+      if (src_macro == p->type)
+        return 1;
+    }
+
+  return 0;
 }
 
 static inline size_t
@@ -147,20 +161,27 @@ gp_yyinput(char *buf, size_t max_size)
         }
       else
         {
-          /* preprocess source line if not in macro definition */
-          if (!IN_MACRO_EXPANSION)
+          if (in_macro_expansion())
             {
-              /* if not in macro expansion: preprocess #v */
-              preprocess_hv(buf, &result, max_size);
+              preprocess_macro_params(buf, &result, max_size);
 
+              /* preprocess #v */
+              preprocess_hv_params(buf, &result, max_size);
+              preprocess_line(buf, &result, max_size);
+
+              /* set processed source line if in macro expansion */
               set_source_line(buf, result, &state.curr_src_line);
             }
+          else
+            {
+              /* set raw source line if not in macro expansion */
+              set_source_line(buf, result, &state.curr_src_line);
 
-          preprocess_line(buf, &result, max_size);
-
-          /* set processed source line if in macro expansion */
-          if (IN_MACRO_EXPANSION)
-            set_source_line(buf, result, &state.curr_src_line);
+              /* preprocess source line if not in macro definition */
+              /* preprocess #v */
+              preprocess_hv_params(buf, &result, max_size);
+              preprocess_line(buf, &result, max_size);
+            }
         }
 
       state.src->last_char_is_nl = (buf[result - 1] == '\n');
@@ -317,6 +338,7 @@ processor                {
                                  gpverror(GPE_BADCHAR, ':');
                                return IDENTIFIER;
                                break;
+
                              case macros:
                                if(asm_enabled()) {
                                  /* make sure macro definition on second pass
@@ -338,14 +360,17 @@ processor                {
                                  return LABEL;
                                }
                                break;
+
                              case opcodes:
                                gpwarning(GPW_OP_COLUMN_ONE, NULL);
                                if (has_collon)
                                  gpverror(GPE_BADCHAR, ':');
                                return IDENTIFIER;
                                break;
+
                              case unknown_type:
                                return LABEL;
+
                              default:
                                return LABEL;
                            }
@@ -677,12 +702,12 @@ void close_file(void)
     }
   } else if (old->type == src_macro) {
     state.stTop = pop_symbol_table(state.stTop);
-    state.stTopDefines = pop_symbol_table(state.stTopDefines);
+    state.stMacroParams = pop_symbol_table(state.stMacroParams);
     if (state.src->astack != state.astack) {
       gpverror(GPE_ILLEGAL_NESTING);
     }
     assert(state.stTop != NULL);
-    assert(state.stTopDefines != NULL);
+    assert(state.stMacroParams != NULL);
     free(old->name);
   } else if (old->type == src_while) {
     free(old->name);
@@ -761,7 +786,9 @@ enum identtype identify(char *text)
   enum identtype type;
   struct symbol *sym;
 
-  if ((sym = get_symbol(state.stTopDefines, text)) != NULL) {
+  if ((sym = get_symbol(state.stMacroParams, text)) != NULL) {
+    type = macro_params;
+  } else if ((sym = get_symbol(state.stDefines, text)) != NULL) {
     type = defines;
   } else if ((sym = get_symbol(state.stDirective, text)) != NULL) {
     type = directives;
