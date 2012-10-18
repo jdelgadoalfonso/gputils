@@ -22,17 +22,15 @@ Boston, MA 02111-1307, USA.  */
 #define __PREPROCESS_H__
 
 /* from preprocess.c */
-void preprocess_macro_params(char *buf, int *n, int max_size);
-void preprocess_hv_params(char *buf, int *n, int max_size);
 void preprocess_line(char *buf, int *n, int max_size);
 
 /* from ppscan.c */
-int ppparse_chunk(char *line, int len);
+int ppparse_chunk(char *buf, int begin, int end);
 int pplex(void);
-extern int col_begin;
-extern int col_end;
+extern int ppcol_begin;
+extern int ppcol_end;
 
 /* from ppparse.c */
 int ppparse(void);
-extern int result;
+extern int ppresult;
 #endif
