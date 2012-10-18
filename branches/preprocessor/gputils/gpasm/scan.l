@@ -63,46 +63,6 @@ static int found_eof(void);
 int force_decimal; /* Used to force radix to decimal for some directives */
 int force_ident;   /* Used to force numbers to identifiers for processor names */
 
-static void
-set_source_line(const char *line, size_t len, struct src_line_s *src_line)
-{
-  if (!src_line->line)
-    {
-      src_line->size = 128;
-      src_line->line = malloc(src_line->size);
-    }
-  if (src_line->size < len)  /* newline replaced with '\0' */
-    {
-      do
-        {
-          src_line->size *= 2;
-        }
-      while (src_line->size < len);  /* newline replaced with '\0' */
-      src_line->line = realloc(src_line->line, src_line->size);
-    }
-  if (len > 0)
-    {
-      memcpy(src_line->line, line, len - 1); /* no newline */
-      src_line->line[len - 1] = '\0';
-    }
-  else
-    src_line->line[0] = '\0';
-}
-
-static inline int
-in_macro_expansion(void)
-{
-  struct source_context *p;
-
-  for (p = state.src; p; p = p->prev)
-    {
-      if (src_macro == p->type)
-        return 1;
-    }
-
-  return 0;
-}
-
 static inline size_t
 gp_input(char *buf, size_t max_size)
 {
@@ -154,35 +114,8 @@ gp_yyinput(char *buf, size_t max_size)
   int result = gp_input(buf, max_size);
   if (result)
     {
-      if (IN_MACRO_DEFINITION)
-        {
-          /* don't preprocess source line if in macro definition */
-          set_source_line(buf, result, &state.curr_src_line);
-        }
-      else
-        {
-          if (in_macro_expansion())
-            {
-              preprocess_macro_params(buf, &result, max_size);
-
-              /* preprocess #v */
-              preprocess_hv_params(buf, &result, max_size);
-              preprocess_line(buf, &result, max_size);
-
-              /* set processed source line if in macro expansion */
-              set_source_line(buf, result, &state.curr_src_line);
-            }
-          else
-            {
-              /* set raw source line if not in macro expansion */
-              set_source_line(buf, result, &state.curr_src_line);
-
-              /* preprocess source line if not in macro definition */
-              /* preprocess #v */
-              preprocess_hv_params(buf, &result, max_size);
-              preprocess_line(buf, &result, max_size);
-            }
-        }
+      /* preprocess line */
+      preprocess_line(buf, &result, max_size);
 
       state.src->last_char_is_nl = (buf[result - 1] == '\n');
     }

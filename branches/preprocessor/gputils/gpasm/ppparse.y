@@ -24,7 +24,7 @@ Boston, MA 02111-1307, USA.  */
 #include "gpasm.h"
 #include "preprocess.h"
 
-int result = 0;
+int ppresult = 0;
 
 void
 pperror(char *message)
@@ -58,7 +58,7 @@ hv:
   /* emty */
   |
   HV exp
-  { result = $2; }
+  { ppresult = $2; }
   ;
  
 exp:
