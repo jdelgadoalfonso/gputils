@@ -54,11 +54,10 @@ do \
   } \
 while (0)
 
-#define YY_USER_ACTION column += yyleng;
+#define YY_USER_ACTION ppcol_end += yyleng;
 
-int col_begin;
-int col_end;
-static int column;
+int ppcol_begin;
+int ppcol_end;
 static int brack_depth;
 static int found_hv;
 %}
@@ -75,10 +74,10 @@ NUMCHAR [0-9a-z]
 <INITIAL>#undefine       {
                            BEGIN(def);
                          }
-<INITIAL>#v\ *\(         {
+<INITIAL>#v\(            {
                            BEGIN(hv);
                            brack_depth = 1;
-                           col_begin = column - yyleng;
+                           ppcol_begin = ppcol_end - yyleng;
                            found_hv = 1;
                            return HV;
                          }
@@ -94,6 +93,13 @@ NUMCHAR [0-9a-z]
 <hv>low                  {
                            pplval.i = LOW;
                            return LOW;
+                         }
+<hv>{IDENT}#v\(          {
+                           int i = yyleng - 3;
+                           pplval.s = strndup(yytext, i);
+                           unput('(');
+                           ++brack_depth;
+                           return IDENTIFIER;
                          }
 <hv>{IDENT}              {
                            pplval.s = strdup(yytext);
@@ -196,7 +202,6 @@ NUMCHAR [0-9a-z]
 <hv>\)                   {
                            if (--brack_depth <= 0) {
                              BEGIN(INITIAL);
-                             col_end = column;
                              yyterminate();
                            }
                            return yytext[0];
@@ -220,7 +225,7 @@ NUMCHAR [0-9a-z]
 static void
 yyprint (FILE *file, int type, YYSTYPE value)
 {
-  printf("@%d:", column);
+  printf("@%d:", ppcol_end);
 
   switch (type) {
   case IDENTIFIER:
@@ -280,16 +285,21 @@ lex_line(char *line)
 #endif
 
 int
-ppparse_chunk(char *line, int len)
+ppparse_chunk(char *buf, int begin, int end)
 {
   int res;
 
-  yy_scan_bytes(line, len);
+  yy_scan_bytes(&buf[begin], end - begin);
 
-  col_end = col_begin = column = 0;
+  ppcol_end = ppcol_begin = 0;
   found_hv = 0;
+  BEGIN(INITIAL);
+  brack_depth = 0;
 
   res = !ppparse() && found_hv;
+
+  ppcol_begin += begin;
+  ppcol_end += begin;
 
   yy_delete_buffer(YY_CURRENT_BUFFER);
 
