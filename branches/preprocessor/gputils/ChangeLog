@@ -3,6 +3,8 @@
   * gpasm/parse.y: corrected identation
   * gpasm/scan.l: evaluate macro parameters as comma delimited literal
     symbols - identifiers
+  * gpasm/macro.c: get rid of now unneeded functions node_to_string(),
+    cat_symbol() and cat_string()
 
 2012-10-18  Borut Razem  <borutr@users.sourceforge.net>
   * gpasm/preprocess.c, gpasm/preprocess.h, gpasm/scan.l,
