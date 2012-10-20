@@ -5,6 +5,7 @@
 %x define
 %x definition
 %x defargs
+%x macpar
 
 %{
 /* lexical analyser for gpasm
@@ -264,7 +265,7 @@ processor                {
                              has_collon = 1;
                            }
                            yylval.s = strdup(yytext);
-                           switch(identify(yytext)) {
+                           switch (identify(yytext)) {
                              case directives:
                                gpwarning(GPW_DIR_COLUMN_ONE, NULL);
                                if (has_collon)
@@ -273,24 +274,20 @@ processor                {
                                break;
 
                              case macros:
-                               if(asm_enabled()) {
-                                 /* make sure macro definition on second pass
-                                    is ignored */
-                                 sym = get_symbol(state.stMacros, yytext);
-                                 h = get_symbol_annotation(sym);
-                                 if (h->line_number == state.src->line_number) {
-                                   return LABEL;
-                                 } else {
-                                   gpwarning(GPW_MACRO_COLUMN_ONE, NULL);
-                                   if (has_collon)
-                                    gpverror(GPE_BADCHAR, ':');
-                                   return IDENTIFIER;
-                                 }
-                               } else {
-                                 /* if assembly is not enabled don't issue
-                                 warnings about macro calls in column 1, they
-                                 could be an alternate definition */
+                               /* Macro invocation */
+                               BEGIN(macpar);
+                               sym = get_symbol(state.stMacros, yytext);
+                               h = get_symbol_annotation(sym);
+                               /* TODO: this conditio shoul be probably removed
+                                * since the symbol table is reinitialised before
+                                * the second pass */
+                               if (h->line_number == state.src->line_number) {
                                  return LABEL;
+                               } else {
+                                 gpwarning(GPW_MACRO_COLUMN_ONE, NULL);
+                                 if (has_collon)
+                                  gpverror(GPE_BADCHAR, ':');
+                                 return IDENTIFIER;
                                }
                                break;
 
@@ -309,6 +306,10 @@ processor                {
                            }
                          }
 {IDENT}                  {
+                           if (NULL != get_symbol(state.stMacros, yytext)) {
+                             /* Macro invocation */
+                             BEGIN(macpar);
+                           }
                            yylval.s = strdup(yytext);
                            return IDENTIFIER;
                          }
@@ -398,7 +399,7 @@ h'-?{NUMCHAR}+'          {
                              return NUMBER;
                            }
                          }
-<INITIAL,bquote>\"{STR_QCHAR}*\"?        {
+<INITIAL,bquote>\"{STR_QCHAR}*\"? {
                            if ((yyleng > 1) && (yytext[yyleng - 1] == '"'))
                              --yyleng;
                            else
@@ -421,7 +422,7 @@ A'{STR_QCHAR}'           {
                            BEGIN(INITIAL);
                            return STRING;
                          }
-<bquote>[^ \t<>";\r\n]+ {
+<bquote>[^ \t<>";\r\n]+  {
                            /* unquoted (special-case) string */
                            yylval.s = strdup(yytext);
                            BEGIN(INITIAL);
@@ -467,14 +468,32 @@ A'{STR_QCHAR}'           {
 "*-"                     OPERATOR(TBL_POST_DEC);
 "+*"                     OPERATOR(TBL_PRE_INC);
 
-<INITIAL,bquote,lnquote,definition,defargs>[ \t\r]*
+<INITIAL,bquote,lnquote,definition,defargs,macpar>[ \t\r]*
+<macpar>([^,;'"\n]*('{STR_QCHAR}*')?(\"{STR_QCHAR}*\")?[^,;'"\n]*)+ {
+                           int begin = 0, len;
+
+                           /* skip leading spaces */
+                           while (isspace(yytext[begin]))
+                             ++begin;
+
+                           /* skip trailing spaces */
+                           len = yyleng - begin - 1;
+                           while (len >= 0 && isspace(yytext[begin + len]))
+                             --len;
+                           ++len;
+
+                           yylval.s = strndup(&yytext[begin], len);
+                           return IDENTIFIER;
+                         }
 <*>[\n]                  {
                            force_decimal = 0;
                            force_ident = 0;
                            BEGIN(INITIAL);  /* no multiline states yet */
                            return yytext[0];
                          }
-<*>;.*                   {  }
+<*>;.*                   {
+                           BEGIN(INITIAL);
+                         }
 <*>.                     {
                            yylval.i = yytext[0];
                            return yytext[0];
