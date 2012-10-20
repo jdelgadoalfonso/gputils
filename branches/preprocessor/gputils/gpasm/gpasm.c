@@ -428,6 +428,7 @@ assemble(void)
   state.cblock = 0;
   state.cblock_defined = 0;
   /* clean out defines for second pass */
+  state.stMacros = push_symbol_table(NULL, state.case_insensitive);
   state.stDefines = push_symbol_table(cmd_defines, state.case_insensitive);
   state.stMacroParams = push_symbol_table(NULL, state.case_insensitive);
   purge_temp_symbols(state.stTop);

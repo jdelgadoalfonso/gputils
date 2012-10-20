@@ -1,3 +1,9 @@
+2012-10-21  Borut Razem  <borutr@users.sourceforge.net>
+  * gpasm/gpasm.c: reinitialize macro symbol table before second pass
+  * gpasm/parse.y: corrected identation
+  * gpasm/scan.l: evaluate macro parameters as comma delimited literal
+    symbols - identifiers
+
 2012-10-18  Borut Razem  <borutr@users.sourceforge.net>
   * gpasm/preprocess.c, gpasm/preprocess.h, gpasm/scan.l,
     gpasm/ppscan.l, gpasm/ppparse.y: redesigned to handle recursive #v

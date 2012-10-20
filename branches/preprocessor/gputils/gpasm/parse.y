@@ -606,7 +606,7 @@ statement:
               mk_list(mk_string($4), NULL)));
         }
         |
-         DEFINE IDENTIFIER '\n'
+        DEFINE IDENTIFIER '\n'
         {
           $$ = do_or_append_insn($1, mk_list(mk_string($2), NULL));
         }
