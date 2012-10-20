@@ -30,168 +30,6 @@ Boston, MA 02111-1307, USA.  */
 #include "parse.h"
 #include "preprocess.h"
 
-#define BUFFER_SIZE 520
-static char arg_buffer[BUFFER_SIZE];
-static int arg_index;
-
-static void
-cat_string(char *string)
-{
-  char *ptr;
-  int length;
-
-  ptr = &arg_buffer[arg_index];
-  length = strlen(string);
-  if (arg_index + length + 1 < BUFFER_SIZE) {
-    strcpy(ptr, string);
-    arg_index += length;
-  } else {
-    gperror(GPE_UNKNOWN, "macro argument exceeds buffer size");
-  }
-}
-
-static void
-cat_symbol(int op)
-{
-  switch (op) {
-  case '+':
-    cat_string("+");
-    break;
-  case '-':
-    cat_string("-");
-    break;
-  case '*':
-    cat_string("*");
-    break;
-  case '/':
-    cat_string("/");
-    break;
-  case '%':
-    cat_string("%");
-    break;
-  case '&':
-    cat_string("&");
-    break;
-  case '|':
-    cat_string("|");
-    break;
-  case '^':
-    cat_string("^");
-    break;
-  case LSH:
-    cat_string("<<");
-    break;
-  case RSH:
-    cat_string(">>");
-    break;
-  case '<':
-    cat_string("<");
-    break;
-  case '>':
-    cat_string(">");
-    break;
-  case '!':
-    cat_string("!");
-    break;
-  case '~':
-    cat_string("~");
-    break;
-  case EQUAL:
-    cat_string("==");
-    break;
-  case NOT_EQUAL:
-    cat_string("!=");
-    break;
-  case GREATER_EQUAL:
-    cat_string(">=");
-    break;
-  case LESS_EQUAL:
-    cat_string("<=");
-    break;
-  case LOGICAL_AND:
-    cat_string("&&");
-    break;
-  case LOGICAL_OR:
-    cat_string("||");
-    break;
-  case '=':
-    cat_string("=");
-    break;
-  case UPPER:
-    cat_string("UPPER");
-    break;
-  case HIGH:
-    cat_string("HIGH");
-    break;
-  case LOW:
-    cat_string("LOW");
-    break;
-  case INCREMENT:
-    cat_string("++");
-    break;
-  case DECREMENT:
-    cat_string("--");
-    break;
-  default:
-    assert(0);
-  }
-}
-
-/* Must convert the parm to a plain string, this will allow substitutions
-   of labels and strings.  This is a kludge.  It would be better to store
-   a copy of the raw string in the parse node. */
-
-static void
-node_to_string(struct pnode *p)
-{
-  char constant_buffer[64];
-
-  switch(p->tag) {
-  case constant:
-    if (p->value.constant < 0) {
-      snprintf(constant_buffer,
-               sizeof(constant_buffer),
-               "-%#x", -p->value.constant);
-    } else {
-      snprintf(constant_buffer,
-               sizeof(constant_buffer),
-               "%#x", p->value.constant);
-    }
-    cat_string(constant_buffer);
-    break;
-
-  case symbol:
-    cat_string(p->value.symbol);
-    break;
-
-  case unop:
-    cat_string("(");
-    cat_symbol(p->value.unop.op);
-    cat_string(" ");
-    node_to_string(p->value.unop.p0);
-    cat_string(")");
-    break;
-
-  case binop:
-    cat_string("(");
-    node_to_string(p->value.binop.p0);
-    cat_symbol(p->value.binop.op);
-    node_to_string(p->value.binop.p1);
-    cat_string(")");
-    break;
-
-  case string:
-    cat_string("\"");
-    cat_string(p->value.string);
-    cat_string("\"");
-    break;
-
-  case list:
-  default:
-    assert(0);
-  }
-}
-
 /* Create a new defines table and place the macro parms in it. */
 
 void setup_macro(struct macro_head *h, int arity, struct pnode *parms)
@@ -213,13 +51,11 @@ void setup_macro(struct macro_head *h, int arity, struct pnode *parms)
       for (pFrom = h->parms; pFrom; pFrom = TAIL(pFrom)) {
         pToH = HEAD(pTo);
         pFromH = HEAD(pFrom);
-        assert(pFromH->tag == symbol);
+        assert(symbol == pFromH->tag);
+        assert(symbol == pToH->tag);
 
-        arg_index = 0;
-        arg_buffer[0] = '\0';
-        node_to_string(pToH);
         sym = add_symbol(state.stMacroParams, pFromH->value.symbol);
-        annotate_symbol(sym, mk_list(mk_string(strdup(arg_buffer)), NULL));
+        annotate_symbol(sym, mk_list(mk_string(strdup(pToH->value.symbol)), NULL));
         pTo = TAIL(pTo);
       }
     }
