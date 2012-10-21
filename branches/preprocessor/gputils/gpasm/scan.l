@@ -501,7 +501,7 @@ A'{STR_QCHAR}'           {
 %%
 
 static void
-search_pathes(struct source_context *new, const char *name)
+search_paths(struct source_context *new, const char *name)
 {
   char tryname[PATH_MAX + 1];
   int i;
@@ -517,7 +517,8 @@ search_pathes(struct source_context *new, const char *name)
   }
 }
 
-void open_src(const char *name, int isinclude)
+void
+open_src(const char *name, int isinclude)
 {
   extern FILE *yyin;
   struct source_context *new = malloc(sizeof(*new));
@@ -530,14 +531,14 @@ void open_src(const char *name, int isinclude)
   else if(isinclude && (strchr(name, PATH_CHAR) == 0)) {
     /* If include file and no PATH_CHAR in name, try searching include
        path */
-    search_pathes(new, name);
+    search_paths(new, name);
 
     if (new->f == NULL) {
       /* We didn't find a match so check for lower case.  This is mainly for
          Microchip examples and some includes in which filenames were written
          without regard to case */
       char *lower_case_name = gp_lower_case(name);
-      search_pathes(new, lower_case_name);
+      search_paths(new, lower_case_name);
       free(lower_case_name);
 
       if (new->f != NULL)
@@ -545,55 +546,50 @@ void open_src(const char *name, int isinclude)
     }
   }
 
-  yyin = new->f;
   if (new->f == NULL) {
     if (state.src) {
-      char complaint[BUFSIZ];
-
-      snprintf(complaint, sizeof(complaint),
-               "Unable to open file \"%s\" - %s.",
-               name,
-               strerror(errno));
-      state.pass = 2; /* Ensure error actually gets displayed */
-      gpverror(GPE_INTERNAL, complaint);
+      gpverror(GPE_NOENT, name);
     } else {
       perror(name);
+      exit(1);
     }
-    exit(1);
-  }
-
-  if (state.src) {
-    yy_switch_to_buffer(yy_create_buffer(yyin, YY_BUF_SIZE));
-  }
-
-  if (state.use_absolute_path) {
-    new->name = gp_absolute_path(new->name);
-  }
-  new->type = src_file;
-  new->h = NULL;
-  new->line_number = 1;
-  new->loop_number = 1;
-  if (state.debug_info) {
-    new->file_symbol = NULL;
   } else {
-    new->file_symbol = coff_add_filesym(new->name, isinclude);
-  }
-  new->prev = state.src;
+    yyin = new->f;
 
-  state.src = new;
-  state.src->fc = add_file(ft_src, new->name);
-  deps_add(new->name);
+    if (state.src) {
+      yy_switch_to_buffer(yy_create_buffer(yyin, YY_BUF_SIZE));
+    }
 
-  if (!isinclude) {
-    /* it is the top level file so initialize the lexer */
-    force_decimal = 0;
-    force_ident = 0;
+    if (state.use_absolute_path) {
+      new->name = gp_absolute_path(new->name);
+    }
+    new->type = src_file;
+    new->h = NULL;
+    new->line_number = 1;
+    new->loop_number = 1;
+    if (state.debug_info) {
+      new->file_symbol = NULL;
+    } else {
+      new->file_symbol = coff_add_filesym(new->name, isinclude);
+    }
+    new->prev = state.src;
+
+    state.src = new;
+    state.src->fc = add_file(ft_src, new->name);
+    deps_add(new->name);
+
+    if (!isinclude) {
+      /* it is the top level file so initialize the lexer */
+      force_decimal = 0;
+      force_ident = 0;
+    }
+    state.src->last_char_is_nl = true;
+    state.found_end = 0;
   }
-  state.src->last_char_is_nl = true;
-  state.found_end = 0;
 }
 
-void execute_macro(struct macro_head *h, int is_while)
+void
+execute_macro(struct macro_head *h, int is_while)
 {
   struct source_context *new = malloc(sizeof(*new));
 
@@ -623,7 +619,8 @@ void execute_macro(struct macro_head *h, int is_while)
   yy_switch_to_buffer(yy_create_buffer(NULL, YY_BUF_SIZE));
 }
 
-void repeat_while(void)
+void
+repeat_while(void)
 {
   struct macro_head *h;
 
@@ -637,7 +634,8 @@ void repeat_while(void)
   yy_switch_to_buffer(yy_create_buffer(NULL, YY_BUF_SIZE));
 }
 
-void close_file(void)
+void
+close_file(void)
 {
   struct source_context *old;
 
@@ -667,7 +665,8 @@ void close_file(void)
   free(old);
 }
 
-void execute_exitm(void)
+void
+execute_exitm(void)
 {
   struct amode *previous;
   struct amode *old;
@@ -689,7 +688,8 @@ void execute_exitm(void)
 }
 
 /* found end directive, close all files and stop the parser */
-int found_end(void)
+int
+found_end(void)
 {
   /* close all open files */
   while(state.src) {
@@ -703,7 +703,8 @@ int found_end(void)
   return 1;
 }
 
-static int found_eof(void)
+static int
+found_eof(void)
 {
   int terminate = 0;
 
@@ -733,7 +734,8 @@ static int found_eof(void)
   return terminate;
 }
 
-enum identtype identify(char *text)
+enum identtype
+identify(char *text)
 {
   enum identtype type;
   struct symbol *sym;
