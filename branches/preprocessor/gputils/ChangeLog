@@ -1,3 +1,13 @@
+2012-10-23  Borut Razem  <borutr@users.sourceforge.net>
+  * gpasm/coff.c: fixed #255 Bug #227 regressed
+  * gpasm/testsuite/gpasm.mchip/asmfiles/macro1.asm,
+    gpasm/testsuite/gpasm.mchip/asmfiles/macro3.asm,
+    gpasm/testsuite/gpasm.mchip/asmfiles/poundv1.asm:
+    fixed MPASM(X) "Warning[207]: Found label after column 1." which
+    generates an error on gpasm
+  * gpasm/testsuite/test: tests performed with --mpasm-compatible gpasm
+    command line option
+
 2012-10-21  Borut Razem  <borutr@users.sourceforge.net>
   * gplink/gplink.h.in, gplink/scan.l:
     fixed bug #256: atrtificially addding a \n ate EOF if missing
