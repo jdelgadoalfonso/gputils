@@ -33,7 +33,7 @@ GPASMFLAGS=-q
 TESTDIR=./test
 TESTOBJDIR=./objtest
 HEADER=../../header
-GPASMBIN=../gpasm
+GPASMBIN="../gpasm --mpasm-compatible"
 GPVOBIN=../../gputils/gpvo
 GPDASMBIN=../../gputils/gpdasm
 
