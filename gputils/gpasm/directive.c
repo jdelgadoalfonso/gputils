@@ -1279,7 +1279,7 @@ static gpasmVal do_define(gpasmVal r,
     assert(list == parms->tag);
     p = HEAD(parms);
     assert(string == p->tag);
-    if ((asm_enabled()) && (!state.mac_prev)) {
+    if (asm_enabled() && !IN_MACRO_DEFINITION) {
       if (get_symbol(state.stDefines, p->value.string) != NULL) {
         gpverror(GPE_DUPLAB, p->value.string);
       } else {
@@ -1571,7 +1571,7 @@ static gpasmVal do_endm(gpasmVal r,
 {
   assert(!state.mac_head);
   state.lst.line.linetype = dir;
-  if (state.mac_prev == NULL)
+  if (!IN_MACRO_DEFINITION)
     gpverror(GPE_UNMATCHED_ENDM);
   else
     state.mac_prev = NULL;
@@ -1589,7 +1589,7 @@ static gpasmVal do_endw(gpasmVal r,
   state.lst.line.linetype = dir;
 
   assert(!state.mac_head);
-  if (state.mac_prev == NULL) {
+  if (!IN_MACRO_DEFINITION) {
     gperror(GPE_ILLEGAL_COND, "Illegal condition (ENDW).");
   } else if (maybe_evaluate(state.while_head->parms)) {
     state.next_state = state_while;
@@ -3046,7 +3046,7 @@ static gpasmVal do_while(gpasmVal r,
   struct macro_head *head = malloc(sizeof(*head));
   struct pnode *p;
 
-  if (state.src->type == src_while) {
+  if (IN_WHILE_EXPANSION) {
     state.pass = 2; /* Ensure error actually gets displayed */
     gperror(GPE_UNKNOWN, "gpasm does not yet support nested while loops");
     exit (1);

@@ -1,3 +1,12 @@
+2012-10-26  Borut Razem  <borutr@users.sourceforge.net>
+  * gpasm/testsuite/gpasm.mchip/asmfiles/files2.asm:
+    fixed MPASM(X) "Warning[207]: Found label after column 1." which
+    generates an error on gpasm
+  * gpasm/util.c, gpasm/parse.y, gpasm/directive.c, gpasm/gpasm.h.in,
+    gpasm/scan.l:
+    use IN_MACRO_DEFINITION, IN_MACRO_EXPANSION, IN_WHILE_EXPANSION and
+    IN_FILE_EXPANSION defines
+
 2012-10-23  Borut Razem  <borutr@users.sourceforge.net>
   * gpasm/coff.c: fixed #255 Bug #227 regressed
   * gpasm/testsuite/gpasm.mchip/asmfiles/macro1.asm,

@@ -186,7 +186,7 @@ gpasmVal set_label(char *label, struct pnode *parms)
 
   if (asm_enabled()) {
     value = do_or_append_insn("set", parms);
-    if (!state.mac_prev) {
+    if (!IN_MACRO_DEFINITION) {
       set_global(label, value, TEMPORARY, gvt_constant);
     }
   }
@@ -198,23 +198,22 @@ int return_op(int operation);
 
 void next_line(int value)
 {
-  if ((state.src->type == src_macro) ||
-      (state.src->type == src_while)) {
+  if (IN_WHILE_EXPANSION || IN_MACRO_EXPANSION) {
     /* while loops can be defined inside a macro or nested */
-    if (state.mac_prev) {
+    if (IN_MACRO_DEFINITION) {
       state.lst.line.linetype = none;
       if (state.mac_body)
         state.mac_body->src_line = strdup(state.src->m->src_line);
     }
 
-    if (((state.src->type == src_while) || (state.lst.expand)) &&
+    if ((IN_WHILE_EXPANSION || (state.lst.expand)) &&
         (state.pass == 2)) {
       lst_format_line(state.curr_src_line.line, value);
     }
 
     state.src->m = state.src->m->next;
-  } else if (state.src->type == src_file) {
-    if (state.mac_prev) {
+  } else if (IN_FILE_EXPANSION) {
+    if (IN_MACRO_DEFINITION) {
       state.lst.line.linetype = none;
       if (state.mac_body)
         state.mac_body->src_line = strdup(state.curr_src_line.line);
@@ -261,7 +260,7 @@ void next_line(int value)
 
 void yyerror(char *message)
 {
-  if (!state.mac_prev) {
+  if (!IN_MACRO_DEFINITION) {
     /* throw error if not in macro definition */
     gpverror(GPE_PARSER, message);
   }
@@ -382,7 +381,7 @@ program:
         | program error '\n'
         {
           yyerrok;  /* generate multiple errors */
-          if (state.mac_prev) {
+          if (IN_MACRO_DEFINITION) {
             /* in macro definition: append the macro */
             macro_append();
           }
@@ -471,8 +470,8 @@ line:
                 h->defined = 1;
 
               state.mac_head = NULL;
-            } else if (!state.mac_prev) {
-              /* Outside a macro, just define the label. */
+            } else if (!IN_MACRO_DEFINITION) {
+              /* Outside a macro definition, just define the label. */
               switch (state.lst.line.linetype) {
               case sec:
                 strncpy(state.obj.new_sec_name, $1, 78);
@@ -551,7 +550,7 @@ decimal_ops: ERRORLEVEL | DEBUG_LINE;
 statement:
         '\n'
         {
-          if (!state.mac_prev) {
+          if (!IN_MACRO_DEFINITION) {
             if (!IS_RAM_ORG)
               /* We want to have r as the value to assign to label */
               $$ = gp_processor_byte_to_org(state.device.class, state.org);
@@ -631,7 +630,7 @@ statement:
           int number;
           int i;
 
-          if (!state.mac_prev) {
+          if (!IN_MACRO_DEFINITION) {
             number = eval_fill_number($5);
 
             for (i = 0; i < number; i++) {
@@ -647,7 +646,7 @@ statement:
           int number;
           int i;
 
-          if (!state.mac_prev) {
+          if (!IN_MACRO_DEFINITION) {
             number = eval_fill_number($6);
 
             for (i = 0; i < number; i++) {
@@ -660,7 +659,7 @@ statement:
         |
         CBLOCK expr '\n'
         {
-          if (!state.mac_prev) {
+          if (!IN_MACRO_DEFINITION) {
             begin_cblock($2);
           } else {
             macro_append();
@@ -670,7 +669,7 @@ statement:
         const_block
         ENDC '\n'
         {
-          if (state.mac_prev) {
+          if (IN_MACRO_DEFINITION) {
             macro_append();
           }
           $$ = 0;
@@ -678,7 +677,7 @@ statement:
         |
         CBLOCK '\n'
         {
-          if (!state.mac_prev) {
+          if (!IN_MACRO_DEFINITION) {
             continue_cblock();
           } else {
             macro_append();
@@ -688,7 +687,7 @@ statement:
         const_block
         ENDC '\n'
         {
-          if (state.mac_prev) {
+          if (IN_MACRO_DEFINITION) {
             macro_append();
           }
           $$ = 0;
@@ -713,14 +712,14 @@ const_line:
         |
         const_def_list '\n'
         {
-          if (state.mac_prev) {
+          if (IN_MACRO_DEFINITION) {
             macro_append();
           }
         }
         |
         LABEL '\n'
         {
-          if (!state.mac_prev) {
+          if (!IN_MACRO_DEFINITION) {
             cblock_expr(mk_symbol($1));
           } else {
             macro_append();
@@ -729,7 +728,7 @@ const_line:
         |
         LABEL expr '\n'
         {
-          if (!state.mac_prev) {
+          if (!IN_MACRO_DEFINITION) {
             cblock_expr_incr(mk_symbol($1), $2);
           } else {
             macro_append();
@@ -746,14 +745,14 @@ const_def_list:
 const_def:
         cidentifier
         {
-          if (!state.mac_prev) {
+          if (!IN_MACRO_DEFINITION) {
             cblock_expr($1);
           }
         }
         |
         cidentifier ':' expr
         {
-          if (!state.mac_prev) {
+          if (!IN_MACRO_DEFINITION) {
             cblock_expr_incr($1, $3);
           }
         }

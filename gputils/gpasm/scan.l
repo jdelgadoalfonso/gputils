@@ -708,7 +708,7 @@ found_eof(void)
 {
   int terminate = 0;
 
-  if (state.src->type == src_while) {
+  if (IN_WHILE_EXPANSION) {
     if (maybe_evaluate(state.src->h->parms)) {
       if (state.src->loop_number > 255) {
         gpverror(GPE_BAD_WHILE_LOOP);
