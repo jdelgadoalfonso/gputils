@@ -36,7 +36,7 @@ Boston, MA 02111-1307, USA.  */
 
 #define IN_MACRO_DEFINITION (NULL != state.mac_prev)
 #define IN_MACRO_EXPANSION  (src_macro == state.src->type)
-#define IN_WHILE_EXPANSION  (src_whilw == state.src->type)
+#define IN_WHILE_EXPANSION  (src_while == state.src->type)
 #define IN_FILE_EXPANSION   (src_file == state.src->type)
 
 enum gpasmValTypes {
