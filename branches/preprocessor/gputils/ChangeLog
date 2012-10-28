@@ -1,3 +1,7 @@
+2012-10-28  Borut Razem  <borutr@users.sourceforge.net>
+  * doc/html-help/Makefile.am, doc/html-help/Makefile.in:
+    test if *.html and *.css files can be / are generated
+
 2012-10-26  Borut Razem  <borutr@users.sourceforge.net>
   * gpasm/testsuite/gpasm.mchip/asmfiles/files2.asm:
     fixed MPASM(X) "Warning[207]: Found label after column 1." which
